@@ -612,8 +612,7 @@ class Building:
 
             # Calculate the number of hours since the start of the year
             n_th_hour_of_year = int((timestamp - start_of_year).total_seconds() // 3600) % 8760
-            print(timestamp)
-            print(n_th_hour_of_year)
+
             for x in compass_directions:
 
                 azimuth_tilt = compass_directions[x]["azimuth_tilt"]
