@@ -407,7 +407,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         return None, None
 
 
-def process_cluster(cluster_df, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,data_classes_comp,ev):
+def process_cluster(cluster_df, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,data_classes_comp,ev,time_index):
     for index, row in cluster_df.iterrows():
         if index >=1:
             continue
@@ -451,7 +451,7 @@ def process_cluster(cluster_df, building_type, epw_path, directory_path, data, r
             building_type=building_type,
             refurbishment_status=refurbish,
             heat_level_calculation=True,
-            number_of_time_steps=number_of_time_steps,
+            time_index=time_index,
         )
 
         # PV-Ertrag pro Watt
@@ -509,30 +509,6 @@ def run_main(refurbish):
                 "weather_files",
                 "03_HH_Hamburg-Fuhlsbuttel_TRY2035.csv",
             )
-
-        data,data_classes_comp = process_cluster(
-            cluster_df=sfh_cluster,
-            building_type="SFH",
-            epw_path=epw_path,
-            directory_path=directory_path,
-            data=data,
-            refurbish=refurbish,
-            number_of_time_steps=number_of_time_steps,
-            data_classes_comp = data_classes_comp,
-            ev=ev
-        )
-        data,data_classes_comp = process_cluster(
-            cluster_df=mfh_cluster,
-            building_type="MFH",
-            epw_path=epw_path,
-            directory_path=directory_path,
-            data=data,
-            refurbish=refurbish,
-            number_of_time_steps=number_of_time_steps,
-            data_classes_comp = data_classes_comp,
-            ev =ev
-        )
-        main_path = get_project_root()
         location = calculate_gain_by_sun.Location(
             epwfile_path=os.path.join(
                 main_path,
@@ -545,6 +521,33 @@ def run_main(refurbish):
         data["air_temperature"] = location.weather_data["drybulb_C"].to_list()
         date_time_index = solph.create_time_index(2025, number=number_of_time_steps - 1)
         data.index = date_time_index
+        data,data_classes_comp = process_cluster(
+            cluster_df=sfh_cluster,
+            building_type="SFH",
+            epw_path=epw_path,
+            directory_path=directory_path,
+            data=data,
+            refurbish=refurbish,
+            number_of_time_steps=number_of_time_steps,
+            data_classes_comp = data_classes_comp,
+            ev=ev,
+            time_index=date_time_index
+        )
+        data,data_classes_comp = process_cluster(
+            cluster_df=mfh_cluster,
+            building_type="MFH",
+            epw_path=epw_path,
+            directory_path=directory_path,
+            data=data,
+            refurbish=refurbish,
+            number_of_time_steps=number_of_time_steps,
+            data_classes_comp = data_classes_comp,
+            ev =ev,
+            time_index=date_time_index
+        )
+        main_path = get_project_root()
+
+
 
         typical_periods = 15
         hours_per_period = 24
