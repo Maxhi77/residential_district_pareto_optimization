@@ -63,6 +63,8 @@ class BuildingParameters:
     heat_transfer_coefficient_ventilation: float
     total_air_change_rate: float
     room_height: float
+    frame_area_fraction_of_window:float
+    radiation_non_perpendicular_to_the_glazing:float
     a_roof: dict = field(default_factory=dict)
     u_roof: dict = field(default_factory=dict)
     b_roof: dict = field(default_factory=dict)
@@ -359,8 +361,8 @@ class Building:
             key: value * self.wall_window_area_ratio
             for key, value in self.a_window_specific.items()
         }
-        self.delta_u_thermal_bridiging = {
-            "delta_u_thermal_bridiging": float(row["delta_U_ThermalBridging"].values[0])
+        self.delta_u_thermal_bridging = {
+            "delta_u_thermal_bridging": float(row["delta_U_ThermalBridging"].values[0])
         }
         self.u_window = {
             "u_window_1": float(row["U_" + str(t_b) + "Window_1"].values[0]),
@@ -513,7 +515,7 @@ class Building:
             a_external = a_external + self.a_window["a_window_" + str(x)]
         h_tr_em = (
             h_tr_em
-            + self.delta_u_thermal_bridiging["delta_u_thermal_bridiging"] * a_external
+            + self.delta_u_thermal_bridging["delta_u_thermal_bridging"] * a_external
         )
         return h_tr_em  # [W/K]
 
@@ -529,7 +531,7 @@ class Building:
             a_window = a_window + self.a_window["a_window_" + str(x)]
         h_tr_w = (
             h_tr_w
-            + self.delta_u_thermal_bridiging["delta_u_thermal_bridiging"] * a_window
+            + self.delta_u_thermal_bridging["delta_u_thermal_bridging"] * a_window
         )
         return h_tr_w  # [W/K]
 
@@ -568,7 +570,7 @@ class Building:
             self.list_class_buildig[self.class_building]["c_m_var"]
         return c_m
 
-    def calc_solar_gaings_through_windows(self, object_location_of_building,t_outside):
+    def calc_solar_gaings_through_windows(self, object_location_of_building,time_index):
         a_window_total = 0
         g_gl_n_window_avg = 0
         for x in range(1, len(self.u_window) + 1):
@@ -586,11 +588,11 @@ class Building:
             )
 
         compass_directions = {
-            "north": {"azimuth_tilt": 270, "alititude_tilt": 90},
-            "east": {"azimuth_tilt": 90, "alititude_tilt": 90},
-            "south": {"azimuth_tilt": 180, "alititude_tilt": 90},
-            "west": {"azimuth_tilt": 0, "alititude_tilt": 90},
-            "horizontal": {"azimuth_tilt": 0, "alititude_tilt": 0},
+            "north": {"azimuth_tilt": 0, "alititude_tilt": 90},  # Nord: Azimut = 0°, Altitude = 90°
+            "east": {"azimuth_tilt": 90, "alititude_tilt": 90},  # Ost: Azimut = 90°, Altitude = 90°
+            "south": {"azimuth_tilt": 180, "alititude_tilt": 90},  # Süd: Azimut = 180°, Altitude = 90°
+            "west": {"azimuth_tilt": 270, "alititude_tilt": 90},  # West: Azimut = 270°, Altitude = 90°
+            "horizontal": {"azimuth_tilt": 0, "alititude_tilt": 0},  # Horizontal: Azimut = 0°, Altitude = 0°
         }
         list_solar_gains = []
         (
@@ -600,11 +602,17 @@ class Building:
         ) = object_location_of_building.calc_sun_position_pv_lib(
             latitude_deg=object_location_of_building.weather_data_latitude_and_longitude['latitude'],
             longitude_deg=object_location_of_building.weather_data_latitude_and_longitude['longitude'],
-            index=object_location_of_building.weather_data['dirnorrad_Whm2'].index
+            time_index=time_index
         )
-        for hour in range(self.number_of_time_steps):
+        for i, timestamp in enumerate(time_index):
             shading_factor=0
             sum_solar_gains = 0
+            # Define the start of the year
+            start_of_year = pd.Timestamp(f'2023-01-01 00:00:00')
+
+            # Calculate the number of hours since the start of the year
+            n_th_hour_of_year = int((timestamp - start_of_year).total_seconds() // 3600) % 8760
+
             for x in compass_directions:
 
                 azimuth_tilt = compass_directions[x]["azimuth_tilt"]
@@ -624,18 +632,18 @@ class Building:
                 solar_gains = window_var.calc_solar_heat_gains_by_pv(
                     direct_normal_irradiance = object_location_of_building.weather_data[
                         "dirnorrad_Whm2"
-                    ],
+                    ].iloc[n_th_hour_of_year],
                     direct_horizontal_irradiance = object_location_of_building.weather_data[
                         "difhorrad_Whm2"
-                    ],
+                    ].iloc[n_th_hour_of_year],
                     direct_normal_irradiance_extra=object_location_of_building.weather_data[
                         "extdirrad_Whm2"
-                    ],
+                    ].iloc[n_th_hour_of_year],
                     global_horizontal_irradiance = object_location_of_building.weather_data[
                         "glohorrad_Whm2"
-                    ],
-                    apparent_zenith = apparent_zenith,
-                    hour = hour)
+                    ].iloc[n_th_hour_of_year],
+                    apparent_zenith = apparent_zenith[timestamp],
+                    timestamp=timestamp)
 
 
                 sum_solar_gains = sum_solar_gains + solar_gains
