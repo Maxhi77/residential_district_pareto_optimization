@@ -152,7 +152,7 @@ class Storage(BaseComponent):
         flow_into_storage = self.get_flow_into_storage(results, component)
         flow_out_storage =  self.get_flow_out_storage(results, component)
         if isinstance(self,HotWaterTank):
-            capacity /= self. relative_storage_capacity_in_wh_per_volume(self.max_temperature)
+            capacity /= self. relative_storage_capacity_in_wh_per_volume(self.max_temperature,self.min_temperature)
         return {"capacity": capacity,
                 "investment_cost": investment_cost,
                 "investment_co2": investment_co2,
@@ -189,7 +189,7 @@ class Storage(BaseComponent):
         return results[component, self.output_bus]["sequences"]["flow"]
 
     def get_flow_out_storage(self, results, component):
-        return results[component, self.input_bus]["sequences"]["flow"]
+        return results[self.input_bus,component]["sequences"]["flow"]
 
 @dataclass
 class HotWaterTank(Storage):
