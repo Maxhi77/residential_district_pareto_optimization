@@ -70,11 +70,7 @@ def main(target_residents,building_id, floor_area,demand_path,heating_system):
                                         demand_path=demand_path+'\\SumProfiles.Warm Water.csv')
     heat_demand = heat_demand_dataclass.create_demand()
     hot_water_tank_config_building = copy.deepcopy(hot_water_tank_config)
-    building_type = "SFH"
-    if building_type == "SFH":
-        hot_water_tank_config_building.maximum_capacity = 20
-    elif building_type == "MFH":
-        hot_water_tank_config_building.maximum_capacity = 60
+
     hot_water_tank_input_bus = solph.buses.Bus(label=f"input_bus")
     hot_water_tank_output_bus = solph.buses.Bus(label=f"output_bus")
     hot_water_tank_dataclass = HotWaterTank(
@@ -83,7 +79,7 @@ def main(target_residents,building_id, floor_area,demand_path,heating_system):
         temperature_buses=heat_carrier_bus,
         max_temperature=70,
         min_temperature=min(heat_carrier_bus),
-        investment_component=hot_water_tank_config_building,
+        investment_component=hot_water_tank_config_building[1],
         input_bus=hot_water_tank_input_bus,
         output_bus=hot_water_tank_output_bus,
     )
@@ -99,7 +95,8 @@ def main(target_residents,building_id, floor_area,demand_path,heating_system):
     es.add(hot_water_tank_output_bus)
     if heating_system==0:
         air_heat_pump_dataclass = AirHeatPump(heat_carrier_bus= heat_carrier_dataclass.get_bus(),
-                                              investment=True)
+                                              investment=True,
+                                              investment_component=air_heat_pump_config[1])
         air_heat_pump_bus = air_heat_pump_dataclass.get_bus()
         air_heat_pump= air_heat_pump_dataclass.create_source()
         air_heat_pump_converters= air_heat_pump_dataclass.create_converters(heat_pump_bus = air_heat_pump_bus,
@@ -115,7 +112,8 @@ def main(target_residents,building_id, floor_area,demand_path,heating_system):
     gas_bus = gas_carrier_dataclass.get_bus()
     connect_buses(input=gas_grid_bus_from_grid, target=gas_bus)
     if heating_system==1:
-        gas_heater_dataclass = GasHeater(investment=True)
+        gas_heater_dataclass = GasHeater(investment=True,
+                                         investment_component=gas_heater_config[1])
         gas_heater_bus = gas_heater_dataclass.get_bus()
         gas_heater= gas_heater_dataclass.create_source()
         gas_heater_converters= gas_heater_dataclass.create_converters(gas_heater_bus = gas_heater_bus,
@@ -133,7 +131,7 @@ def main(target_residents,building_id, floor_area,demand_path,heating_system):
     battery_dataclass = Battery(investment=True,
                                 input_bus = electricity_carrier_bus,
                                 output_bus = electricity_carrier_bus,
-                                maximum_capacity = 15000)
+                                investment_component=battery_config[1])
     battery = battery_dataclass.create_storage()
     es.add(battery)
 
@@ -162,7 +160,8 @@ def main(target_residents,building_id, floor_area,demand_path,heating_system):
             heat_carrier_bus,
             heat_demand]
 
-    pv_dataclass = PVSystem(investment=True)
+    pv_dataclass = PVSystem(investment=True,
+                            investment_component=pv_system_config[1])
     pv_dataclass.update_maximum_investment_pv_capacity_based_on_area(area=building_dataclass.get_roof_area_for_pv())
     pv_system = pv_dataclass.create_source(output_bus = electricity_carrier_bus,
 
