@@ -62,10 +62,13 @@ class Converter(BaseComponent):
         investment_co2 = self.get_investment_co2(capacity,invest_status)
         into_converter = self.get_flow_into_converter(results,carrier_converted,converter)
         out_converter = self.get_flow_out_converter(results,component,converter,heat_carrier)
-        sum_out_converter = [value.sum() for key, value in out_converter.items()]
-        sum_into_converter =[value.sum() for key, value in into_converter.items()]
+        sum_out_converter = sum([value.sum() for key, value in out_converter.items()])
+        sum_into_converter =sum([value.sum() for key, value in into_converter.items()])
 
-        total_efficiency = sum(sum_out_converter) /sum(sum_into_converter)
+        if sum_into_converter == 0:
+            total_efficiency = 0  #
+        else:
+            total_efficiency = sum_out_converter / sum_into_converter
 
         return {"capacity":capacity,
                 "investment_cost":investment_cost,
