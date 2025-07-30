@@ -123,8 +123,7 @@ class Location(
         # Add latitude and longitude as new columns to self.weather_data
         self.weather_data_latitude_and_longitude['latitude'] = latitude
         self.weather_data_latitude_and_longitude['longitude'] = longitude
-    def calc_sun_position_pv_lib(self, index, latitude_deg, longitude_deg):
-        time_index = pd.date_range(start='2023-01-01', periods=index.max() + 1, freq='H', tz='UTC')
+    def calc_sun_position_pv_lib(self, time_index, latitude_deg, longitude_deg):
 
         solpos = pvlib.solarposition.get_solarposition(time_index, latitude_deg, longitude_deg)
         return solpos["elevation"], solpos["azimuth"], solpos["apparent_zenith"]
@@ -240,7 +239,7 @@ class Window(object):
         global_horizontal_irradiance,
         direct_normal_irradiance_extra,
         apparent_zenith,
-        hour
+        timestamp
     ):
         """Calculate the Solar Gains in the building zone through the set Window.
 
@@ -258,21 +257,22 @@ class Window(object):
         """
         if self.azimuth_tilt_rad is None:
             self.azimuth_tilt_rad = 0
+
         poa_irrad = pvlib.irradiance.get_total_irradiance(
             self.alititude_tilt_rad, #
             self.azimuth_tilt_rad, #
-            apparent_zenith.iloc[hour],
-            self.sun_azimuth.iloc[hour],
-            direct_normal_irradiance.iloc[hour],
-            global_horizontal_irradiance.iloc[hour],
-            direct_horizontal_irradiance.iloc[hour],
-            direct_normal_irradiance_extra.iloc[hour],
+            apparent_zenith,
+            self.sun_azimuth[timestamp],
+            direct_normal_irradiance,
+            global_horizontal_irradiance,
+            direct_horizontal_irradiance,
+            direct_normal_irradiance_extra,
         )
 
         if math.isnan(poa_irrad["poa_direct"]):
             return 0
 
-        return poa_irrad["poa_direct"] * self.reduction_factor
+        return poa_irrad["poa_direct"] * self.reduction_factor * self.area
     def calc_solar_gains(
         self,
         sun_altitude,

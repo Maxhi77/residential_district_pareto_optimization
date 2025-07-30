@@ -11,6 +11,7 @@ from oemof.thermal_building_model.helpers.building_heat_demand_simulation import
 import os
 import warnings
 import copy
+import pandas as pd
 @dataclass
 class Demand:
     name: str
@@ -87,6 +88,7 @@ I think I want to add as well nur Dämmung des Daches als Variante
 '''
 @dataclass
 class ThermalBuilding(Demand):
+    time_index:pd.DatetimeIndex = None
     name: Optional[str] = None
     number_of_occupants:float = 0
     number_of_household:float = 1
@@ -132,11 +134,11 @@ class ThermalBuilding(Demand):
         self.t_outside = self.location.weather_data["drybulb_C"].to_list()
         self.solar_gains = self.building_object.calc_solar_gaings_through_windows(
             object_location_of_building=self.location,
-            t_outside=self.t_outside
+            time_index=self.time_index
         )
         self.building_object.calc_solar_gaings_through_windows(
             object_location_of_building=self.location,
-            t_outside=self.t_outside
+            time_index=self.time_index
         )
         if "MFH" in self.building_type :
             gain_technology_per_hour_in_watt = 200 * self.number_of_household
@@ -148,7 +150,7 @@ class ThermalBuilding(Demand):
         self.internal_gains = []
         self.t_set_heating = []
         self.t_set_cooling = []
-        for _ in range(self.number_of_time_steps + 1):
+        for hour_counter in range(len(self.time_index)+1):
             self.internal_gains.append(self.number_of_occupants*50+ gain_technology_per_hour_in_watt)
             self.t_set_heating.append(20)
             self.t_set_cooling.append(40)
@@ -168,7 +170,7 @@ class ThermalBuilding(Demand):
             t_inital=self.t_inital,
             max_power_heating=self.max_power_heating,
             max_power_cooling=self.max_power_cooling,
-            timesteps= self.number_of_time_steps).solve()
+            time_index= self.time_index).solve()
         self.value_list = heating_demand
         if self.refurbishment_status is not "no_refurbishment":
             self.peak_index, _ = find_highest_peak(self.value_list)
@@ -223,21 +225,21 @@ class ThermalBuilding(Demand):
 
             solar_gains_reference = self.reference_building.calc_solar_gaings_through_windows(
                 object_location_of_building=self.location,
-                t_outside=self.t_outside[:self.peak_index]
+                time_index=self.time_index
             )
             heating_demand_reference, _, _ = HeatDemand_Simulation_5RC(
                 label=str(self.name)+"_reference",
-                solar_gains=solar_gains_reference,
+                solar_gains=solar_gains_reference[:self.peak_index],
                 t_outside=self.t_outside[:self.peak_index],
                 internal_gains=self.internal_gains[:self.peak_index],
-                t_set_heating=self.t_set_heating,
-                t_set_cooling=self.t_set_cooling,
+                t_set_heating=self.t_set_heating[:self.peak_index],
+                t_set_cooling=self.t_set_cooling[:self.peak_index],
                 t_set_heating_max=self.t_set_heating_max,
                 building_config=self.reference_building.building_config,
                 t_inital=self.t_inital,
                 max_power_heating=self.max_power_heating,
                 max_power_cooling=self.max_power_cooling,
-                timesteps=self.peak_index).solve()
+                time_index=self.time_index[:self.peak_index]).solve()
 
             nominal_outside_temperature_for_heating_systems = -14
             t_outside_coldest = self.t_outside[:self.peak_index]
@@ -254,7 +256,7 @@ class ThermalBuilding(Demand):
                 t_inital=self.t_inital,
                 max_power_heating=self.max_power_heating,
                 max_power_cooling=self.max_power_cooling,
-                timesteps=self.peak_index,
+                time_index=self.time_index[:self.peak_index],
             ).solve()
             T_new = calculate_inlet_temp(
                 space_heating_load_old=max(heating_demand_reference),

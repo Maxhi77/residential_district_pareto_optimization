@@ -25,7 +25,7 @@ class HeatDemand_Simulation_5RC():
         t_set_heating_max: List | float,
         max_power_heating: float,
         max_power_cooling: float,
-        timesteps: int,
+        time_index: int,
         phi_m_tot: float = 0,
         t_inital: float = 20,
         t_m: float = 20,
@@ -109,14 +109,14 @@ class HeatDemand_Simulation_5RC():
             self.phi_ia.append(M5RC.calc_phi_ia(self, i))
             self.phi_st.append(M5RC.calc_phi_st(self, i))
             self.phi_m.append(M5RC.calc_phi_m(self, i))
-        self.timestep = timesteps
+        self.time_index = time_index
     def solve(self):
         first=True
         heating_demand = []
         cooling_demand = []
         t_air = []
         self.max_power_cooling = - self.max_power_cooling
-        for timestep in range(self.timestep):
+        for timestep in range(len(self.time_index)):
             if isinstance(self.t_set_heating, (float, int)):
                 self.t_set_heating_calculation = self.t_set_heating
             elif isinstance(self.t_set_heating, List):
