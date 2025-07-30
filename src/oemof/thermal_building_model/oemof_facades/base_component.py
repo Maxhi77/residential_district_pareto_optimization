@@ -16,7 +16,7 @@ class BaseComponent:
 class TimeConfiguration:
     lifetime: float
     observation_period: float = 20
-    multiperiod: bool = True
+    multiperiod: bool = False
 
 @dataclass
 class InvestmentComponents(TimeConfiguration):
