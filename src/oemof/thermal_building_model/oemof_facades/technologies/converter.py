@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 import copy
 import os
 from oemof.thermal_building_model.helpers import calculate_gain_by_sun
-from oemof.thermal_building_model.input.economics.investment_components import air_heat_pump_config, gas_heater_config
+from oemof.thermal_building_model.input.economics.investment_components import air_heat_pump_config, gas_heater_config, chp_config
 
 
 @dataclass
@@ -144,13 +144,14 @@ class CHP(Converter):
     nominal_power: Optional[float] = 10000
     heat_carrier_bus: Optional[dict[Bus]] = None
     electrical_carrier_bus: Optional[dict[Bus]] = None
-    thermal_efficiency: Optional[float] = 0.95
-    electrical_efficiency: Optional[float] = 0.95
-    investment_component: InvestmentComponents = field(default_factory=lambda: copy.deepcopy(gas_heater_config))
+    thermal_efficiency: Optional[float] = 0.62
+    electrical_efficiency: Optional[float] = 0.36
+    investment_component: InvestmentComponents = field(default_factory=lambda: copy.deepcopy(chp_config))
 
     def create_converters(self,
                           chp_bus: Bus,
                           gas_bus:Bus,
+                          electricity_bus: Optional[dict[Bus]],
                           heat_carrier_bus: Optional[dict[Bus]]):
         converters = []
         for temperature, bus in heat_carrier_bus.items():
@@ -160,10 +161,10 @@ class CHP(Converter):
                         chp_bus: solph.Flow()},
                 outputs={
                     bus: solph.Flow(),
-                    self.electrical_carrier_bus: solph.Flow(),
+                    electricity_bus: solph.Flow(),
                 },
                 conversion_factors={bus: self.thermal_efficiency,
-                                    self.electrical_carrier_bus: self.electrical_efficiency},
+                                    electricity_bus: self.electrical_efficiency},
             ))
         return converters
 

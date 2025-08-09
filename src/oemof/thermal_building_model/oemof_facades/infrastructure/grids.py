@@ -4,7 +4,7 @@ import copy
 from oemof.thermal_building_model.oemof_facades.base_component import  InvestmentComponents
 from dataclasses import dataclass, field
 from oemof.thermal_building_model.oemof_facades.base_component import GridComponents
-from oemof.thermal_building_model.input.economics.operation_grid_economics import gas_grid_config,electricity_grid_config,heat_grid_config
+from oemof.thermal_building_model.input.economics.operation_grid_economics import gas_grid_config,electricity_grid_config,heat_grid_config, hydrogen_grid_config
 from oemof.thermal_building_model.input.economics.investment_components import heat_grid_config as heat_grid_config_inv
 '''
 CO2 in kg/kWh
@@ -175,6 +175,13 @@ class GasGrid(Grid):
     name: str = "Gas"
     primary_energy_factor: float = 6.2
     operation_grid: GridComponents = field(default_factory=lambda: copy.deepcopy(gas_grid_config))
+
+@dataclass
+class HydrogenGrid(Grid):
+    name: str = "Hydrogen"
+    primary_energy_factor: float = 6.2
+    operation_grid: GridComponents = field(default_factory=lambda: copy.deepcopy(hydrogen_grid_config))
+
 
 @dataclass
 class ElectricityGrid(Grid):

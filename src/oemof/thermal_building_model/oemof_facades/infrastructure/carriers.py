@@ -55,6 +55,10 @@ class GasCarrier(Carrier):
     name: str = "Gas"
 
 @dataclass
+class HydrogenCarrier(Carrier):
+    name: str = "Hydrogen"
+
+@dataclass
 class ElectricityCarrier(Carrier):
     name: str = "Electricity"
 
