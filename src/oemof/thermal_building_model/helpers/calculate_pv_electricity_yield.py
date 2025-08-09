@@ -21,8 +21,8 @@ def simulate_pv_yield(pv_nominal_power_in_watt, epw_path, tilt=35, azimuth=180, 
     except Exception as e:
         print(f"Fehler beim Einlesen der EPW-Datei: {e}")
         folder_path = os.path.dirname(epw_path)
-        data = pd.read_csv(folder_path+'\data.csv', index_col=0, parse_dates=True)  # Lade CSV-Daten
-        with open(folder_path+'\meta.json', 'r') as f:  # Lade JSON-Metadaten
+        data = pd.read_csv( os.path.join(folder_path, 'data.csv'), index_col=0, parse_dates=True)  # Lade CSV-Daten
+        with open(os.path.join(folder_path, 'meta.json'), 'r') as f:  # Lade JSON-Metadaten
             meta = json.load(f)
 
     # Standort aus EPW
