@@ -6,7 +6,7 @@ wall_config = EconomicsInvestmentRefurbishment(
     thermal_conductivity=0.035,
     cost_per_unit=4.49 ,
     cost_offset=155.06,
-    lifetime=50,
+    lifetime=35, #50
     co2_per_unit = 69.3  / (100 * 1000)
 )
 
@@ -16,7 +16,7 @@ roof_config = EconomicsInvestmentRefurbishment(
     thermal_conductivity=0.035,
     cost_per_unit=5.45,
     cost_offset=171.08,
-    lifetime=50,
+    lifetime=35,#50
     co2_per_unit=46.24  / (100 * 1000)
 )
 
@@ -26,7 +26,7 @@ floor_config = EconomicsInvestmentRefurbishment(
     thermal_conductivity=0.035,
     cost_per_unit=2.32,
     cost_offset=70.35,
-    lifetime=50,
+    lifetime=35,#50
     co2_per_unit=134.15 /(100 * 1000)
 )
 
