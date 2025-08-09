@@ -11,15 +11,19 @@ from pvlib.location import Location
 import matplotlib.pyplot as plt
 import pandas as pd
 import pvlib
-
-
+import json
+import os
 def simulate_pv_yield(pv_nominal_power_in_watt, epw_path, tilt=35, azimuth=180, show_plot=True):
     # EPW einlesen
     try:
+        lol
         data, meta = read_epw(epw_path)
     except Exception as e:
         print(f"Fehler beim Einlesen der EPW-Datei: {e}")
-        return None
+        folder_path = os.path.dirname(epw_path)
+        data = pd.read_csv(folder_path+'\data.csv', index_col=0, parse_dates=True)  # Lade CSV-Daten
+        with open(folder_path+'\meta.json', 'r') as f:  # Lade JSON-Metadaten
+            meta = json.load(f)
 
     # Standort aus EPW
     site = Location(meta['latitude'], meta['longitude'], tz=meta['TZ'])
