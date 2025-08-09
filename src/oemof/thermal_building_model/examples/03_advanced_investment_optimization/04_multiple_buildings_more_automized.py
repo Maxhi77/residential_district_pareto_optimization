@@ -95,8 +95,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
     components = {}
     index_stopper=1
     for index, row in combined_cluster.iterrows():
-        if index >=index_stopper:
-            continue
+
         building_id =row['building_id']
         building_in_cluster =1
         dataclasses[building_id] = {}
@@ -389,7 +388,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
 
         model.solve(solver=solver, solve_kwargs={"tee": True},
-                                              cmdline_options={"mipgap": 0.00}
+                                              cmdline_options={"mipgap": 0.02}
         )
         meta_results = solph.processing.meta_results(model)
         results = solph.processing.results(model)
@@ -483,8 +482,6 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
 def process_cluster(cluster_df, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,data_classes_comp,ev,time_index):
     for index, row in cluster_df.iterrows():
-        if index >=1:
-            continue
         building_id = row['building_id']
         tabula_year_class = row['tabula_year_class']
         building_floor_area = row['net_floor_area']
@@ -658,12 +655,12 @@ def run_main(refurbish):
         }
         co2_reference = co2_ref
         peak_reference = final_results_ref["Electricity"]["peak_from_grid"]
-        co2_reduction_factors = [1,0.7] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+        co2_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
          #[1,0.9,0.8,0.7,0.6,0.5,0.4]
 
         for co2_reduction_factor in co2_reduction_factors:
             first_co2_run_in_peak_loop = True
-            peak_reduction_factors = [1,0.7]
+            peak_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
 
             if co2_reference > 0:
@@ -757,8 +754,8 @@ if __name__ == "__main__":
     import multiprocessing
     import os
 
-    #run_main("no_refurbishment")
-    run_main("usual_refurbishment")
+    for refubish in refurbishment:
+        run_main(refubish)
     if False:
         with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
             pool.map(run_main, refurbish)
