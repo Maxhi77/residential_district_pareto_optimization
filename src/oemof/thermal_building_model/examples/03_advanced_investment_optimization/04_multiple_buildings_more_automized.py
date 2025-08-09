@@ -558,7 +558,7 @@ def process_cluster(cluster_df, building_type, epw_path, directory_path, data, r
 
 
 
-def run_main(refurbish):
+def run_main(refurbish,buildings_connected):
     base_path = os.path.dirname(os.path.abspath(__file__))
     ueu = "processed_bds_in_DENI03403000SEC5658"
     directory_path =os.path.join(base_path, ueu)
@@ -572,7 +572,6 @@ def run_main(refurbish):
     combined_cluster = pd.concat([sfh_cluster,mfh_cluster])
     results_loop_to_save = {}
     ev = "no_EV"
-    buildings_connected="con" #or uncon
     if True:
 
         main_path = get_project_root()
@@ -752,10 +751,11 @@ def run_main(refurbish):
 if __name__ == "__main__":
     refurbishment =["no_refurbishment","usual_refurbishment","advanced_refurbishment"]  # Beispiel #"GEG_standard"
     import multiprocessing
+    connec=["uncon","con"]
     import os
-
-    for refubish in refurbishment:
-        run_main(refubish)
-    if False:
-        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-            pool.map(run_main, refurbish)
+    for connection in connec:
+        for refubish in refurbishment:
+            run_main(refubish,connection)
+        if False:
+            with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+                pool.map(run_main, refurbish)
