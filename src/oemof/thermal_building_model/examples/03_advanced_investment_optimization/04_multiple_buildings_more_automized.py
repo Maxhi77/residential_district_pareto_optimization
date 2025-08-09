@@ -95,7 +95,8 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
     components = {}
     index_stopper=1
     for index, row in combined_cluster.iterrows():
-
+        if index>=1:
+            continue
         building_id =row['building_id']
         building_in_cluster =1
         dataclasses[building_id] = {}
@@ -482,6 +483,8 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
 def process_cluster(cluster_df, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,data_classes_comp,ev,time_index):
     for index, row in cluster_df.iterrows():
+        if index>=1:
+            continue
         building_id = row['building_id']
         tabula_year_class = row['tabula_year_class']
         building_floor_area = row['net_floor_area']
@@ -751,7 +754,7 @@ def run_main(refurbish,buildings_connected):
 if __name__ == "__main__":
     refurbishment =["no_refurbishment","usual_refurbishment","advanced_refurbishment"]  # Beispiel #"GEG_standard"
 
-    refurbishment =["GEG_standard"]  # Beispiel #"GEG_standard"
+    refurbishment =["no_refurbishment"]  # Beispiel #"GEG_standard"
     import multiprocessing
     connec=["uncon","con"]
     import os
