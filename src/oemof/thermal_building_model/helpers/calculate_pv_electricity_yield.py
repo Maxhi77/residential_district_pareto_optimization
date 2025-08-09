@@ -15,7 +15,11 @@ import pvlib
 
 def simulate_pv_yield(pv_nominal_power_in_watt, epw_path, tilt=35, azimuth=180, show_plot=True):
     # EPW einlesen
-    data, meta = read_epw(epw_path)
+    try:
+        data, meta = read_epw(epw_path)
+    except Exception as e:
+        print(f"Fehler beim Einlesen der EPW-Datei: {e}")
+        return None
 
     # Standort aus EPW
     site = Location(meta['latitude'], meta['longitude'], tz=meta['TZ'])
