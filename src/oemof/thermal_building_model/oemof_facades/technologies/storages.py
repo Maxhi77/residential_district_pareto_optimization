@@ -8,6 +8,8 @@ from oemof.network import Bus
 from oemof.solph import Flow
 from oemof.thermal_building_model.input.economics.investment_components import battery_config,hot_water_tank_config
 import copy
+import math
+
 from oemof.solph.constraints import storage_level_constraint,equate_variables
 
 @dataclass
@@ -115,7 +117,7 @@ class Storage(BaseComponent):
                     outputs=output_bus,
                     nominal_storage_capacity=solph.Investment(lifetime=self.investment_component.lifetime,
                                                       ),
-                    loss_rate=self.loss_rate * share_sum,
+                    loss_rate=self.loss_rate,
                     inflow_conversion_factor=self.charging_efficiency,
                     outflow_conversion_factor=self.discharging_efficiency,
                     balanced = self.balanced,
@@ -197,9 +199,9 @@ class HotWaterTank(Storage):
     temperature_buses: Optional[Bus] = None
     invest_relation_input_capacity: float = 0.3
     invest_relation_output_capacity: float = 0.3
-    loss_rate: float = 0.0
-    charging_efficiency: float = 0.98
-    discharging_efficiency: float = 0.98
+    loss_rate: float = 0.025
+    charging_efficiency: float = 0.99
+    discharging_efficiency: float = 0.99
     charging_capacity_rate: float = 0.3
     discharging_capacity_rate: float = 0.3
     # ambient_temperature: [dict[str, float], None] = None
@@ -209,6 +211,8 @@ class HotWaterTank(Storage):
     min_temperature: Optional[float] = None
     diameter: float = 0.5
     volume_in_m3 : float  = 100
+    external_temperautre: float = 10
+    height_diameter_relation = 2.5
     investment_component: InvestmentComponents = field(default_factory=lambda: copy.deepcopy(hot_water_tank_config))  # Use deepcopy
 
     # capacity is m^3
@@ -244,23 +248,18 @@ class HotWaterTank(Storage):
                 min_temp_storage = temp
                 storage_dict[temp] = share_bus
         return storage_dict
-    def create_stratisfied_storage_constraint(self,model,hot_water_tank, hot_water_tank_stratisfied, hot_water_tank_stratisfied_temp_levels):
-        equate_variables(energysystem.groups['powerline_1_2'], )
-        def equate_variables(m):
-            return var1 * factor1 == var2
 
-        setattr(model, name, po.Constraint(rule=equate_variables_rule))
-        print(2)
-        if False:
-            storage_level_constraint(
-                model=model,
-                name=self.name,
-                storage_component=storage,
-                multiplexer_bus=self.multiplexer,
-                input_levels={bus: self.get_relative_storage_level_at_temperature(temperature_low=temp,
-                                                                                  temperature_high=self.max_temperature) for temp,bus in self.temperature_buses.items()},  # in_0 is always active
-                output_levels={bus: self.get_relative_storage_level_at_temperature(temp) for temp,bus in self.temperature_buses.items()},
-            )
+    def calculate_diameter_and_height(self,volume, height_diameter_ratio):
+        diameter = (4 * volume / (math.pi * height_diameter_ratio)) ** (1 / 3)
+        height = height_diameter_ratio * diameter
+        return diameter, height
+
+    def calculate_area_of_heat_loss(self,volume,):
+        diameter, height = self.calculate_diameter_and_height(volume=volume,height_diameter_ratio=self.height_diameter_relation)
+        mantle_area = math.pi * diameter * height
+        top_area =  math.pi * (diameter/2) ** 2
+        bottom_area = math.pi * (diameter / 2) ** 2
+        return mantle_area + top_area + bottom_area
     def generate_bus_from_storage(self):
         self.bus_from_storage = solph.buses.Bus(label=f"b_{self.name.lower()}_from_storage")
         return self.get_bus_from_storage()
@@ -289,7 +288,7 @@ class HotWaterTank(Storage):
 @dataclass
 class Battery(Storage):
     name: str = "Battery"
-    loss_rate: float = 0.0
+    loss_rate: float = 0.04
     nominal_capacity: float
     invest_relation_input_capacity: float = 0.5
     invest_relation_output_capacity: float = 0.5
