@@ -99,6 +99,8 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
             continue
         building_id =row['building_id']
         building_in_cluster =row['buildings_in_cluster']
+        print("HARD CORDED BUILDING IN CLUSTER ==1 ")
+        building_in_cluster=1
         dataclasses[building_id] = {}
         components[building_id] = {}
         electricity_carrier_dataclass_building = ElectricityCarrier(name="e_carrier_"+str(building_id))
@@ -141,8 +143,10 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
         max_required_heating = max(data["ww_demand_"+str(building_id)] + data["building_"+str(building_id)]) * 2
 
-
-        heat_carrier_temperature_levels = [40,50,60,70,80,90]
+        building_dataclass = copy.deepcopy(data_classes_comp.loc["building", building_id])
+        temp_heating_demand_building = building_dataclass.level_heating_demand
+        heat_carrier_temperature_levels = [40,50]
+        heat_carrier_temperature_levels.extend([temp_heating_demand_building,80])
         heat_carrier_dataclass = HeatCarrier(name="h_carrier_"+str(building_id),
             levels = heat_carrier_temperature_levels)
         heat_carrier_dataclass.connect_buses_decreasing_levels()
@@ -150,8 +154,8 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         heat_carrier_bus = heat_carrier_dataclass.get_bus()
         heat_demand_dataclass = data_classes_comp.loc["heat_demand", building_id]
         heat_demand_dataclass.value_list = data["ww_demand_"+str(building_id)]
-        heat_demand_dataclass.level = 40
-        heat_demand_dataclass.bus = heat_carrier_bus[40]
+        heat_demand_dataclass.level = heat_demand_dataclass.demand_temperature
+        heat_demand_dataclass.bus = heat_carrier_bus[heat_demand_dataclass.demand_temperature]
 
         heat_demand = heat_demand_dataclass.create_demand()
 
@@ -322,7 +326,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
             dataclasses[building_id]["pv_dataclass_"+str(key)] = pv_dataclass
             components[building_id]["pv_system_"+str(key)] = pv_system
-        break
+
     for building_id, building_data in components.items():
         # Ensure we're processing the components for the current building
         for oemof_comp, comp_value in building_data.items():
@@ -362,8 +366,12 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
             def equate_variables_rule(maximum_pv_capacity, maximum_key):
                 for ke in range(maximum_key):
                     key = int(ke +1)
-                    return model.InvestmentFlowBlock.invest[es.groups[components[building_id]["pv_system_"+str(key)].label],electricity_carrier_bus_building,0] + \
-                    model.InvestmentFlowBlock.invest[es.groups[components[building_id]["pv_system_"+str(key)].label],electricity_carrier_bus_building,0] <= maximum_pv_capacity
+                    return model.InvestmentFlowBlock.invest[es.groups[components[building_id]["pv_system_"+str(key)].label],
+                    components[building_id]["electricity_carrier_bus_building"],
+                    0] + \
+                    model.InvestmentFlowBlock.invest[es.groups[components[building_id]["pv_system_"+str(key)].label],
+                    components[building_id]["electricity_carrier_bus_building"],
+                    0] <= maximum_pv_capacity
 
             setattr(model, "eq"+components[building_id]["pv_system_"+str(key)].label, po.Constraint(rule=equate_variables_rule(int(maximum_key), int(maximum_pv_capacity))))
 
@@ -483,6 +491,8 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
 def process_cluster(cluster_df, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,data_classes_comp,ev,time_index):
     for index, row in cluster_df.iterrows():
+        if index>=1:
+            continue
         building_id = row['building_id']
         tabula_year_class = row['tabula_year_class']
         building_floor_area = row['net_floor_area']

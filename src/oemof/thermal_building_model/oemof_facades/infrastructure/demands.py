@@ -106,9 +106,9 @@ class HeatDemand(Demand):
 @dataclass
 class WarmWater(Demand):
     name: str = "WarmWaterDemand"
-    base_temperature:float = 35
-    demand_temperature:float = 10
+    demand_temperature = 50
     def __post_init__(self):
+        fraction_of_hot_water = (35-10)/(self.demand_temperature-10)
         if self.value_list is None:
             if self.demand_path is None:
                 main_path = get_project_root()
@@ -159,3 +159,4 @@ class WarmWater(Demand):
                     (35 - 10) * heat_capacity_water * df_ww * (1000 / 3600)
             )
             self.value_list = warm_water_demand_in_watt.tolist()
+        self.value_list=[x * fraction_of_hot_water for x in self.value_list]

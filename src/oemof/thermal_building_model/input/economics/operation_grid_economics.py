@@ -11,7 +11,7 @@ gas_grid_config = GridComponents(
 hydrogen_grid_config = GridComponents(
     working_rate=0.18 / 1000, # https://www.sciencedirect.com/science/article/pii/S037877882200651X  https://www.sciencedirect.com/science/article/pii/S2211467X24001391
     revenue=0,
-    price_change_factor=-0.02,
+    price_change_factor=0.02,
     co2_per_flow=0.056 / 1000)
 
 
