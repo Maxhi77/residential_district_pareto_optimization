@@ -98,7 +98,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         if index>=1:
             continue
         building_id =row['building_id']
-        building_in_cluster =1
+        building_in_cluster =row['buildings_in_cluster']
         dataclasses[building_id] = {}
         components[building_id] = {}
         electricity_carrier_dataclass_building = ElectricityCarrier(name="e_carrier_"+str(building_id))
@@ -474,7 +474,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         final_results["co2_operation"] = co2_operation
         final_results["co2_investment"] = co2_investment
         final_results["totex"] = meta_results["objective"]
-
+        final_results["totex_oemof_model"] = meta_results["objective"]
         return final_results, co2_oemof_model
     except Exception as e:
         print(e)
@@ -483,8 +483,6 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
 def process_cluster(cluster_df, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,data_classes_comp,ev,time_index):
     for index, row in cluster_df.iterrows():
-        if index>=1:
-            continue
         building_id = row['building_id']
         tabula_year_class = row['tabula_year_class']
         building_floor_area = row['net_floor_area']
@@ -657,12 +655,12 @@ def run_main(refurbish,buildings_connected):
         }
         co2_reference = co2_ref
         peak_reference = final_results_ref["Electricity"]["peak_from_grid"]
-        co2_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
-         #[1,0.9,0.8,0.7,0.6,0.5,0.4]
+        co2_reduction_factors = [1,0.6,0.3] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+         #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
         for co2_reduction_factor in co2_reduction_factors:
             first_co2_run_in_peak_loop = True
-            peak_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
+            peak_reduction_factors = [1,0.6,0.3]
 
 
             if co2_reference > 0:
@@ -694,7 +692,7 @@ def run_main(refurbish,buildings_connected):
                         first_co2_run_in_peak_loop = False
                         peak =False
                         peak_reference = peak
-
+                    break
                 else:
                     peak_calculation_worked = True
                     totex = final_results["totex"]
