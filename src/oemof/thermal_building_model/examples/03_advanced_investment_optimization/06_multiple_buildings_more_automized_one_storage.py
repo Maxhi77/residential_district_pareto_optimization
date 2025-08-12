@@ -95,10 +95,12 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
     components = {}
     index_stopper=1
     for index, row in combined_cluster.iterrows():
-
+        if False:
+            if index>=1:
+                continue
         building_id =row['building_id']
         building_in_cluster =row['buildings_in_cluster']
-        if True:
+        if False:
             print("HARD CORDED BUILDING IN CLUSTER ==1 ")
             building_in_cluster=1
         dataclasses[building_id] = {}
@@ -164,6 +166,17 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
         components[building_id]["heat_demand"] = heat_demand
         components[building_id]["heat_carrier_bus"] = heat_carrier_bus
+
+        if True:
+            building_dataclass = copy.deepcopy(data_classes_comp.loc["building", building_id])
+            building_dataclass.value_list = data["building_"+str(building_id)]
+            building_dataclass.set_number_of_buildings_in_cluster(building_in_cluster)
+            building_dataclass.bus=heat_carrier_bus[building_dataclass.level_heating_demand]
+
+            building_component = building_dataclass.create_demand()
+
+            dataclasses[building_id]["building_dataclass"] = building_dataclass
+            components[building_id]["building_component"] = building_component
         if True:
             for key, config in hot_water_tank_config.items():
                 print(building_id)
@@ -201,9 +214,12 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
                                                   investment_component=air_heat_pump_config_building)
             air_heat_pump_bus = air_heat_pump_dataclass.get_bus()
             air_heat_pump= air_heat_pump_dataclass.create_source()
+            avg_temp_building_demand_and_max_storage = int(
+                (building_dataclass.level_heating_demand + max(heat_carrier_dataclass.get_bus())) / 2)
             air_heat_pump_converters= air_heat_pump_dataclass.create_converters(heat_pump_bus = air_heat_pump_bus,
                                                                              electricity_bus = electricity_carrier_bus_building,
-                                                                             heat_carrier_bus=heat_carrier_dataclass.get_bus())
+                                                                             heat_carrier_bus={avg_temp_building_demand_and_max_storage if k == max(heat_carrier_dataclass.get_bus()
+                                                                                                                                                    ) else k: v for k, v in heat_carrier_dataclass.get_bus().items()})
 
             dataclasses[building_id]["air_heat_pump_dataclass_"+str(key)] = air_heat_pump_dataclass
             components[building_id]["air_heat_pump_converters_"+str(key)] = air_heat_pump_converters
@@ -294,18 +310,6 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
             dataclasses[building_id]["battery_dataclass_"+str(key)] = battery_dataclass
             components[building_id]["battery_"+str(key)] = battery
 
-
-
-        if True:
-            building_dataclass = copy.deepcopy(data_classes_comp.loc["building", building_id])
-            building_dataclass.value_list = data["building_"+str(building_id)]
-            building_dataclass.set_number_of_buildings_in_cluster(building_in_cluster)
-            building_dataclass.bus=heat_carrier_bus[building_dataclass.level_heating_demand]
-
-            building_component = building_dataclass.create_demand()
-
-            dataclasses[building_id]["building_dataclass"] = building_dataclass
-            components[building_id]["building_component"] = building_component
         for key, config in pv_system_config.items():
             pv_dataclass = copy.deepcopy(data_classes_comp[building_id]["pv_system"][key])
             pv_dataclass_config_building = copy.deepcopy(config)
@@ -484,7 +488,9 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
 def process_cluster(cluster_df, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,data_classes_comp,ev,time_index):
     for index, row in cluster_df.iterrows():
-
+        if False:
+            if index>=1:
+                continue
         building_id = row['building_id']
         tabula_year_class = row['tabula_year_class']
         building_floor_area = row['net_floor_area']
