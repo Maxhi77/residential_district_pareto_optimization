@@ -141,11 +141,11 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         components[building_id]["grid_from_converter_building"] = grid_from_converter_building
         components[building_id]["electricity_demand"] = electricity_demand
 
-        max_required_heating = max(data["ww_demand_"+str(building_id)] + data["building_"+str(building_id)]) * 2
+        max_required_heating = max(data["ww_demand_"+str(building_id)] + data["building_"+str(building_id)]) * 3
 
         building_dataclass = copy.deepcopy(data_classes_comp.loc["building", building_id])
         temp_heating_demand_building = building_dataclass.level_heating_demand
-        heat_carrier_temperature_levels = [40,50]
+        heat_carrier_temperature_levels = [50]
         heat_carrier_temperature_levels.extend([temp_heating_demand_building,80])
         heat_carrier_dataclass = HeatCarrier(name="h_carrier_"+str(building_id),
             levels = heat_carrier_temperature_levels)
@@ -164,39 +164,40 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
         components[building_id]["heat_demand"] = heat_demand
         components[building_id]["heat_carrier_bus"] = heat_carrier_bus
+        if True:
+            for key, config in hot_water_tank_config.items():
+                print(building_id)
+                hot_water_tank_config_building = copy.deepcopy(config)
+                if data_classes_comp.loc["building", building_id] == "SFH":
+                    hot_water_tank_config_building.maximum_capacity = 5
+                elif data_classes_comp.loc["building", building_id] == "MFH":
+                    hot_water_tank_config_building.maximum_capacity = 40
 
-        for key, config in hot_water_tank_config.items():
-            print(building_id)
-            hot_water_tank_config_building = copy.deepcopy(config)
-            if data_classes_comp.loc["building", building_id] == "SFH":
-                hot_water_tank_config_building.maximum_capacity = 5
-            elif data_classes_comp.loc["building", building_id] == "MFH":
-                hot_water_tank_config_building.maximum_capacity = 40
+                hot_water_tank_config_building.set_reference_unit_quantity(reference_unit_quantity=building_in_cluster)
+                hot_water_tank_input_bus = solph.buses.Bus(label=f"input_bus_{building_id}_{key}")
+                hot_water_tank_output_bus = solph.buses.Bus(label=f"output_bus_{building_id}_{key}")
+                hot_water_tank_dataclass = HotWaterTank(
+                    name=f"heat_storage_{building_id}_{key}",
+                    investment=True,
+                    temperature_buses = heat_carrier_bus,
+                    max_temperature=80,
+                    min_temperature=min(heat_carrier_bus),
+                    investment_component=hot_water_tank_config_building,
+                    input_bus= hot_water_tank_input_bus,
+                    output_bus=hot_water_tank_output_bus,
+                    )
+                hot_water_tank_stratisfied_temp_levels_dict = hot_water_tank_dataclass.get_stratified_storage_temperature_levels()
+                hot_water_tank = hot_water_tank_dataclass.create_storage()
 
-            hot_water_tank_config_building.set_reference_unit_quantity(reference_unit_quantity=building_in_cluster)
-            hot_water_tank_input_bus = solph.buses.Bus(label=f"input_bus_{building_id}_{key}")
-            hot_water_tank_output_bus = solph.buses.Bus(label=f"output_bus_{building_id}_{key}")
-            hot_water_tank_dataclass = HotWaterTank(
-                name=f"heat_storage_{building_id}_{key}",
-                investment=True,
-                temperature_buses = heat_carrier_bus,
-                max_temperature=70,
-                min_temperature=min(heat_carrier_bus),
-                investment_component=hot_water_tank_config_building,
-                input_bus= hot_water_tank_input_bus,
-                output_bus=hot_water_tank_output_bus,
-                )
-            hot_water_tank_stratisfied_temp_levels_dict = hot_water_tank_dataclass.get_stratified_storage_temperature_levels()
-            hot_water_tank = hot_water_tank_dataclass.create_storage()
+                hot_water_tank_stratisfied = hot_water_tank_dataclass.create_stratified_storage(hot_water_tank_stratisfied_temp_levels_dict,heat_carrier_bus)
+                dataclasses[building_id]["hot_water_tank_stratisfied_temp_levels_"+str(key)] = hot_water_tank_stratisfied_temp_levels_dict
 
-            hot_water_tank_stratisfied = hot_water_tank_dataclass.create_stratified_storage(hot_water_tank_stratisfied_temp_levels_dict,heat_carrier_bus)
-            dataclasses[building_id]["hot_water_tank_stratisfied_temp_levels_"+str(key)] = hot_water_tank_stratisfied_temp_levels_dict
+                dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)] = hot_water_tank_dataclass
+                components[building_id]["hot_water_tank_stratisfied_"+str(key)] = hot_water_tank_stratisfied
+                components[building_id]["hot_water_tank_input_bus_"+str(key)] = hot_water_tank_input_bus
+                components[building_id]["hot_water_tank_output_bus_"+str(key)] = hot_water_tank_output_bus
+                components[building_id]["hot_water_tank_"+str(key)] = hot_water_tank
 
-            dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)] = hot_water_tank_dataclass
-            components[building_id]["hot_water_tank_stratisfied_"+str(key)] = hot_water_tank_stratisfied
-            components[building_id]["hot_water_tank_input_bus_"+str(key)] = hot_water_tank_input_bus
-            components[building_id]["hot_water_tank_output_bus_"+str(key)] = hot_water_tank_output_bus
-            components[building_id]["hot_water_tank_"+str(key)] = hot_water_tank
         for key, config in air_heat_pump_config.items():
             air_heat_pump_config_building =  copy.deepcopy(config)
             air_heat_pump_config_building.maximum_capacity = max_required_heating
@@ -265,28 +266,28 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
             components[building_id]["gas_heater_converters_"+str(key)] = gas_heater_converters
             components[building_id]["gas_heater_bus_"+str(key)] = gas_heater_bus
             components[building_id]["gas_heater_"+str(key)] = gas_heater
+        if True:
+            for key, config in chp_config.items():
+                chp_config_building = copy.deepcopy(config)
+                chp_config_building.maximum_capacity = max_required_heating
+                chp_config_building.set_reference_unit_quantity(reference_unit_quantity=building_in_cluster)
 
-        for key, config in chp_config.items():
-            chp_config_building = copy.deepcopy(config)
-            chp_config_building.maximum_capacity = max_required_heating
-            chp_config_building.set_reference_unit_quantity(reference_unit_quantity=building_in_cluster)
+                chp_dataclass = CHP(investment=True,
+                                    name="chp_"+str(building_id)+"_"+str(key),
+                                    investment_component=chp_config_building,
+                                    )
+                chp_bus = chp_dataclass.get_bus()
+                chp= chp_dataclass.create_source()
+                chp_converters= chp_dataclass.create_converters(chp_bus = chp_bus,
+                                                                gas_bus = hydrogen_carrier_bus_building,
+                                                                heat_carrier_bus=heat_carrier_dataclass.get_bus(),
+                                                                electricity_bus = electricity_carrier_bus_building
+                                                                )
 
-            chp_dataclass = CHP(investment=True,
-                                name="chp_"+str(building_id)+"_"+str(key),
-                                investment_component=chp_config_building,
-                                )
-            chp_bus = chp_dataclass.get_bus()
-            chp= chp_dataclass.create_source()
-            chp_converters= chp_dataclass.create_converters(chp_bus = chp_bus,
-                                                            gas_bus = hydrogen_carrier_bus_building,
-                                                            heat_carrier_bus=heat_carrier_dataclass.get_bus(),
-                                                            electricity_bus = electricity_carrier_bus_building
-                                                            )
-
-            dataclasses[building_id]["chp_dataclass_"+str(key)] = chp_dataclass
-            components[building_id]["chp_converters_"+str(key)] = chp_converters
-            components[building_id]["chp_bus_"+str(key)] = chp_bus
-            components[building_id]["chp_"+str(key)] = chp
+                dataclasses[building_id]["chp_dataclass_"+str(key)] = chp_dataclass
+                components[building_id]["chp_converters_"+str(key)] = chp_converters
+                components[building_id]["chp_bus_"+str(key)] = chp_bus
+                components[building_id]["chp_"+str(key)] = chp
 
         for key, config in battery_config.items():
             battery_config_building =  copy.deepcopy(config)
@@ -346,19 +347,19 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
                 # Otherwise, just add the component directly
                 es.add(comp_value)
                 print(comp_value)
-
     model = solph.Model(es)
-    for building_id, building_data in dataclasses.items():
-        for key, config in hot_water_tank_config.items():
-            for temperature, stratisfied_storage in components[building_id]["hot_water_tank_stratisfied_"+str(key)].items():
-                storage_father = es.groups[components[building_id]["hot_water_tank_"+str(key)].label]
-                storage_child = stratisfied_storage
-                share_stratisfied = dataclasses[building_id]["hot_water_tank_stratisfied_temp_levels_"+str(key)][temperature]
+    if True:
+        for building_id, building_data in dataclasses.items():
+            for key, config in hot_water_tank_config.items():
+                for temperature, stratisfied_storage in components[building_id]["hot_water_tank_stratisfied_"+str(key)].items():
+                    storage_father = es.groups[components[building_id]["hot_water_tank_"+str(key)].label]
+                    storage_child = stratisfied_storage
+                    share_stratisfied = dataclasses[building_id]["hot_water_tank_stratisfied_temp_levels_"+str(key)][temperature]
 
-                def equate_variables_rule(factor1):
-                    return model.GenericInvestmentStorageBlock.invest[storage_child, 0]  == model.GenericInvestmentStorageBlock.invest[storage_father, 0]
+                    def equate_variables_rule(share_stratisfied):
+                        return model.GenericInvestmentStorageBlock.invest[storage_child, 0] * share_stratisfied  == model.GenericInvestmentStorageBlock.invest[storage_father, 0]
 
-                setattr(model, "eq"+components[building_id]["hot_water_tank_stratisfied_"+str(key)][temperature].label, po.Constraint(rule=equate_variables_rule(share_stratisfied)))
+                    setattr(model, "eq"+components[building_id]["hot_water_tank_stratisfied_"+str(key)][temperature].label, po.Constraint(rule=equate_variables_rule(share_stratisfied)))
 
         for key, config in pv_system_config.items():
             maximum_pv_capacity = dataclasses[building_id]["pv_dataclass_" + str(key)].investment_component.maximum_capacity
@@ -633,7 +634,7 @@ def run_main(refurbish,buildings_connected):
         )
 
 
-        typical_periods = 15
+        typical_periods = 12
         hours_per_period = 24
 
         aggregation1 = tsam.TimeSeriesAggregation(
