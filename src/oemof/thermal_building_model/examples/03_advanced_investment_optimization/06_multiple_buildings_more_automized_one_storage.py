@@ -95,8 +95,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
     components = {}
     index_stopper=1
     for index, row in combined_cluster.iterrows():
-        if index>=1:
-            continue
+
         building_id =row['building_id']
         building_in_cluster =row['buildings_in_cluster']
         if True:
@@ -369,7 +368,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
         setattr(model, "eq"+components[building_id]["pv_system_"+str(key)].label, po.Constraint(rule=equate_variables_rule(int(maximum_key), int(maximum_pv_capacity))))
 
-    if True:
+    if False:
         # Create the graph from the energy system (es)
         graph = create_nx_graph(es)
         # Draw the graph
@@ -485,8 +484,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
 def process_cluster(cluster_df, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,data_classes_comp,ev,time_index):
     for index, row in cluster_df.iterrows():
-        if index >= 1:
-            continue
+
         building_id = row['building_id']
         tabula_year_class = row['tabula_year_class']
         building_floor_area = row['net_floor_area']
@@ -628,7 +626,7 @@ def run_main(refurbish,buildings_connected):
         )
 
 
-        typical_periods = 12
+        typical_periods = 15
         hours_per_period = 24
 
         aggregation1 = tsam.TimeSeriesAggregation(
