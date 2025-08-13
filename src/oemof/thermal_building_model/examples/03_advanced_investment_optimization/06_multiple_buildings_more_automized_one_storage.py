@@ -144,7 +144,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         components[building_id]["electricity_demand"] = electricity_demand
 
         max_required_heating = max(data["ww_demand_"+str(building_id)] + data["building_"+str(building_id)]) * 3
-
+        print("max_required_heating: "+str(max_required_heating))
         building_dataclass = copy.deepcopy(data_classes_comp.loc["building", building_id])
         temp_heating_demand_building = building_dataclass.level_heating_demand
         heat_carrier_temperature_levels = [50]
@@ -480,7 +480,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         final_results["co2_investment"] = co2_investment
         final_results["totex"] = meta_results["objective"]
         final_results["totex_oemof_model"] = meta_results["objective"]
-        return final_results, co2_oemof_model
+        return final_results, co2_oemof_model, meta_results["solver"]["Wall time"]
     except Exception as e:
         print(e)
         return None, None
@@ -649,7 +649,7 @@ def run_main(refurbish,buildings_connected):
         )
 
 
-        final_results_ref, co2_ref = run_model(None, None,refurbish,data,aggregation1,t1_agg,data_classes_comp,buildings_connected,combined_cluster)
+        final_results_ref, co2_ref, time = run_model(None, None,refurbish,data,aggregation1,t1_agg,data_classes_comp,buildings_connected,combined_cluster)
         co2_reduction_factor_ref = 1
         peak_reduction_factor_ref = 1
         results_loop_to_save[(co2_reduction_factor_ref, peak_reduction_factor_ref,refurbish)] = {
@@ -658,7 +658,8 @@ def run_main(refurbish,buildings_connected):
             "peak_reduction_factor" : peak_reduction_factor_ref,
             "refurbish": refurbish,
             "totex": final_results_ref["totex"],
-            "peak": final_results_ref["Electricity"]["peak_from_grid"]
+            "peak": final_results_ref["Electricity"]["peak_from_grid"],
+            "time":time
 
         }
         co2_reference = co2_ref
@@ -686,7 +687,7 @@ def run_main(refurbish,buildings_connected):
 
                     peak_new = peak_reference * peak_reduction_factor
 
-                final_results, co2  = run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,buildings_connected,combined_cluster)
+                final_results, co2,time  = run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,buildings_connected,combined_cluster)
                 if final_results is None:
                     results_loop_to_save[(co2_reduction_factor, peak_reduction_factor, refurbish)] = {
                         "results": None,
@@ -694,7 +695,8 @@ def run_main(refurbish,buildings_connected):
                         "peak_reduction_factor": None,
                         "refurbish": None,
                         "totex": None,
-                        "peak": None
+                        "peak": None,
+                        "time":None
                     }
                     if first_co2_run_in_peak_loop:
                         first_co2_run_in_peak_loop = False
@@ -715,7 +717,8 @@ def run_main(refurbish,buildings_connected):
                         "peak_reduction_factor": peak_reduction_factor,
                         "refurbish": refurbish,
                         "totex": totex,
-                        "peak": peak
+                        "peak": peak,
+                        "time": time
                     }
 
             if True:
