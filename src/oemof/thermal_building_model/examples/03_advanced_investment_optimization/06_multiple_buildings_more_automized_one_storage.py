@@ -1,3 +1,4 @@
+from oemof.thermal_building_model.oemof_facades.base_component import  PhysicalBaseUnit
 from oemof.solph.components import Converter
 import copy
 from oemof.thermal_building_model.oemof_facades.infrastructure.grids import ElectricityGrid, HeatGrid, GasGrid, HydrogenGrid
@@ -96,7 +97,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
     index_stopper=1
     for index, row in combined_cluster.iterrows():
         if False:
-            if index>=2:
+            if index>=1:
                 continue
         building_id =row['building_id']
         building_in_cluster =row['buildings_in_cluster']
@@ -151,7 +152,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         heat_carrier_temperature_levels.extend([temp_heating_demand_building,80])
         heat_carrier_dataclass = HeatCarrier(name="h_carrier_"+str(building_id),
             levels = heat_carrier_temperature_levels)
-        if False:
+        if True:
             heat_carrier_dataclass.connect_buses_decreasing_levels()
         else:
             connect_buses(input=heat_carrier_dataclass.get_bus([temp_heating_demand_building])[temp_heating_demand_building], target=heat_carrier_dataclass.get_bus([50])[50])
@@ -377,7 +378,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
             setattr(model, "eq"+components[building_id]["pv_system_"+str(key)].label, po.Constraint(rule=equate_variables_rule(int(maximum_key), int(maximum_pv_capacity))))
 
-    if True:
+    if False:
         # Create the graph from the energy system (es)
         graph = create_nx_graph(es)
         # Draw the graph
@@ -399,7 +400,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
 
         model.solve(solver=solver, solve_kwargs={"tee": True},
-                                              cmdline_options={"mipgap": 0.02}
+                                              cmdline_options={"mipgap": 0.005}
         )
         meta_results = solph.processing.meta_results(model)
         results = solph.processing.results(model)
@@ -494,7 +495,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 def process_cluster(cluster_df, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,data_classes_comp,ev,time_index):
     for index, row in cluster_df.iterrows():
         if False:
-            if index>=2:
+            if index>=1:
                 continue
         building_id = row['building_id']
         tabula_year_class = row['tabula_year_class']
@@ -669,12 +670,12 @@ def run_main(refurbish,buildings_connected):
         }
         co2_reference = co2_ref
         peak_reference = final_results_ref["Electricity"]["peak_from_grid"]
-        co2_reduction_factors = [1,0.4] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+        co2_reduction_factors = [1] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
          #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
         for co2_reduction_factor in co2_reduction_factors:
             first_co2_run_in_peak_loop = True
-            peak_reduction_factors = [1,0.4]
+            peak_reduction_factors = [1]
 
 
             if co2_reference > 0:
@@ -726,7 +727,7 @@ def run_main(refurbish,buildings_connected):
                         "time": time
                     }
             print("FINISHED PEAK LOOP START SAVING")
-            file_path="results_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(buildings_connected)+".pkl"
+            file_path="1results_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(buildings_connected)+".pkl"
             if os.path.exists(file_path):
                 # If the file exists, open it and load the data
                 with open(file_path, "rb") as f:
@@ -744,7 +745,7 @@ def run_main(refurbish,buildings_connected):
             # Save the updated or new results back to the pickle file
             with open(file_path, "wb") as f:
                 pickle.dump(existing_results, f)
-    file_path = "results_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) +"_" + str(
+    file_path = "1results_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) +"_" + str(
         buildings_connected) + ".pkl"
     if os.path.exists(file_path):
         # If the file exists, open it and load the data

@@ -1,6 +1,6 @@
 from openpyxl.styles.builtins import output
 
-from oemof.thermal_building_model.oemof_facades.base_component import BaseComponent, InvestmentComponents
+from oemof.thermal_building_model.oemof_facades.base_component import BaseComponent, InvestmentComponents, PhysicalBaseUnit
 from typing import Optional
 from oemof import solph
 from dataclasses import dataclass, field
@@ -223,7 +223,7 @@ class HotWaterTank(Storage):
 
     # capacity is m^3
     def __post_init__(self):
-        self.storage_volumen_in_Wh_per_kg = 4.186 * 1000 / 3600 # [Wh/K kg]
+        self.storage_volumen_in_Wh_per_kg = 4.186 * 1000 / 3600 / PhysicalBaseUnit.factor# [Wh/K kg]
         self.qubick_meter_water_in_kg = 992.2  # [kg/m^3]
 
         if not self.investment:

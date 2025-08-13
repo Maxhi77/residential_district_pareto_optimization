@@ -3,6 +3,11 @@ from oemof.tools import economics
 from typing import Optional
 
 @dataclass(kw_only=True)
+class PhysicalBaseUnit:
+    Watts: float=1
+    kiloWatts: float=1000
+    factor = kiloWatts
+@dataclass(kw_only=True)
 class BaseComponent:
     name: str
     oemof_component_name: str = None

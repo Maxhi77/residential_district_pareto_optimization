@@ -1,4 +1,4 @@
-from oemof.thermal_building_model.oemof_facades.base_component import BaseComponent, InvestmentComponents
+from oemof.thermal_building_model.oemof_facades.base_component import BaseComponent, InvestmentComponents, PhysicalBaseUnit
 from typing import Optional, List
 from oemof import solph
 from oemof.network import Bus
@@ -8,6 +8,7 @@ import os
 from dataclasses import dataclass, field
 import copy
 from oemof.thermal_building_model.input.economics.investment_components import pv_system_config
+
 @dataclass
 class RenewableEnergySource(BaseComponent):
     nominal_power: Optional[float] = None
@@ -108,9 +109,9 @@ class PVSystem(RenewableEnergySource):
                     "sfh_example",
                     "pvwatts_hourly_1kW.csv",
                 )
-            )["AC System Output (W)"] / 1000
+            )["AC System Output (W)"] / 1000 / PhysicalBaseUnit.factor
     def calculate_max_pv_size_based_area(self, area):
-        installable_power_per_module_area_wp_per_m2 = 0.205 * 1000
+        installable_power_per_module_area_wp_per_m2 = 0.205 * 1000 / PhysicalBaseUnit.factor
         return installable_power_per_module_area_wp_per_m2 *area
     def update_maximum_investment_pv_capacity_based_on_area(self,area):
         self.investment_component.maximum_capacity=self.calculate_max_pv_size_based_area(area)

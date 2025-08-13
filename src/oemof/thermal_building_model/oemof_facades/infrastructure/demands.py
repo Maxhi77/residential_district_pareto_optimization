@@ -4,6 +4,7 @@ from typing import Optional, Union, List
 from oemof.thermal_building_model.helpers.path_helper import get_project_root
 import pandas as pd
 import os
+from oemof.thermal_building_model.oemof_facades.base_component import  PhysicalBaseUnit
 @dataclass
 class Demand:
     name: str
@@ -80,7 +81,7 @@ class ElectricityDemand(Demand):
                     .sum()
                     .to_frame(name="Hourly_Sum")["Hourly_Sum"]
                 )
-                elect_demand_in_watt = elect_demand_df * 1000
+                elect_demand_in_watt = elect_demand_df * 1000 / PhysicalBaseUnit.factor
                 self.value_list = elect_demand_in_watt
             else:
 
@@ -96,8 +97,9 @@ class ElectricityDemand(Demand):
                 )
 
                 #df_elect =( df["Electricity_HH1"] + df["Electricity_House"] ) * 1000
-                df_elect = (elect_demand_df) * 1000
+                df_elect = (elect_demand_df) * 1000 / PhysicalBaseUnit.factor
                 self.value_list = df_elect.tolist()
+        self.value_list =  [x / PhysicalBaseUnit.factor for x in self.value_list]
 @dataclass
 class HeatDemand(Demand):
     name: str = "HeatDemand"
@@ -130,7 +132,7 @@ class WarmWater(Demand):
                 heat_capacity_water = 4.18  # [kJ/(kg/K)
                 warm_water_demand_in_watt = (
                         (35 - 10) * heat_capacity_water * warm_water_demand_df * (1000 / 3600)
-                )
+                ) / PhysicalBaseUnit.factor
                 self.value_list = warm_water_demand_in_watt
 
 
@@ -150,13 +152,13 @@ class WarmWater(Demand):
                 heat_capacity_water = 4.18  # [kJ/(kg/K)
                 warm_water_demand_in_watt = (
                         (35 - 10) * heat_capacity_water * df_ww * (1000 / 3600)
-                )
+                ) / PhysicalBaseUnit.factor
                 self.value_list = warm_water_demand_in_watt.tolist()
         else:
             df_ww =  self.value_list
             heat_capacity_water = 4.18  # [kJ/(kg/K)
             warm_water_demand_in_watt = (
                     (35 - 10) * heat_capacity_water * df_ww * (1000 / 3600)
-            )
+            ) / PhysicalBaseUnit.factor
             self.value_list = warm_water_demand_in_watt.tolist()
         self.value_list=[x * fraction_of_hot_water for x in self.value_list]

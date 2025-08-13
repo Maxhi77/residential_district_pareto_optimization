@@ -6,7 +6,7 @@ from oemof.thermal_building_model.helpers import calculate_gain_by_sun, path_hel
 from oemof.thermal_building_model.helpers.building_heat_demand_simulation import HeatDemand_Simulation_5RC
 from oemof.thermal_building_model.helpers.refurbishment_calculator import Floor,Roof,Wall
 from oemof.thermal_building_model.input.refurbishment.refurbishment_data import wall_config, roof_config, floor_config, door_config, window_config
-from oemof.thermal_building_model.oemof_facades.base_component import EconomicsInvestmentRefurbishment
+from oemof.thermal_building_model.oemof_facades.base_component import EconomicsInvestmentRefurbishment, PhysicalBaseUnit
 from oemof.thermal_building_model.helpers.building_heat_demand_simulation import find_highest_peak, calculate_inlet_temp
 import os
 import warnings
@@ -152,10 +152,10 @@ class ThermalBuilding(Demand):
         self.t_set_cooling = []
         for hour_counter in range(len(self.time_index)+1):
             self.internal_gains.append(self.number_of_occupants*50+ gain_technology_per_hour_in_watt)
-            self.t_set_heating.append(20)
+            self.t_set_heating.append(19)
             self.t_set_cooling.append(40)
-        self.max_power_heating = 30000
-        self.max_power_cooling = 30000
+        self.max_power_heating = 100000
+        self.max_power_cooling = 100000
         self.t_set_heating_max = 24
         self.t_inital=20
         heating_demand, _, _ = HeatDemand_Simulation_5RC(
@@ -171,9 +171,9 @@ class ThermalBuilding(Demand):
             max_power_heating=self.max_power_heating,
             max_power_cooling=self.max_power_cooling,
             time_index= self.time_index).solve()
-        self.value_list = heating_demand
+
         if self.refurbishment_status is not "no_refurbishment":
-            self.peak_index, _ = find_highest_peak(self.value_list)
+            self.peak_index, _ = find_highest_peak(heating_demand)
             self.reference_building = Building(
                 number_of_time_steps=self.peak_index,
                 tabula_building_code=self.tabula_building_code,
@@ -189,7 +189,7 @@ class ThermalBuilding(Demand):
         else:
             self.reference_building = self.building_object
         self.investment_cost_per_measure, self.capex_annuity_per_measure, self.co2_cost_per_measure = self.get_refurbishment_cost ()
-
+        self.value_list = [x/PhysicalBaseUnit.factor for x in heating_demand]
         self.level_heating_demand = self.calculate_heat_distribution_temperature()
 
         self.capex_annuity = sum(self.capex_annuity_per_measure.values())

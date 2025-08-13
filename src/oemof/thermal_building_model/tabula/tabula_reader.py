@@ -126,7 +126,7 @@ class Building:
         number_of_time_steps: float,
         tabula_building_code: str = None,
         country: str = None,
-        class_building: str = "heavy",
+        class_building: str = "average",
         building_type: str = None,
         refurbishment_status="no_refurbishment",
         construction_year: int = None,
