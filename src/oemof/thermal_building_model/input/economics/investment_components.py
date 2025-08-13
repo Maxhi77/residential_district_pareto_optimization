@@ -102,7 +102,17 @@ if True:
             lifetime=25,
         )
     }
-    if True:
+    pv_system_config = {1:
+        InvestmentComponents(
+        maximum_capacity=100*1000,
+        cost_per_unit=1300 /1000,
+        minimum_capacity=1000,
+        cost_offset=500,
+        operational_cost_relative_to_capacity=0.02,
+        co2_per_capacity=0.91,
+        lifetime=25,
+    )}
+    if False:
         pv_system_config = {1:
             InvestmentComponents(
             maximum_capacity=30*1000,
@@ -155,24 +165,34 @@ if True:
             lifetime=25),
 
     }
-
-    chp_config = { #gilt für Bio gas und Wasserstoff
-        1:InvestmentComponents(
-            maximum_capacity=30*1000,
-            minimum_capacity=2*1000,
+    chp_config = {  # gilt für Bio gas und Wasserstoff
+        1: InvestmentComponents(
+            maximum_capacity=100 * 1000,
+            minimum_capacity=2 * 1000,
             cost_per_unit=3866 / 1000,
             cost_offset=43666.66,
             operational_cost_relative_to_capacity=0.025,
             co2_per_capacity=0.02264,
             lifetime=15,
-            ),
-        2:InvestmentComponents(
-            maximum_capacity=100*1000,
-            minimum_capacity=30*1000,
-            cost_per_unit=3500 / 1000,
-            cost_offset=41000,
-            operational_cost_relative_to_capacity=0.02,
-            co2_per_capacity=0.02264,
-            lifetime=15,
-        )
-    }
+        )}
+    if False:
+        chp_config = { #gilt für Bio gas und Wasserstoff
+            1:InvestmentComponents(
+                maximum_capacity=30*1000,
+                minimum_capacity=2*1000,
+                cost_per_unit=3866 / 1000,
+                cost_offset=43666.66,
+                operational_cost_relative_to_capacity=0.025,
+                co2_per_capacity=0.02264,
+                lifetime=15,
+                ),
+            2:InvestmentComponents(
+                maximum_capacity=100*1000,
+                minimum_capacity=30*1000,
+                cost_per_unit=3500 / 1000,
+                cost_offset=41000,
+                operational_cost_relative_to_capacity=0.02,
+                co2_per_capacity=0.02264,
+                lifetime=15,
+            )
+        }

@@ -356,21 +356,21 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
                         return model.GenericInvestmentStorageBlock.invest[storage_child, 0] * share_stratisfied  == model.GenericInvestmentStorageBlock.invest[storage_father, 0]
 
                     setattr(model, "eq"+components[building_id]["hot_water_tank_stratisfied_"+str(key)][temperature].label, po.Constraint(rule=equate_variables_rule(share_stratisfied)))
+    if len(pv_system_config) > 1:
+        for key, config in pv_system_config.items():
+            maximum_pv_capacity = dataclasses[building_id]["pv_dataclass_" + str(key)].investment_component.maximum_capacity
+            maximum_key = max(pv_system_config)
+            def equate_variables_rule(maximum_pv_capacity, maximum_key):
+                for ke in range(maximum_key):
+                    key = int(ke +1)
+                    return model.InvestmentFlowBlock.invest[es.groups[components[building_id]["pv_system_"+str(key)].label],
+                    components[building_id]["electricity_carrier_bus_building"],
+                    0] + \
+                    model.InvestmentFlowBlock.invest[es.groups[components[building_id]["pv_system_"+str(key)].label],
+                    components[building_id]["electricity_carrier_bus_building"],
+                    0] <= maximum_pv_capacity
 
-    for key, config in pv_system_config.items():
-        maximum_pv_capacity = dataclasses[building_id]["pv_dataclass_" + str(key)].investment_component.maximum_capacity
-        maximum_key = max(pv_system_config)
-        def equate_variables_rule(maximum_pv_capacity, maximum_key):
-            for ke in range(maximum_key):
-                key = int(ke +1)
-                return model.InvestmentFlowBlock.invest[es.groups[components[building_id]["pv_system_"+str(key)].label],
-                components[building_id]["electricity_carrier_bus_building"],
-                0] + \
-                model.InvestmentFlowBlock.invest[es.groups[components[building_id]["pv_system_"+str(key)].label],
-                components[building_id]["electricity_carrier_bus_building"],
-                0] <= maximum_pv_capacity
-
-        setattr(model, "eq"+components[building_id]["pv_system_"+str(key)].label, po.Constraint(rule=equate_variables_rule(int(maximum_key), int(maximum_pv_capacity))))
+            setattr(model, "eq"+components[building_id]["pv_system_"+str(key)].label, po.Constraint(rule=equate_variables_rule(int(maximum_key), int(maximum_pv_capacity))))
 
     if False:
         # Create the graph from the energy system (es)
@@ -483,7 +483,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         return final_results, co2_oemof_model, meta_results["solver"]["Wall time"]
     except Exception as e:
         print(e)
-        return None, None
+        return None, None, None
 
 
 def process_cluster(cluster_df, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,data_classes_comp,ev,time_index):
@@ -763,7 +763,7 @@ def run_main(refurbish,buildings_connected):
 if __name__ == "__main__":
     refurbishment =["no_refurbishment","usual_refurbishment","advanced_refurbishment"]  # Beispiel #"GEG_standard"
 
-    refurbishment =["usual_refurbishment"]  # Beispiel #"GEG_standard"
+    refurbishment =["no_refurbishment"]  # Beispiel #"GEG_standard"
     import multiprocessing
     connec=["uncon","con"]
     import os
