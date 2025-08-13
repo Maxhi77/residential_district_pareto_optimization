@@ -5,41 +5,63 @@ if True:
 
     battery_config = {
         1: InvestmentComponents(
-            maximum_capacity=30*1000,
+            maximum_capacity=100*1000,
             minimum_capacity=0,
-            cost_per_unit=750 / 1000,
+            cost_per_unit=675 / 1000,
             cost_offset=1000,
             co2_per_capacity=0.1303,
             lifetime=20,
             ),
-        2:InvestmentComponents(
-            maximum_capacity=100*1000,
-            minimum_capacity=30*1000,
-            cost_per_unit=625 / 1000,
-            cost_offset=1000,
-            co2_per_capacity=0.1303,
-            lifetime=20,
-        )}
+}
+    if False:
+        battery_config = {
+            1: InvestmentComponents(
+                maximum_capacity=30 * 1000,
+                minimum_capacity=0,
+                cost_per_unit=750 / 1000,
+                cost_offset=1000,
+                co2_per_capacity=0.1303,
+                lifetime=20,
+            ),
+            2: InvestmentComponents(
+                maximum_capacity=100 * 1000,
+                minimum_capacity=30 * 1000,
+                cost_per_unit=625 / 1000,
+                cost_offset=1000,
+                co2_per_capacity=0.1303,
+                lifetime=20,
+            )}
     # capacity is m^3
     hot_water_tank_config = {
         1: InvestmentComponents(
-            maximum_capacity=1,
+            maximum_capacity=50,
             minimum_capacity=0,
-            cost_per_unit=2097.431,
-            cost_offset=1048,
+            cost_per_unit=367.51,
+            cost_offset=2598,
             co2_per_capacity=0.2695,
             lifetime=30,
-            operational_cost_relative_to_capacity = 0.01
-        ),
-        2: InvestmentComponents(
-            maximum_capacity=100,
-            minimum_capacity=1,
-            cost_per_unit=856.272931,
-            cost_offset=2568,
-            co2_per_capacity=0.2695,
-            lifetime=30,
-            operational_cost_relative_to_capacity = 0.01
+            operational_cost_relative_to_capacity=0.01
         )}
+    if False:
+        hot_water_tank_config = {
+            1: InvestmentComponents(
+                maximum_capacity=1,
+                minimum_capacity=0,
+                cost_per_unit=2097.431,
+                cost_offset=1048,
+                co2_per_capacity=0.2695,
+                lifetime=30,
+                operational_cost_relative_to_capacity = 0.01
+            ),
+            2: InvestmentComponents(
+                maximum_capacity=100,
+                minimum_capacity=1,
+                cost_per_unit=856.272931,
+                cost_offset=2568,
+                co2_per_capacity=0.2695,
+                lifetime=30,
+                operational_cost_relative_to_capacity = 0.01
+            )}
 
     air_heat_pump_config={
         1: InvestmentComponents(
@@ -80,26 +102,26 @@ if True:
             lifetime=25,
         )
     }
+    if True:
+        pv_system_config = {1:
+            InvestmentComponents(
+            maximum_capacity=30*1000,
+            cost_per_unit=1500 /1000,
+            minimum_capacity=0,
+            cost_offset=500,
+            operational_cost_relative_to_capacity=0.02,
+            co2_per_capacity=0.91,
+            lifetime=25,
+        ),2:
+            InvestmentComponents(
+            maximum_capacity=1000*100,
 
-    pv_system_config = {1:
-        InvestmentComponents(
-        maximum_capacity=30*1000,
-        cost_per_unit=1500 /1000,
-        minimum_capacity=0,
-        cost_offset=500,
-        operational_cost_relative_to_capacity=0.02,
-        co2_per_capacity=0.91,
-        lifetime=25,
-    ),2:
-        InvestmentComponents(
-        maximum_capacity=1000*100,
-
-        cost_per_unit=1250 /1000,
-        cost_offset=500,
-        operational_cost_relative_to_capacity=0.02,
-        co2_per_capacity=0.91,
-        lifetime=25,
-    )}
+            cost_per_unit=1250 /1000,
+            cost_offset=500,
+            operational_cost_relative_to_capacity=0.02,
+            co2_per_capacity=0.91,
+            lifetime=25,
+        )}
 
 
     heat_grid_config = {
