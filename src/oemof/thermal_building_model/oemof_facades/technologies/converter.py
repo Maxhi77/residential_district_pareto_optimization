@@ -139,13 +139,13 @@ class GasHeater(Converter):
         return converters
 
 @dataclass
-class CHP(Converter):
+class CHP(Converter): # heat ruled
     name: str = "CHPElect"
     nominal_power: Optional[float] = 10000
     heat_carrier_bus: Optional[dict[Bus]] = None
     electrical_carrier_bus: Optional[dict[Bus]] = None
-    thermal_efficiency: Optional[float] = 0.62
-    electrical_efficiency: Optional[float] = 0.36
+    thermal_efficiency: Optional[float] = 0.605
+    electrical_efficiency: Optional[float] = 0.34
     investment_component: InvestmentComponents = field(default_factory=lambda: copy.deepcopy(chp_config))
 
     def create_converters(self,
@@ -154,16 +154,16 @@ class CHP(Converter):
                           electricity_bus: Optional[dict[Bus]],
                           heat_carrier_bus: Optional[dict[Bus]]):
         converters = []
-        for temperature, bus in heat_carrier_bus.items():
+        for temperature, heat_bus in heat_carrier_bus.items():
             converters.append(solph.components.Converter(
                 label=f"{self.name.lower()}_converter_to_{temperature}",
                 inputs={gas_bus: solph.Flow(),
                         chp_bus: solph.Flow()},
                 outputs={
-                    bus: solph.Flow(),
+                    heat_bus: solph.Flow(),
                     electricity_bus: solph.Flow(),
                 },
-                conversion_factors={bus: self.thermal_efficiency,
+                conversion_factors={gas_bus: 1 / self.thermal_efficiency,
                                     electricity_bus: self.electrical_efficiency},
             ))
         return converters
