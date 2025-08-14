@@ -677,7 +677,7 @@ def run_main(refurbish,building_id_in_cluster):
 
                     peak_new = peak_reference * peak_reduction_factor
 
-                final_results, co2,time  = run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster)
+                final_results, co2,time  = run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,building_id_in_cluster)
                 if final_results is None:
                     results_loop_to_save[(co2_reduction_factor, peak_reduction_factor, refurbish)] = {
                         "results": None,
@@ -752,7 +752,7 @@ def run_main(refurbish,building_id_in_cluster):
 if __name__ == "__main__":
     building_in_cluster=["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"]
     refurbishment =["no_refurbishment","usual_refurbishment","advanced_refurbishment"]  # Beispiel #"GEG_standard"
-    refurbishment =["usual_refurbishment"]
+    refurbishment =["no_refurbishment"]
     import multiprocessing
     import os
     for refubish in refurbishment:
