@@ -768,7 +768,7 @@ def run_main(refurbish,buildings_connected):
 if __name__ == "__main__":
     refurbishment =["no_refurbishment","usual_refurbishment","advanced_refurbishment"]  # Beispiel #"GEG_standard"
 
-    refurbishment =["usual_refurbishment"]  # Beispiel #"GEG_standard"
+    refurbishment =["advanced_refurbishment"]  # Beispiel #"GEG_standard"
     import multiprocessing
     connec=["con"]
     import os
