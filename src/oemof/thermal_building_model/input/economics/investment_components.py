@@ -24,21 +24,21 @@ if full_and_not_linearized:
         )}
     hot_water_tank_config = {
         1: InvestmentComponents(
-            maximum_capacity=1,
+            maximum_capacity=2,
             minimum_capacity=0,
-            cost_per_unit=2097.431,
-            cost_offset=1048,
+            cost_per_unit=1355.431,
+            cost_offset=1483,
             co2_per_capacity=0.2695,
             lifetime=30,
             operational_cost_relative_to_capacity=0.01
         ),
         2: InvestmentComponents(
             maximum_capacity=100,
-            minimum_capacity=1,
+            minimum_capacity=2,
             cost_per_unit=856.272931,
             cost_offset=2568,
             co2_per_capacity=0.2695,
-            lifetime=30,
+            lifetime=35,
             operational_cost_relative_to_capacity=0.01
         )}
     pv_system_config = {1:
