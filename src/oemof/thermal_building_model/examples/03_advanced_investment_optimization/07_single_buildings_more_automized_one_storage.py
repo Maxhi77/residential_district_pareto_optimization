@@ -723,7 +723,7 @@ def run_main(refurbish,building_id_in_cluster):
                         "time": time
                     }
             print("FINISHED PEAK LOOP START SAVING")
-            file_path="results_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(building_id_in_cluster)+".pkl"
+            file_path="fresults_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(building_id_in_cluster)+".pkl"
             if os.path.exists(file_path):
                 # If the file exists, open it and load the data
                 with open(file_path, "rb") as f:
@@ -741,7 +741,7 @@ def run_main(refurbish,building_id_in_cluster):
             # Save the updated or new results back to the pickle file
             with open(file_path, "wb") as f:
                 pickle.dump(existing_results, f)
-    file_path = "results_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) +"_" + str(
+    file_path = "fresults_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) +"_" + str(
         building_id_in_cluster) + ".pkl"
     if os.path.exists(file_path):
         # If the file exists, open it and load the data
