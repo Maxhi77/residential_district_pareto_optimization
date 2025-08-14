@@ -31,7 +31,7 @@ import tsam.timeseriesaggregation as tsam
 
 import pandas as pd
 #  create solver
-def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,buildings_connected,combined_cluster):
+def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster, building_id_in_cluster):
 
     solver = "gurobi"
     es = solph.EnergySystem(
@@ -96,40 +96,23 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
     components = {}
     index_stopper=1
     for index, row in combined_cluster.iterrows():
-        if True:
-            if index>=2:
-                continue
+        if building_id_in_cluster != row["building_id"]:
+            continue
         building_id =row['building_id']
         building_in_cluster =row['buildings_in_cluster']
-        if False:
-            print("HARD CORDED BUILDING IN CLUSTER ==1 ")
-            building_in_cluster=1
+
         dataclasses[building_id] = {}
         components[building_id] = {}
         electricity_carrier_dataclass_building = ElectricityCarrier(name="e_carrier_"+str(building_id))
         electricity_carrier_bus_building = electricity_carrier_dataclass_building.get_bus()
-        if buildings_connected == "con":
-            grid_into_converter_building = Converter(label="conv_e_into_grid_"+str(building_id),
-                                                  inputs={electricity_carrier_bus_building: solph.flows.Flow()},
-                                                  outputs={electricity_carrier_bus: solph.flows.Flow()},
-                                                  conversion_factors={electricity_carrier_bus_building: 1/building_in_cluster })
-            grid_from_converter_building = Converter(label="conv_e_from_grid_"+str(building_id),
-                                                  inputs={electricity_carrier_bus: solph.flows.Flow()},
-                                                  outputs={electricity_carrier_bus_building: solph.flows.Flow()},
-                                                  conversion_factors={electricity_carrier_bus_building: 1/ building_in_cluster* 0.975})
-        elif buildings_connected =="uncon":
-            grid_into_converter_building = Converter(label="conv_e_into_grid_" + str(building_id),
-                                                     inputs={electricity_carrier_bus_building: solph.flows.Flow()},
-                                                     outputs={electricity_grid_bus_into_grid: solph.flows.Flow()},
-                                                     conversion_factors={
-                                                         electricity_carrier_bus_building: 1 / building_in_cluster})
-            grid_from_converter_building = Converter(label="conv_e_from_grid_" + str(building_id),
-                                                     inputs={electricity_grid_bus_from_grid: solph.flows.Flow()},
-                                                     outputs={electricity_carrier_bus_building: solph.flows.Flow()},
-                                                     conversion_factors={
-                                                         electricity_carrier_bus_building: 1 / building_in_cluster * 0.975})
-        else:
-            break
+        grid_into_converter_building = Converter(label="conv_e_into_grid_"+str(building_id),
+                                              inputs={electricity_carrier_bus_building: solph.flows.Flow()},
+                                              outputs={electricity_carrier_bus: solph.flows.Flow()},
+                                              conversion_factors={electricity_carrier_bus_building: 1/building_in_cluster })
+        grid_from_converter_building = Converter(label="conv_e_from_grid_"+str(building_id),
+                                              inputs={electricity_carrier_bus: solph.flows.Flow()},
+                                              outputs={electricity_carrier_bus_building: solph.flows.Flow()},
+                                              conversion_factors={electricity_carrier_bus_building: 1/ building_in_cluster})
 
         electricity_demand_dataclass_building = data_classes_comp.loc["electricity_demand", building_id]
         electricity_demand_dataclass_building.value_list = data["e_demand_"+str(building_id)]
@@ -400,7 +383,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
 
         model.solve(solver=solver, solve_kwargs={"tee": True},
-                                              cmdline_options={"mipgap": 0.005}
+                                              cmdline_options={"mipgap": 0.02}
         )
         meta_results = solph.processing.meta_results(model)
         results = solph.processing.results(model)
@@ -492,17 +475,14 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         return None, None, None
 
 
-def process_cluster(cluster_df, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,data_classes_comp,ev,time_index):
-    for index, row in cluster_df.iterrows():
-        if True:
-            if index>=2:
-                continue
-        building_id = row['building_id']
-        tabula_year_class = row['tabula_year_class']
-        building_floor_area = row['net_floor_area']
-        number_of_occupants = row['number_of_residents']
-        number_of_households = row['number_of_apartments']
-        number_of_buildings_in_cluster = row['buildings_in_cluster']
+def process_cluster(building_row, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,data_classes_comp,ev,time_index):
+
+        building_id = building_row['building_id']
+        tabula_year_class = building_row['tabula_year_class']
+        building_floor_area = building_row['net_floor_area']
+        number_of_occupants = building_row['number_of_residents']
+        number_of_households = building_row['number_of_apartments']
+        number_of_buildings_in_cluster = building_row['buildings_in_cluster']
 
         # Zuordnung Baujahr
         year_map = {
@@ -543,7 +523,7 @@ def process_cluster(cluster_df, building_type, epw_path, directory_path, data, r
         # PV-Ertrag pro Watt
         pv_yield_per_wp = simulate_pv_yield(
             pv_nominal_power_in_watt=1,
-            tilt=row['avg_roof_pitch_angle'],
+            tilt=building_row['avg_roof_pitch_angle'],
             epw_path=epw_path
         )
         dict_pv_systems = {}
@@ -569,11 +549,11 @@ def process_cluster(cluster_df, building_type, epw_path, directory_path, data, r
                                           "pv_system":dict_pv_systems,
                                           "building":building,
                                           "heat_demand":heat_demand}
-    return data, data_classes_comp
+        return data, data_classes_comp
 
 
 
-def run_main(refurbish,buildings_connected):
+def run_main(refurbish,building_id_in_cluster):
     base_path = os.path.dirname(os.path.abspath(__file__))
     ueu = "processed_bds_in_DENI03403000SEC5658"
     directory_path =os.path.join(base_path, ueu)
@@ -612,33 +592,37 @@ def run_main(refurbish,buildings_connected):
         data["air_temperature"] = location.weather_data["drybulb_C"].to_list()
         date_time_index = solph.create_time_index(2025, number=number_of_time_steps - 1)
         data.index = date_time_index
-        data,data_classes_comp = process_cluster(
-            cluster_df=sfh_cluster,
-            building_type="SFH",
-            epw_path=epw_path,
-            directory_path=directory_path,
-            data=data,
-            refurbish=refurbish,
-            number_of_time_steps=number_of_time_steps,
-            data_classes_comp = data_classes_comp,
-            ev=ev,
-            time_index=date_time_index
-        )
-        data,data_classes_comp = process_cluster(
-            cluster_df=mfh_cluster,
-            building_type="MFH",
-            epw_path=epw_path,
-            directory_path=directory_path,
-            data=data,
-            refurbish=refurbish,
-            number_of_time_steps=number_of_time_steps,
-            data_classes_comp = data_classes_comp,
-            ev =ev,
-            time_index=date_time_index
-        )
+        for index, building_row in sfh_cluster.iterrows():
+            if building_id_in_cluster == building_row["building_id"]:
+                data,data_classes_comp = process_cluster(
+                    building_row=building_row,
+                    building_type="SFH",
+                    epw_path=epw_path,
+                    directory_path=directory_path,
+                    data=data,
+                    refurbish=refurbish,
+                    number_of_time_steps=number_of_time_steps,
+                    data_classes_comp = data_classes_comp,
+                    ev=ev,
+                    time_index=date_time_index
+                )
+        for index, building_row in mfh_cluster.iterrows():
+            if building_id_in_cluster == building_row["building_id"]:
+                data,data_classes_comp = process_cluster(
+                    building_row=mfh_cluster,
+                    building_type="MFH",
+                    epw_path=epw_path,
+                    directory_path=directory_path,
+                    data=data,
+                    refurbish=refurbish,
+                    number_of_time_steps=number_of_time_steps,
+                    data_classes_comp = data_classes_comp,
+                    ev =ev,
+                    time_index=date_time_index
+                )
 
 
-        typical_periods = 15
+        typical_periods = 30
         hours_per_period = 24
 
         aggregation1 = tsam.TimeSeriesAggregation(
@@ -655,7 +639,7 @@ def run_main(refurbish,buildings_connected):
         )
 
 
-        final_results_ref, co2_ref, time = run_model(None, None,refurbish,data,aggregation1,t1_agg,data_classes_comp,buildings_connected,combined_cluster)
+        final_results_ref, co2_ref, time = run_model(None, None,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,building_id_in_cluster)
         co2_reduction_factor_ref = 1
         peak_reduction_factor_ref = 1
         results_loop_to_save[(co2_reduction_factor_ref, peak_reduction_factor_ref,refurbish)] = {
@@ -670,12 +654,12 @@ def run_main(refurbish,buildings_connected):
         }
         co2_reference = co2_ref
         peak_reference = final_results_ref["Electricity"]["peak_from_grid"]
-        co2_reduction_factors = [1] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+        co2_reduction_factors = [1,0.8,0.6,0.4,0.2] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
          #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
         for co2_reduction_factor in co2_reduction_factors:
             first_co2_run_in_peak_loop = True
-            peak_reduction_factors = [1]
+            peak_reduction_factors = [1,0.8,0.6,0.4,0.2,]
 
 
             if co2_reference > 0:
@@ -693,7 +677,7 @@ def run_main(refurbish,buildings_connected):
 
                     peak_new = peak_reference * peak_reduction_factor
 
-                final_results, co2,time  = run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,buildings_connected,combined_cluster)
+                final_results, co2,time  = run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster)
                 if final_results is None:
                     results_loop_to_save[(co2_reduction_factor, peak_reduction_factor, refurbish)] = {
                         "results": None,
@@ -727,7 +711,7 @@ def run_main(refurbish,buildings_connected):
                         "time": time
                     }
             print("FINISHED PEAK LOOP START SAVING")
-            file_path="results_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(buildings_connected)+".pkl"
+            file_path="results_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(building_id_in_cluster)+".pkl"
             if os.path.exists(file_path):
                 # If the file exists, open it and load the data
                 with open(file_path, "rb") as f:
@@ -746,7 +730,7 @@ def run_main(refurbish,buildings_connected):
             with open(file_path, "wb") as f:
                 pickle.dump(existing_results, f)
     file_path = "results_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) +"_" + str(
-        buildings_connected) + ".pkl"
+        building_id_in_cluster) + ".pkl"
     if os.path.exists(file_path):
         # If the file exists, open it and load the data
         with open(file_path, "rb") as f:
@@ -766,15 +750,14 @@ def run_main(refurbish,buildings_connected):
         pickle.dump(existing_results, f)
 
 if __name__ == "__main__":
+    building_in_cluster=["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"]
     refurbishment =["no_refurbishment","usual_refurbishment","advanced_refurbishment"]  # Beispiel #"GEG_standard"
 
-    refurbishment =["usual_refurbishment"]  # Beispiel #"GEG_standard"
     import multiprocessing
-    connec=["con"]
     import os
-    for connection in connec:
-        for refubish in refurbishment:
-            run_main(refubish,connection)
-        if False:
-            with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-                pool.map(run_main, refurbish)
+    for refubish in refurbishment:
+        for building_id_in_cluster in building_in_cluster:
+            run_main(refubish,building_id_in_cluster)
+    if False:
+        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+            pool.map(run_main, refurbish)
