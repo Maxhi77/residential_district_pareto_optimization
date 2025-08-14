@@ -131,7 +131,11 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         print("max_required_heating: "+str(max_required_heating))
         building_dataclass = copy.deepcopy(data_classes_comp.loc["building", building_id])
         temp_heating_demand_building = building_dataclass.level_heating_demand
-        heat_carrier_temperature_levels = [50,60,70,80]
+        heat_carrier_temperature_levels = [50]
+        if temp_heating_demand_building==60:
+            heat_carrier_temperature_levels.extend([temp_heating_demand_building, 80])
+        else:
+            heat_carrier_temperature_levels.extend([temp_heating_demand_building,60, 80])
         heat_carrier_dataclass = HeatCarrier(name="h_carrier_"+str(building_id),
             levels = heat_carrier_temperature_levels)
         if True:
@@ -210,7 +214,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
             air_heat_pump= air_heat_pump_dataclass.create_source()
             air_heat_pump_converters= air_heat_pump_dataclass.create_converters(heat_pump_bus = air_heat_pump_bus,
                                                                              electricity_bus = electricity_carrier_bus_building,
-                                                                             heat_carrier_bus={heat_carrier_dataclass.get_bus()})
+                                                                             heat_carrier_bus=heat_carrier_dataclass.get_bus())
 
             dataclasses[building_id]["air_heat_pump_dataclass_"+str(key)] = air_heat_pump_dataclass
             components[building_id]["air_heat_pump_converters_"+str(key)] = air_heat_pump_converters
