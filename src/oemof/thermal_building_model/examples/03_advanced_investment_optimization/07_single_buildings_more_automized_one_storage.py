@@ -765,12 +765,15 @@ if __name__ == "__main__":
     building_in_cluster=["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"]
     building_in_cluster =["DENILD1100004rSr"]
     refurbishment =["no_refurbishment","usual_refurbishment","advanced_refurbishment"]  # Beispiel #"GEG_standard"
-    refurbishment =["no_refurbishment"]
+    refurbishment =["advanced_refurbishment"]
     import multiprocessing
     import os
     for refubish in refurbishment:
         for building_id_in_cluster in building_in_cluster:
-            run_main(refubish,building_id_in_cluster)
+            try:
+                run_main(refubish,building_id_in_cluster)
+            except:
+                print("start: "+building_id_in_cluster)
     if False:
         with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
             pool.map(run_main, refurbish)
