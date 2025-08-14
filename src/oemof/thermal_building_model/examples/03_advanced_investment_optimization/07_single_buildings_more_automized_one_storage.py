@@ -297,9 +297,9 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         for key, config in battery_config.items():
             battery_config_building =  copy.deepcopy(config)
             if data_classes_comp.loc["building", building_id] == "SFH":
-                hot_water_tank_config_building.maximum_capacity = 30000/PhysicalBaseUnit.factor
+                battery_config_building.maximum_capacity = 30000/PhysicalBaseUnit.factor
             elif data_classes_comp.loc["building", building_id] == "MFH":
-                hot_water_tank_config_building.maximum_capacity = 80000/PhysicalBaseUnit.factor
+                battery_config_building.maximum_capacity = 80000/PhysicalBaseUnit.factor
             battery_config_building.set_reference_unit_quantity(reference_unit_quantity=building_in_cluster)
             battery_dataclass = Battery(investment=True,
                                         name="battery_"+str(building_id)+"_"+str(key),
