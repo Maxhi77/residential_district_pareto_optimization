@@ -236,13 +236,13 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         dataclasses[building_id]["gas_carrier_dataclass_building"] = gas_carrier_dataclass_building
         components[building_id]["gas_carrier_bus_building"] = gas_carrier_bus_building
 
-        hydrogen_carrier_dataclass_building = HydrogenCarrier(name="h_carrier_"+str(building_id))
+        hydrogen_carrier_dataclass_building = HydrogenCarrier(name="hydrogen_carrier_"+str(building_id))
         hydrogen_carrier_bus_building = hydrogen_carrier_dataclass_building.get_bus()
-        grid_hydrogen_into_converter_building = Converter(label="conv_h_into_grid_"+str(building_id),
+        grid_hydrogen_into_converter_building = Converter(label="conv_hydrogen_into_grid_"+str(building_id),
                                               inputs={hydrogen_carrier_bus_building: solph.flows.Flow()},
                                               outputs={hydrogen_bus: solph.flows.Flow()},
                                               conversion_factors={hydrogen_carrier_bus_building: 1/building_in_cluster})
-        grid_hydrogen_from_converter_building = Converter(label="conv_h_from_grid_"+str(building_id),
+        grid_hydrogen_from_converter_building = Converter(label="conv_hydrogen_from_grid_"+str(building_id),
                                               inputs={hydrogen_bus: solph.flows.Flow()},
                                               outputs={hydrogen_carrier_bus_building: solph.flows.Flow()},
                                               conversion_factors={hydrogen_carrier_bus_building: 1/building_in_cluster})
@@ -764,7 +764,7 @@ def run_main(refurbish,building_id_in_cluster):
 if __name__ == "__main__":
     building_in_cluster=["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k"] #,"DENILD1100004rSr"
     refurbishment =["no_refurbishment","usual_refurbishment","advanced_refurbishment"]  # Beispiel #"GEG_standard"
-    refurbishment =["advanced_refurbishment"]
+    refurbishment =["GEG_standard"]
     import multiprocessing
     import os
     for refubish in refurbishment:
