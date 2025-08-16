@@ -37,7 +37,7 @@ def main(target_residents,building_id, floor_area,demand_path,heating_system,ref
     electricity_carrier_dataclass = ElectricityCarrier()
     electricity_carrier_bus = electricity_carrier_dataclass.get_bus()
     connect_buses(input=electricity_grid_bus_from_grid, target=electricity_carrier_bus, output=electricity_grid_bus_into_grid)
-    electricity_demand_dataclass = ElectricityDemand(demand_path = demand_path+'\\SumProfiles.Electricity.csv',
+    electricity_demand_dataclass = ElectricityDemand(demand_path = demand_path+'/SumProfiles.Electricity.csv',
                                                     bus=electricity_carrier_bus)
     electricity_demand = electricity_demand_dataclass.create_demand()
 
@@ -67,7 +67,7 @@ def main(target_residents,building_id, floor_area,demand_path,heating_system,ref
     heat_demand_dataclass = WarmWater(name="WarmWater",
                                        level = 40,
                                        bus=heat_carrier_bus[40],
-                                        demand_path=demand_path+'\\SumProfiles.Warm Water.csv')
+                                        demand_path=demand_path+'/SumProfiles.Warm Water.csv')
     heat_demand = heat_demand_dataclass.create_demand()
     hot_water_tank_config_building = copy.deepcopy(hot_water_tank_config)
 
