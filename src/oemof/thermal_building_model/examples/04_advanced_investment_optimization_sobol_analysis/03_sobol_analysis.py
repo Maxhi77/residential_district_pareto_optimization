@@ -678,13 +678,13 @@ resident_ranges = get_resident_range(household_dicts)
 # Beispiel-Durchlauf
 results_loop_to_save = {}
 counter = 0
-gap_starter = 1
+gap_starter = 2
 # Beispiel-Durchlauf
 for params in param_values:
     if (gap_starter+1) * 9000<counter:
         counter += 1
         continue
-    if counter < gap_starter*8000:
+    if counter < gap_starter*9000:
         counter += 1
         continue
     heating_system=int(params[idx_heating_system])
