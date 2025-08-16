@@ -358,7 +358,7 @@ for params in param_values:
             return "Results_INVALID"
     result_key = format_household_key(chosen_household)
 
-    demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles\{result_key}'
+    demand_path = fr'/home/hill_mx/thermal_building_clone\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles\{result_key}'
 
     final_results, co2  = main(target_residents,tabula_building_code, building_size,demand_path,heating_system,refurbishment_status)
     totex = final_results["totex"]
