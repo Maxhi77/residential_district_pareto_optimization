@@ -10,14 +10,14 @@ from oemof.thermal_building_model.oemof_facades.technologies.converter import Ai
 from oemof.thermal_building_model.oemof_facades.refurbishment.building_model import ThermalBuilding
 from oemof import solph
 import random
-from oemof.thermal_building_model.input.economics.investment_components import battery_config,hot_water_tank_config,air_heat_pump_config,gas_heater_config,pv_system_config
+from oemof.thermal_building_model.input.economics.investment_components_sobol import battery_config,hot_water_tank_config,air_heat_pump_config,gas_heater_config,pv_system_config
 import copy
 import os
 import pickle
 
 from SALib.sample import saltelli
 
-def main(target_residents,building_id, floor_area,demand_path,heating_system):
+def main(target_residents,building_id, floor_area,demand_path,heating_system,refurbishment_status):
     solver = "gurobi"  # 'glpk', 'gurobi',....
     number_of_time_steps = 8760
 
@@ -77,7 +77,7 @@ def main(target_residents,building_id, floor_area,demand_path,heating_system):
         name="heat_storage",
         investment=True,
         temperature_buses=heat_carrier_bus,
-        max_temperature=70,
+        max_temperature=80,
         min_temperature=min(heat_carrier_bus),
         investment_component=hot_water_tank_config_building[1],
         input_bus=hot_water_tank_input_bus,
@@ -146,9 +146,10 @@ def main(target_residents,building_id, floor_area,demand_path,heating_system):
                                           class_building="average",
                                           heat_level_calculation = True,
                                           number_of_time_steps=number_of_time_steps,
-                                          bus=heat_carrier_dataclass.get_bus(),
                                          time_index=date_time_index,
+                                         refurbishment_status=refurbishment_status_tabula,
                                           )
+    building_dataclass.bus = heat_carrier_bus[building_dataclass.level_heating_demand]
     building_component = building_dataclass.create_demand()
     es.add(building_component)
     heat = []
@@ -253,7 +254,7 @@ problem = {
     ]
 }
 # Sampling (kleine Anzahl für Test)
-param_values = saltelli.sample(problem, int(128/2), calc_second_order=False)
+param_values = saltelli.sample(problem, int(128*2**5), calc_second_order=True)
 # laut chat gpt bei 6 params sollte man n=	2048+ für gute Ergebnisse, das wären 16.000 Durchläufe
 # Spaltenindex merken
 idx_size = problem['names'].index('net_floor_area')
@@ -276,8 +277,15 @@ resident_ranges = get_resident_range(household_dicts)
 # Beispiel-Durchlauf
 results_loop_to_save = {}
 counter = 0
+gap_starter = 0
 # Beispiel-Durchlauf
 for params in param_values:
+    if (gap_starter+1) * 9000<counter:
+        counter += 1
+        continue
+    if counter < gap_starter*8000:
+        counter += 1
+        continue
     heating_system=int(params[idx_heating_system])
     refurbishment_status = int(params[idx_refurbishment_status])
     building_size = params[idx_size]
@@ -327,12 +335,12 @@ for params in param_values:
         year_of_construction = 2020
 
     if refurbishment_status == 0:
-        refurbishment_status_tabula ="001"
+        refurbishment_status_tabula ="no_refurbishment"
     elif refurbishment_status == 1:
-        refurbishment_status_tabula="002"
+        refurbishment_status_tabula="usual_refurbishment"
     elif refurbishment_status == 2:
-        refurbishment_status_tabula="003"
-    tabula_building_code = f"DE.N.SFH.{tabula_year_class:02d}.Gen.ReEx.001.{refurbishment_status_tabula}"
+        refurbishment_status_tabula="advanced_refurbishment"
+    tabula_building_code = f"DE.N.SFH.{tabula_year_class:02d}.Gen.ReEx.001.001"
 
     print(f"Typ: {household_type}, Ziel-Bewohner: {target_residents}, Haushalt: {chosen_household}")
     print(f"TABULA-Code: {year_of_construction}\n")
@@ -352,7 +360,7 @@ for params in param_values:
 
     demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles\{result_key}'
 
-    final_results, co2  = main(target_residents,tabula_building_code, building_size,demand_path,heating_system)
+    final_results, co2  = main(target_residents,tabula_building_code, building_size,demand_path,heating_system,refurbishment_status)
     totex = final_results["totex"]
     peak = (final_results["Electricity"]["peak_into_grid"],
     final_results["Electricity"]["peak_from_grid"])
@@ -370,8 +378,8 @@ for params in param_values:
                     "totex": None,
                     "peak": None
                 }
-    if counter % 200== 0 or counter %( len(param_values)-1)== 0:
-        file_path="results_sobol_"+str(counter)+".pkl"
+    if counter % 1000== 0 or counter %( len(param_values)-1)== 0:
+        file_path="results_sobol_"+str(gap_starter)+"_"+str(counter)+".pkl"
         if os.path.exists(file_path):
             # If the file exists, open it and load the data
             with open(file_path, "rb") as f:
