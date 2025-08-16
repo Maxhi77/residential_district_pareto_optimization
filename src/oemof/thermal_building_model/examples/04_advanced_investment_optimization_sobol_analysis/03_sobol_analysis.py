@@ -678,7 +678,7 @@ resident_ranges = get_resident_range(household_dicts)
 # Beispiel-Durchlauf
 results_loop_to_save = {}
 counter = 0
-gap_starter = 5
+gap_starter = 6
 # Beispiel-Durchlauf
 for params in param_values:
     if (gap_starter+1) * 9000<counter:
