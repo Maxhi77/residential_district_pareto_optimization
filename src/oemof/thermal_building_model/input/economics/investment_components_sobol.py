@@ -16,7 +16,7 @@ hot_water_tank_config = {
         cost_per_unit=367.51,
         cost_offset=2598,
         co2_per_capacity=0.2695,
-        lifetime=30,
+        lifetime=36,
         operational_cost_relative_to_capacity=0.01
     )}
 pv_system_config = {1:
