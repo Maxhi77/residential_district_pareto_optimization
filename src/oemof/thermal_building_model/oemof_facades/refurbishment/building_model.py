@@ -23,6 +23,7 @@ class Demand:
     level: int = None
     capex_annuity: Optional[float] = None
     co2_cost: Optional[float] = None
+    tsam_total_amount:Optional[float] = None
     def create_demand(self) -> solph.components.Sink:
         """Creates a solph sink with revenue as variable cost."""
         if self.heat_level_calculation:
@@ -45,29 +46,54 @@ class Demand:
             else:
                 raise TypeError("self.bus must be either a dictionary or a single Bus object.")
             self.oemof_component_name = f"{self.name.lower()}_lvl{self.heat_level_calculation}_demand"
-            return solph.components.Sink(
-                label=self.oemof_component_name,
-                inputs={self.heat_temp_bus: solph.Flow(
-                    fix=self.value_list,
-                    nominal_value=self.nominal_value,
-                    variable_costs=self.capex_annuity / sum(self.value_list),
-                    custom_attributes={"co2": self.co2_cost/ sum(self.value_list)}
+            if self.tsam_total_amount is None:
+                return solph.components.Sink(
+                    label=self.oemof_component_name,
+                    inputs={self.heat_temp_bus: solph.Flow(
+                        fix=self.value_list,
+                        nominal_value=self.nominal_value,
+                        variable_costs=self.capex_annuity / sum(self.value_list),
+                        custom_attributes={"co2": self.co2_cost/ sum(self.value_list)}
+                    )
+                    }
                 )
-                }
-            )
+            else:
+                return solph.components.Sink(
+                    label=self.oemof_component_name,
+                    inputs={self.heat_temp_bus: solph.Flow(
+                        fix=self.value_list,
+                        nominal_value=self.nominal_value,
+                        variable_costs=self.capex_annuity / self.tsam_total_amount,
+                        custom_attributes={"co2": self.co2_cost/ self.tsam_total_amount}
+                    )
+                    }
+                )
         else:
             self.oemof_component_name = f"{self.name.lower()}_demand"
             self.heat_temp_bus = self.bus
-            return solph.components.Sink(
-                label=self.oemof_component_name,
-                inputs={self.heat_temp_bus: solph.Flow(
-                    fix=self.value_list,
-                    nominal_value=self.nominal_value,
-                    variable_costs=self.capex_annuity/ sum(self.value_list),
-                    custom_attributes={"co2": self.co2_cost/ sum(self.value_list)}
+            if self.tsam_total_amount is None:
+                return solph.components.Sink(
+                    label=self.oemof_component_name,
+                    inputs={self.heat_temp_bus: solph.Flow(
+                        fix=self.value_list,
+                        nominal_value=self.nominal_value,
+                        variable_costs=self.capex_annuity/ sum(self.value_list),
+                        custom_attributes={"co2": self.co2_cost/ sum(self.value_list)}
+                    )
+                    }
                 )
-                }
-            )
+            else:
+                return solph.components.Sink(
+                    label=self.oemof_component_name,
+                    inputs={self.heat_temp_bus: solph.Flow(
+                        fix=self.value_list,
+                        nominal_value=self.nominal_value,
+                        variable_costs=self.capex_annuity/ self.tsam_total_amount,
+                        custom_attributes={"co2": self.co2_cost/ self.tsam_total_amount}
+                    )
+                    }
+                )
+
     def get_heat_bus_of_demand_temp_level(self):
         return self.heat_temp_bus
 
@@ -142,8 +168,8 @@ class ThermalBuilding(Demand):
         )
         if "MFH" in self.building_type :
             gain_technology_per_hour_in_watt = 200 * self.number_of_household
-            self.max_power_heating = 150000
-            self.max_power_cooling = 150000
+            self.max_power_heating = 180000
+            self.max_power_cooling = 180000
         elif "SFH" in self.building_type :
             gain_technology_per_hour_in_watt = 250
             self.max_power_heating = 80000
@@ -354,7 +380,7 @@ class ThermalBuilding(Demand):
                     capex_annuity[key.replace('a_', '')] = self.window_config[insulation_replacement[key.replace('a_', '')]].calculate_epc(
                         investment_cost[key.replace('a_', '')])
 
-                    co2_cost[key.replace('a_', '')] = (self.window_config[insulation_replacement[key.replace('a_', '')]].co2_per_unit * area) *self.window_config[insulation_replacement[key.replace('a_', '')]].get_depreciation_period()
+                    co2_cost[key.replace('a_', '')] = (self.window_config[insulation_replacement[key.replace('a_', '')]].co2_per_unit * area) *self.window_config[insulation_replacement[key.replace('a_', '')]].get_depreciation_period()/self.window_config[insulation_replacement[key.replace('a_', '')]].lifetime
             for key, area in self.building_object.a_door.items():
                 square_meter_average_door = 2
                 investment_cost[key.replace('a_', '')] = (self.door_config[insulation_replacement[key.replace('a_', '')]].cost_per_unit *
@@ -363,6 +389,6 @@ class ThermalBuilding(Demand):
                     insulation_replacement[key.replace('a_', '')]].calculate_epc(
                     investment_cost[key.replace('a_', '')])
                 co2_cost[key.replace('a_', '')] = (
-                            self.door_config[insulation_replacement[key.replace('a_', '')]].co2_per_unit * area / square_meter_average_door) *self.door_config[insulation_replacement[key.replace('a_', '')]].get_depreciation_period()
+                            self.door_config[insulation_replacement[key.replace('a_', '')]].co2_per_unit * area / square_meter_average_door) *self.door_config[insulation_replacement[key.replace('a_', '')]].get_depreciation_period()/self.door_config[insulation_replacement[key.replace('a_', '')]].lifetime
 
             return investment_cost, capex_annuity, co2_cost
