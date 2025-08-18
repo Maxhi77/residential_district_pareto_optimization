@@ -51,7 +51,8 @@ class RenewableEnergySource(BaseComponent):
                 outputs={
                     output_bus: solph.Flow(
                         fix=self.value_list,
-                        nominal_value=self.nominal_power)
+                        nominal_value=self.nominal_power,
+                    )
                 }
             )
 
@@ -98,6 +99,7 @@ class RenewableEnergySource(BaseComponent):
 class PVSystem(RenewableEnergySource):
     name: str = "PVSystem"
     investment_component: InvestmentComponents = field(default_factory=lambda: copy.deepcopy(pv_system_config))
+    inverter_losses = 0.05
     def __post_init__(self):
         if self.value_list is None:
             main_path = get_project_root()
@@ -110,6 +112,7 @@ class PVSystem(RenewableEnergySource):
                     "pvwatts_hourly_1kW.csv",
                 )
             )["AC System Output (W)"] / 1000 / PhysicalBaseUnit.factor
+        self.value_list=self.value_list = [v * (1 - self.inverter_losses) for v in self.value_list]
     def calculate_max_pv_size_based_area(self, area):
         installable_power_per_module_area_wp_per_m2 = 0.205 * 1000 / PhysicalBaseUnit.factor
         return installable_power_per_module_area_wp_per_m2 *area
