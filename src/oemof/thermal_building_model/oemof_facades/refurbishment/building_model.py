@@ -142,8 +142,12 @@ class ThermalBuilding(Demand):
         )
         if "MFH" in self.building_type :
             gain_technology_per_hour_in_watt = 200 * self.number_of_household
+            self.max_power_heating = 150000
+            self.max_power_cooling = 150000
         elif "SFH" in self.building_type :
             gain_technology_per_hour_in_watt = 250
+            self.max_power_heating = 80000
+            self.max_power_cooling = 80000
         else:
             gain_technology_per_hour_in_watt = 200
         # Internal gains of residents, machines (f.e. fridge, computer,...) and lights have to be added manually
@@ -154,8 +158,7 @@ class ThermalBuilding(Demand):
             self.internal_gains.append(self.number_of_occupants*50+ gain_technology_per_hour_in_watt)
             self.t_set_heating.append(19)
             self.t_set_cooling.append(40)
-        self.max_power_heating = 100000
-        self.max_power_cooling = 100000
+
         self.t_set_heating_max = 24
         self.t_inital=20
         heating_demand, _, _ = HeatDemand_Simulation_5RC(
