@@ -6,7 +6,7 @@ battery_config = {
             minimum_capacity=0 / PhysicalBaseUnit.factor,
             cost_per_unit=675 / 1000 * PhysicalBaseUnit.factor,
             cost_offset=1000,
-            co2_per_capacity=0.1303 / PhysicalBaseUnit.factor,
+            co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
             lifetime=20,
             )}
 hot_water_tank_config = {
