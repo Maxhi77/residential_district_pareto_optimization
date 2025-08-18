@@ -130,6 +130,8 @@ class Grid:
         return {"capacity":capacity,
                 "investment_cost":investment_cost,
                 "investment_co2":investment_co2,
+                "flow_from_grid_sum":sum(flow_from_grid),
+                "flow_into_grid_sum": sum(flow_into_grid),
                 "flow_from_grid":flow_from_grid,
                 "flow_into_grid":flow_into_grid,
                 "flow_from_grid_cost": flow_from_grid_cost,
