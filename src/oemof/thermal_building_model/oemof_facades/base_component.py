@@ -21,7 +21,7 @@ class BaseComponent:
 class TimeConfiguration:
     lifetime: float
     observation_period: float = 20
-    multiperiod: bool = False
+    multiperiod: bool = True
 
 @dataclass
 class InvestmentComponents(TimeConfiguration):
@@ -35,9 +35,9 @@ class InvestmentComponents(TimeConfiguration):
     wacc: float = 0.03
     reference_unit_quantity: int = 1
     def __post_init__(self):
-        self.cost_offset =self.cost_offset * self.get_depreciation_period() * self.reference_unit_quantity
-        self.co2_per_capacity = self.co2_per_capacity * self.get_depreciation_period() * self.reference_unit_quantity /  self.lifetime
-        self.co2_offset = self.co2_offset * self.get_depreciation_period() * self.reference_unit_quantity /  self.lifetime
+        self.cost_offset =self.cost_offset * self.get_depreciation_period()
+        self.co2_per_capacity = self.co2_per_capacity * self.get_depreciation_period()  /  self.lifetime
+        self.co2_offset = self.co2_offset * self.get_depreciation_period()  /  self.lifetime
     def calculate_epc(self) -> float:
         """Calculates Equivalent Annual Cost (EPC) using annuity formula."""
         capex = (
