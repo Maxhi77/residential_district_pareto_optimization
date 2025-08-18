@@ -145,7 +145,7 @@ class CHP(Converter): # heat ruled
     heat_carrier_bus: Optional[dict[Bus]] = None
     electrical_carrier_bus: Optional[dict[Bus]] = None
     thermal_efficiency: Optional[float] = 0.605
-    electrical_efficiency: Optional[float] = 0.34
+    electrical_efficiency: Optional[float] = 0.36
     investment_component: InvestmentComponents = field(default_factory=lambda: copy.deepcopy(chp_config))
 
     def create_converters(self,
