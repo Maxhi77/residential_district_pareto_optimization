@@ -31,7 +31,7 @@ import tsam.timeseriesaggregation as tsam
 
 import pandas as pd
 #  create solver
-def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster, building_id_in_cluster):
+def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster, building_id_in_cluster,cluster_occurence):
 
     solver = "gurobi"
     es = solph.EnergySystem(
@@ -131,11 +131,14 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         print("max_required_heating: "+str(max_required_heating))
         building_dataclass = copy.deepcopy(data_classes_comp.loc["building", building_id])
         temp_heating_demand_building = building_dataclass.level_heating_demand
-        heat_carrier_temperature_levels = [50]
-        if temp_heating_demand_building==60:
-            heat_carrier_temperature_levels.extend([temp_heating_demand_building, 80])
+        if False:
+            heat_carrier_temperature_levels = [50]
+            if temp_heating_demand_building==60:
+                heat_carrier_temperature_levels.extend([temp_heating_demand_building, 80])
+            else:
+                heat_carrier_temperature_levels.extend([temp_heating_demand_building,60, 80])
         else:
-            heat_carrier_temperature_levels.extend([temp_heating_demand_building,60, 80])
+            heat_carrier_temperature_levels = [40,50,60,70,80]
         heat_carrier_dataclass = HeatCarrier(name="h_carrier_"+str(building_id),
             levels = heat_carrier_temperature_levels)
         if True:
@@ -145,6 +148,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         heat_carrier_bus = heat_carrier_dataclass.get_bus()
         heat_demand_dataclass = data_classes_comp.loc["heat_demand", building_id]
         heat_demand_dataclass.value_list = data["ww_demand_"+str(building_id)]
+
         heat_demand_dataclass.level = heat_demand_dataclass.demand_temperature
         heat_demand_dataclass.bus = heat_carrier_bus[heat_demand_dataclass.demand_temperature]
 
@@ -159,6 +163,12 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         if True:
             building_dataclass = copy.deepcopy(data_classes_comp.loc["building", building_id])
             building_dataclass.value_list = data["building_"+str(building_id)]
+
+            demand = 0
+            for cluster, count in cluster_occurence.items():
+                # Hole den entsprechenden WW-Demand aus 'data' für das Cluster (erste Zahl in cluster_order entspricht dem Cluster)
+                demand = demand + data["building_"+str(building_id)][cluster].sum() * count
+            building_dataclass.tsam_total_amount=demand
             building_dataclass.set_number_of_buildings_in_cluster(building_in_cluster)
             building_dataclass.bus=heat_carrier_bus[building_dataclass.level_heating_demand]
 
@@ -400,8 +410,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         meta_results = solph.processing.meta_results(model)
         results = solph.processing.results(model)
         final_results = {}
-        final_results[electricity_grid_dataclass.name] = electricity_grid_dataclass.post_process(results,electricity_grid_source,electricity_grid_sink
-                                                )
+        final_results[electricity_grid_dataclass.name] = electricity_grid_dataclass.post_process(results,electricity_grid_source,electricity_grid_sink)
         final_results[gas_grid_dataclass.name] = gas_grid_dataclass.post_process(results,gas_grid_source,None)
 
         final_results[hydrogen_grid_dataclass.name] = hydrogen_grid_dataclass.post_process(results, hydrogen_grid_source, None)
@@ -517,7 +526,6 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
         # Datenklassen
         electricity_demand = ElectricityDemand(name=f"e_demand_{building_id}", value_list=demand_electricity)
         heat_demand = WarmWater(name=f"ww_demand_{building_id}", value_list=demand_warm_water, level=40)
-
         building = ThermalBuilding(
             name=f"building_{building_id}",
             floor_area=building_floor_area,
@@ -645,13 +653,14 @@ def run_main(refurbish,building_id_in_cluster):
 
         )
         aggregation1.createTypicalPeriods()
+        cluster_occurence=aggregation1.clusterPeriodNoOccur
         data = aggregation1.typicalPeriods
         t1_agg = pd.date_range(
             "2025-01-01", periods=typical_periods * hours_per_period, freq="H"
         )
 
 
-        final_results_ref, co2_ref, time = run_model(None, None,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,building_id_in_cluster)
+        final_results_ref, co2_ref, time = run_model(None, None,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,building_id_in_cluster,cluster_occurence)
         co2_reduction_factor_ref = 1
         peak_reduction_factor_ref = 1
         results_loop_to_save[(co2_reduction_factor_ref, peak_reduction_factor_ref,refurbish)] = {
@@ -666,12 +675,12 @@ def run_main(refurbish,building_id_in_cluster):
         }
         co2_reference = co2_ref
         peak_reference = final_results_ref["Electricity"]["peak_from_grid"]
-        co2_reduction_factors = [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+        co2_reduction_factors =  [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
          #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
         for co2_reduction_factor in co2_reduction_factors:
             first_co2_run_in_peak_loop = True
-            peak_reduction_factors = [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+            peak_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
 
             if co2_reference > 0:
@@ -689,7 +698,7 @@ def run_main(refurbish,building_id_in_cluster):
 
                     peak_new = peak_reference * peak_reduction_factor
 
-                final_results, co2,time  = run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,building_id_in_cluster)
+                final_results, co2,time  = run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,building_id_in_cluster,cluster_occurence)
                 if final_results is None:
                     results_loop_to_save[(co2_reduction_factor, peak_reduction_factor, refurbish)] = {
                         "results": None,
@@ -723,7 +732,7 @@ def run_main(refurbish,building_id_in_cluster):
                         "time": time
                     }
             print("FINISHED PEAK LOOP START SAVING")
-            file_path="fresults_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(building_id_in_cluster)+".pkl"
+            file_path="results_dec_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(building_id_in_cluster)+".pkl"
             if os.path.exists(file_path):
                 # If the file exists, open it and load the data
                 with open(file_path, "rb") as f:
@@ -741,7 +750,7 @@ def run_main(refurbish,building_id_in_cluster):
             # Save the updated or new results back to the pickle file
             with open(file_path, "wb") as f:
                 pickle.dump(existing_results, f)
-    file_path = "fresults_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) +"_" + str(
+    file_path = "results_dec_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) +"_" + str(
         building_id_in_cluster) + ".pkl"
     if os.path.exists(file_path):
         # If the file exists, open it and load the data
@@ -762,17 +771,18 @@ def run_main(refurbish,building_id_in_cluster):
         pickle.dump(existing_results, f)
 
 if __name__ == "__main__":
-    building_in_cluster=["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k"] #,"DENILD1100004rSr"
+    building_in_cluster=["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"] #,["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"]
     refurbishment =["no_refurbishment","usual_refurbishment","advanced_refurbishment"]  # Beispiel #"GEG_standard"
     refurbishment =["GEG_standard"]
     import multiprocessing
     import os
     for refubish in refurbishment:
         for building_id_in_cluster in building_in_cluster:
+            print("start: " + building_id_in_cluster)
             try:
                 run_main(refubish,building_id_in_cluster)
             except:
-                print("start: "+building_id_in_cluster)
+                print("crashed: "+building_id_in_cluster)
     if False:
         with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
             pool.map(run_main, refurbish)
