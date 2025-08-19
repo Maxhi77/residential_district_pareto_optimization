@@ -168,12 +168,12 @@ class ThermalBuilding(Demand):
         )
         if "MFH" in self.building_type :
             gain_technology_per_hour_in_watt = 200 * self.number_of_household
-            self.max_power_heating = 180000
-            self.max_power_cooling = 180000
+            self.max_power_heating = 280000
+            self.max_power_cooling = 280000
         elif "SFH" in self.building_type :
             gain_technology_per_hour_in_watt = 250
-            self.max_power_heating = 80000
-            self.max_power_cooling = 80000
+            self.max_power_heating = 180000
+            self.max_power_cooling = 180000
         else:
             gain_technology_per_hour_in_watt = 200
         # Internal gains of residents, machines (f.e. fridge, computer,...) and lights have to be added manually
