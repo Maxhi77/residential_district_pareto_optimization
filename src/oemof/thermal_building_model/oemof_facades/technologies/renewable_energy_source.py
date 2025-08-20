@@ -112,7 +112,7 @@ class PVSystem(RenewableEnergySource):
                     "pvwatts_hourly_1kW.csv",
                 )
             )["AC System Output (W)"] / 1000 / PhysicalBaseUnit.factor
-        self.value_list=self.value_list = [v * (1 - self.inverter_losses) for v in self.value_list]
+
     def calculate_max_pv_size_based_area(self, area):
         installable_power_per_module_area_wp_per_m2 = 0.205 * 1000 / PhysicalBaseUnit.factor
         return installable_power_per_module_area_wp_per_m2 *area

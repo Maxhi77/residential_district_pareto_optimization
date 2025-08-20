@@ -57,7 +57,6 @@ class Storage(BaseComponent):
                                                           }
                                                   ),
                 loss_rate=self.loss_rate,
-                fixed_losses_relative=self.fixed_losses_relative,
                 min_storage_level=self.min_storage_level,
                 initial_storage_level=self.initial_storage_level,
                 inflow_conversion_factor=self.charging_efficiency,
@@ -81,7 +80,6 @@ class Storage(BaseComponent):
                     )},
                     nominal_storage_capacity = self.nominal_capacity,
                     loss_rate = self.loss_rate,
-                    fixed_losses_relative=self.fixed_losses_relative,
                     min_storage_level = self.min_storage_level,
                     initial_storage_level = self.initial_storage_level,
                     inflow_conversion_factor = self.charging_efficiency,
@@ -118,10 +116,22 @@ class Storage(BaseComponent):
                     label=self.oemof_component_name,
                     inputs=input_bus,
                     outputs=output_bus,
+                    invest_relation_input_capacity=self.invest_relation_input_capacity,  # c-rate of 1/6
+                    invest_relation_output_capacity=self.invest_relation_output_capacity,
                     nominal_storage_capacity=solph.Investment(lifetime=self.investment_component.lifetime,
+                                                              nonconvex=True,
+                                                              maximum=self.investment_component.maximum_capacity,
+                                                              minimum=0,
+                                                              ep_costs=0.0,
+                                                              offset=self.investment_component.cost_offset,
+                                                              custom_attributes={
+                                                                  "co2": {
+                                                                      "offset": 0.00,
+                                                                      "cost":0.00
+                                                                  }
+                                                              }
                                                       ),
                     loss_rate=self.loss_rate,
-                    fixed_losses_relative=self.fixed_losses_relative,
                     inflow_conversion_factor=self.charging_efficiency,
                     outflow_conversion_factor=self.discharging_efficiency,
                     balanced = self.balanced,
@@ -202,14 +212,11 @@ class Storage(BaseComponent):
 class HotWaterTank(Storage):
     name: str = "LayeredWaterTank"
     temperature_buses: Optional[Bus] = None
-    invest_relation_input_capacity: float = 0.3
-    invest_relation_output_capacity: float = 0.3
-    loss_rate: float = 0.0
-    fixed_losses_relative: float = 0.015
+    loss_rate: float = 0.005
     charging_efficiency: float = 0.99
     discharging_efficiency: float = 0.99
-    charging_capacity_rate: float = 0.3
-    discharging_capacity_rate: float = 0.3
+    charging_capacity_rate: float = 1
+    discharging_capacity_rate: float = 1
     # ambient_temperature: [dict[str, float], None] = None
     u_value: Optional[float] = 1.2
     min_storage_level:float = 0
@@ -294,8 +301,8 @@ class HotWaterTank(Storage):
 @dataclass
 class Battery(Storage):
     name: str = "Battery"
-    loss_rate: float = 0.00
-    fixed_losses_relative: float = 0.005
+    loss_rate: float = 0.005
+    fixed_losses_relative: float = 0.0
     nominal_capacity: float
     invest_relation_input_capacity: float = 0.5
     invest_relation_output_capacity: float = 0.5

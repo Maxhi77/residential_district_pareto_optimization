@@ -26,7 +26,7 @@ class Converter(BaseComponent):
         self.oemof_component_name = f"{self.name.lower()}_source"
         if self.investment:
             epc = self.investment_component.calculate_epc()  # Get EPC from economics model
-
+            print(epc)
             return solph.components.Source(
                 label=self.oemof_component_name,
                 outputs={self.bus: solph.Flow(

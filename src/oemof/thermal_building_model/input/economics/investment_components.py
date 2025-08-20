@@ -56,44 +56,56 @@ if full_and_not_linearized:
             co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
             lifetime=20,
         )}
-    hot_water_tank_config = {
-        1: InvestmentComponents(
-            maximum_capacity=2,
-            minimum_capacity=0,
-            cost_per_unit=1355.431,
-            cost_offset=1483,
-            co2_per_capacity=0.2695,
-            lifetime=35,
-            operational_cost_relative_to_capacity=0.01
-        ),
-        2: InvestmentComponents(
-            maximum_capacity=100,
-            minimum_capacity=2,
-            cost_per_unit=856.272931,
-            cost_offset=2568,
-            co2_per_capacity=0.2695,
-            lifetime=35,
-            operational_cost_relative_to_capacity=0.01
-        )}
+    if True:
+        hot_water_tank_config = {
+            1: InvestmentComponents(
+                maximum_capacity=2,
+                minimum_capacity=0,
+                cost_per_unit=1355.431,
+                cost_offset=1483,
+                co2_per_capacity=0.2695*200,
+                lifetime=35,
+                operational_cost_relative_to_capacity=0.01
+            ),
+            2: InvestmentComponents(
+                maximum_capacity=100,
+                minimum_capacity=2,
+                cost_per_unit=856.272931,
+                cost_offset=2568,
+                co2_per_capacity=0.2695*100,
+                lifetime=35,
+                operational_cost_relative_to_capacity=0.01
+            )}
+    if False:
+        pv_system_config = {1:
+            InvestmentComponents(
+                maximum_capacity=30 * 1000 / PhysicalBaseUnit.factor,
+                minimum_capacity=0 ,
+                cost_per_unit=1500 / 1000 * PhysicalBaseUnit.factor,
+                cost_offset=500,
+                operational_cost_relative_to_capacity=0.02,
+                co2_per_capacity=0.91 * PhysicalBaseUnit.factor,
+                lifetime=25,
+            ), 2:
+            InvestmentComponents(
+                maximum_capacity=1000 * 100 / PhysicalBaseUnit.factor,
+                minimum_capacity=1000 * 30  / PhysicalBaseUnit.factor,
+                cost_per_unit=1250 / 1000 * PhysicalBaseUnit.factor,
+                cost_offset=500,
+                operational_cost_relative_to_capacity=0.02,
+                co2_per_capacity=0.91 * PhysicalBaseUnit.factor,
+                lifetime=25,
+            )}
     pv_system_config = {1:
-        InvestmentComponents(
-            maximum_capacity=30 * 1000 / PhysicalBaseUnit.factor,
-            minimum_capacity=0 / PhysicalBaseUnit.factor,
-            cost_per_unit=1500 / 1000 * PhysicalBaseUnit.factor,
-            cost_offset=500,
-            operational_cost_relative_to_capacity=0.02,
-            co2_per_capacity=0.91 * PhysicalBaseUnit.factor,
-            lifetime=25,
-        ), 2:
-        InvestmentComponents(
-            maximum_capacity=1000 * 100 / PhysicalBaseUnit.factor,
-            minimum_capacity=1000 * 30  / PhysicalBaseUnit.factor,
-            cost_per_unit=1250 / 1000 * PhysicalBaseUnit.factor,
-            cost_offset=500,
-            operational_cost_relative_to_capacity=0.02,
-            co2_per_capacity=0.91 * PhysicalBaseUnit.factor,
-            lifetime=25,
-        )}
+            InvestmentComponents(
+                maximum_capacity=100 * 1000 / PhysicalBaseUnit.factor,
+                minimum_capacity=0 ,
+                cost_per_unit=1350 / 1000 * PhysicalBaseUnit.factor,
+                cost_offset=500,
+                operational_cost_relative_to_capacity=0.02,
+                co2_per_capacity=0.91 * PhysicalBaseUnit.factor,
+                lifetime=25,
+            )}
     chp_config = {  # gilt für Bio gas und Wasserstoff
         1: InvestmentComponents(
             maximum_capacity=30 * 1000/ PhysicalBaseUnit.factor,

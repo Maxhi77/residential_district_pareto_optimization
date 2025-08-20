@@ -327,6 +327,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
                         setattr(model, "eq"+components[building_id]["hot_water_tank_stratisfied_"+str(key)][temperature].label, po.Constraint(rule=equate_variables_rule(share_stratisfied)))
     if len(pv_system_config) > 1:
+        print("PV SYSTEM ÜBERARTBEITEN SODASS DER CONSTRAINT FÜR JEDES GEBÄUDE GEMACHT WIRD IN BUILDING ID")
         for key, config in pv_system_config.items():
             maximum_pv_capacity = dataclasses[building_id]["pv_dataclass_" + str(key)].investment_component.maximum_capacity
             maximum_key = max(pv_system_config)
@@ -340,7 +341,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                     components[building_id]["electricity_carrier_bus_building"],
                     0] <= maximum_pv_capacity
 
-            setattr(model, "eq"+components[building_id]["pv_system_"+str(key)].label, po.Constraint(rule=equate_variables_rule(int(maximum_key), int(maximum_pv_capacity))))
+            setattr(model, "eq"+components[building_id]["pv_system_"+str(key)].label, po.Constraint(rule=equate_variables_rule(int(maximum_pv_capacity),int(maximum_key))))
 
     if False:
         # Create the graph from the energy system (es)
