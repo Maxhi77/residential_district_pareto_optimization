@@ -94,8 +94,9 @@ class Storage(BaseComponent):
 
             share_sum=share_sum+share
             self.oemof_component_name = f"{self.name.lower()}_{str(temperature)}"
-            if temperature <= min(carrier_buses):
-                continue
+            if False:
+                if temperature <= min(carrier_buses):
+                    continue
             # Zielwert
 
             # Sortierte Liste der Keys
@@ -104,13 +105,13 @@ class Storage(BaseComponent):
             # Index vom Zielwert finden
             index = sorted_keys.index(temperature)
 
-            # Nächstkleinerer Key (falls vorhanden)
-            if index > 0:
-                lower_key = sorted_keys[index - 1]
-                result = carrier_buses[lower_key]
-
+            if False:
+                if index > 0:
+                    lower_key = sorted_keys[index - 1]
+                    result = carrier_buses[lower_key]
+                    output_bus = {result: solph.Flow()}
             input_bus =  {carrier_buses[temperature]:solph.Flow()}
-            output_bus =  {result:solph.Flow()}
+            output_bus = {carrier_buses[temperature]:solph.Flow()}
             if self.investment:
                 storage_dict[temperature] =  solph.components.GenericStorage(
                     label=self.oemof_component_name,
@@ -119,24 +120,14 @@ class Storage(BaseComponent):
                     invest_relation_input_capacity=self.invest_relation_input_capacity,  # c-rate of 1/6
                     invest_relation_output_capacity=self.invest_relation_output_capacity,
                     nominal_storage_capacity=solph.Investment(lifetime=self.investment_component.lifetime,
-                                                              nonconvex=True,
                                                               maximum=self.investment_component.maximum_capacity,
-                                                              minimum=0,
-                                                              ep_costs=0.0,
-                                                              offset=self.investment_component.cost_offset,
-                                                              custom_attributes={
-                                                                  "co2": {
-                                                                      "offset": 0.00,
-                                                                      "cost":0.00
-                                                                  }
-                                                              }
+                                                              nonconvex=True,
                                                       ),
                     loss_rate=self.loss_rate,
                     inflow_conversion_factor=self.charging_efficiency,
                     outflow_conversion_factor=self.discharging_efficiency,
                     balanced = self.balanced,
-                    lifetime_inflow=self.investment_component.lifetime,
-                    lifetime_outflow=self.investment_component.lifetime,
+
                 )
         return storage_dict
 
@@ -226,6 +217,8 @@ class HotWaterTank(Storage):
     volume_in_m3 : float  = 100
     external_temperautre: float = 10
     height_diameter_relation = 2.5
+    invest_relation_input_capacity: float = 0.3
+    invest_relation_output_capacity: float = 0.3
     investment_component: InvestmentComponents = field(default_factory=lambda: copy.deepcopy(hot_water_tank_config))  # Use deepcopy
 
     # capacity is m^3
