@@ -196,18 +196,28 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
                 hot_water_tank_config_building.set_reference_unit_quantity(reference_unit_quantity=building_in_cluster)
                 hot_water_tank_input_bus = solph.buses.Bus(label=f"tank_input_bus_{building_id}_{key}")
                 hot_water_tank_output_bus = solph.buses.Bus(label=f"tank_output_bus_{building_id}_{key}")
-
-                hot_water_tank_dataclass = HotWaterTank(
-                    name=f"heat_storage_{building_id}_{key}",
-                    investment=True,
-                    temperature_buses = heat_carrier_dataclass.get_bus(),
-                    max_temperature=80,
-                    min_temperature=(40+temp_heating_demand_building)/2,
-                    investment_component=hot_water_tank_config_building,
-                    input_bus= heat_carrier_dataclass.get_bus()[80],
-                    output_bus=heat_carrier_bus[80],
-                    )
-
+                if True:
+                    hot_water_tank_dataclass = HotWaterTank(
+                        name=f"heat_storage_{building_id}_{key}",
+                        investment=True,
+                        temperature_buses = heat_carrier_dataclass.get_bus(),
+                        max_temperature=80,
+                        min_temperature=(40+temp_heating_demand_building)/2,
+                        investment_component=hot_water_tank_config_building,
+                        input_bus= heat_carrier_dataclass.get_bus()[80],
+                        output_bus=heat_carrier_bus[80],
+                        )
+                else:
+                    hot_water_tank_dataclass = HotWaterTank(
+                        name=f"heat_storage_{building_id}_{key}",
+                        investment=True,
+                        temperature_buses = heat_carrier_dataclass.get_bus(),
+                        max_temperature=80,
+                        min_temperature=40,
+                        investment_component=hot_water_tank_config_building,
+                        input_bus= hot_water_tank_input_bus,
+                        output_bus=hot_water_tank_output_bus,
+                        )
                 hot_water_tank = hot_water_tank_dataclass.create_storage()
 
                 dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)] = hot_water_tank_dataclass
@@ -356,20 +366,17 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
             if isinstance(comp_value, list):
                 for item in comp_value:
                     es.add(item)
-                    print(item)
                     # Process each component in the list
             # Check if the component is a dictionary, meaning it has nested components
             elif isinstance(comp_value, dict):
                 # If it's a dictionary, iterate over its key-value pairs
                 for key, value in comp_value.items():
-                    print(value)
                     es.add(value)
             else:
                 # Otherwise, just add the component directly
                 es.add(comp_value)
-                print(comp_value)
     model = solph.Model(es)
-    if True:
+    if False:
         for building_id, building_data in dataclasses.items():
             for key, _ in hot_water_tank_config.items():
                 for temperature, stratisfied_storage in components[building_id]["hot_water_tank_stratisfied_"+str(key)].items():
@@ -701,12 +708,12 @@ def run_main(refurbish,building_id_in_cluster):
         }
         co2_reference = co2_ref
         peak_reference = final_results_ref["Electricity"]["peak_from_grid"]
-        co2_reduction_factors =  [1,0.6,0.3] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+        co2_reduction_factors =  [1,0.8] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
          #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
         for co2_reduction_factor in co2_reduction_factors:
             first_co2_run_in_peak_loop = True
-            peak_reduction_factors = [1,0.6,0.3]
+            peak_reduction_factors = [1,0.8]
 
 
             if co2_reference > 0:

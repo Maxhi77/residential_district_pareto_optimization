@@ -56,13 +56,23 @@ if full_and_not_linearized:
             co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
             lifetime=20,
         )}
-    if True:
+    hot_water_tank_config = {
+        1: InvestmentComponents(
+            maximum_capacity=100,
+            minimum_capacity=0,
+            cost_per_unit=0,#856.272931
+            cost_offset=10,#2568
+            co2_per_capacity=0.2695 * 100,
+            lifetime=35,
+            operational_cost_relative_to_capacity=0.01
+        )}
+    if False:
         hot_water_tank_config = {
             1: InvestmentComponents(
                 maximum_capacity=2,
                 minimum_capacity=0,
-                cost_per_unit=1355.431,
-                cost_offset=1483,
+                cost_per_unit=1355.431,#
+                cost_offset=1483,#
                 co2_per_capacity=0.2695*200,
                 lifetime=35,
                 operational_cost_relative_to_capacity=0.01
