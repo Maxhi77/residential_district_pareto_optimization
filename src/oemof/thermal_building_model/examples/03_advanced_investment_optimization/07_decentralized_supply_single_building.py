@@ -139,7 +139,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
             if temp_heating_demand_building==60:
                 heat_carrier_temperature_levels.extend([temp_heating_demand_building, 80])
             elif temp_heating_demand_building == 50:
-                continue
+                pass
             else:
                 heat_carrier_temperature_levels.extend([temp_heating_demand_building, 80])
         else:
