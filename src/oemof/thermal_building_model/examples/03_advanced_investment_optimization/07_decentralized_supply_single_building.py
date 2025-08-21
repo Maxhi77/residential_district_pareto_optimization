@@ -369,7 +369,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
                 es.add(comp_value)
                 print(comp_value)
     model = solph.Model(es)
-    if False:
+    if True:
         for building_id, building_data in dataclasses.items():
             for key, _ in hot_water_tank_config.items():
                 for temperature, stratisfied_storage in components[building_id]["hot_water_tank_stratisfied_"+str(key)].items():
