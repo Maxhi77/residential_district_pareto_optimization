@@ -39,19 +39,29 @@ if False:
     battery_config = create_investment_config("battery", battery_params)
 
 if full_and_not_linearized:
+    if False:
+        battery_config = {
+            1: InvestmentComponents(
+                maximum_capacity=30 * 1000 / PhysicalBaseUnit.factor,
+                minimum_capacity=1 / PhysicalBaseUnit.factor,
+                cost_per_unit=750 / 1000 * PhysicalBaseUnit.factor,
+                cost_offset=1000,
+                co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
+                lifetime=20,
+            ),
+            2: InvestmentComponents(
+                maximum_capacity=100 * 1000/ PhysicalBaseUnit.factor,
+                minimum_capacity=30 * 1000 / PhysicalBaseUnit.factor,
+                cost_per_unit=625 / 1000 * PhysicalBaseUnit.factor,
+                cost_offset=1000,
+                co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
+                lifetime=20,
+            )}
     battery_config = {
         1: InvestmentComponents(
-            maximum_capacity=30 * 1000 / PhysicalBaseUnit.factor,
+            maximum_capacity=70 * 1000 / PhysicalBaseUnit.factor,
             minimum_capacity=1 / PhysicalBaseUnit.factor,
-            cost_per_unit=750 / 1000 * PhysicalBaseUnit.factor,
-            cost_offset=1000,
-            co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
-            lifetime=20,
-        ),
-        2: InvestmentComponents(
-            maximum_capacity=100 * 1000/ PhysicalBaseUnit.factor,
-            minimum_capacity=30 * 1000 / PhysicalBaseUnit.factor,
-            cost_per_unit=625 / 1000 * PhysicalBaseUnit.factor,
+            cost_per_unit=680 / 1000 * PhysicalBaseUnit.factor,
             cost_offset=1000,
             co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
             lifetime=20,
@@ -59,7 +69,7 @@ if full_and_not_linearized:
     hot_water_tank_config = {
         1: InvestmentComponents(
             maximum_capacity=100,
-            minimum_capacity=0,
+            minimum_capacity=0.2,
             cost_per_unit=0,#856.272931
             cost_offset=10,#2568
             co2_per_capacity=0.2695 * 100,
