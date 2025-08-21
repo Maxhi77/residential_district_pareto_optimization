@@ -138,6 +138,8 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
             heat_carrier_temperature_levels = [50]
             if temp_heating_demand_building==60:
                 heat_carrier_temperature_levels.extend([temp_heating_demand_building, 80])
+            elif temp_heating_demand_building == 50:
+                continue
             else:
                 heat_carrier_temperature_levels.extend([temp_heating_demand_building, 80])
         else:
@@ -200,7 +202,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
                     investment=True,
                     temperature_buses = heat_carrier_dataclass.get_bus(),
                     max_temperature=80,
-                    min_temperature=40,
+                    min_temperature=(40+temp_heating_demand_building)/2,
                     investment_component=hot_water_tank_config_building,
                     input_bus= heat_carrier_dataclass.get_bus()[80],
                     output_bus=heat_carrier_bus[80],
@@ -376,7 +378,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
                     share_stratisfied = dataclasses[building_id]["hot_water_tank_stratisfied_temp_levels_"+str(key)][temperature]
 
                     def equate_variables_rule(share_stratisfied):
-                        return model.GenericInvestmentStorageBlock.invest[storage_child, 0] * share_stratisfied  == model.GenericInvestmentStorageBlock.invest[storage_father, 0]
+                        return model.GenericInvestmentStorageBlock.invest[storage_child, 0] == model.GenericInvestmentStorageBlock.invest[storage_father, 0] * share_stratisfied
 
                     setattr(model, "eq_"+components[building_id]["hot_water_tank_stratisfied_"+str(key)][temperature].label, po.Constraint(rule=equate_variables_rule(share_stratisfied)))
     if False:
@@ -699,12 +701,12 @@ def run_main(refurbish,building_id_in_cluster):
         }
         co2_reference = co2_ref
         peak_reference = final_results_ref["Electricity"]["peak_from_grid"]
-        co2_reduction_factors =  [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+        co2_reduction_factors =  [1,0.6,0.3] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
          #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
         for co2_reduction_factor in co2_reduction_factors:
             first_co2_run_in_peak_loop = True
-            peak_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
+            peak_reduction_factors = [1,0.6,0.3]
 
 
             if co2_reference > 0:

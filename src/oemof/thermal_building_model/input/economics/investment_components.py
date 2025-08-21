@@ -42,7 +42,7 @@ if full_and_not_linearized:
     battery_config = {
         1: InvestmentComponents(
             maximum_capacity=30 * 1000 / PhysicalBaseUnit.factor,
-            minimum_capacity=0 / PhysicalBaseUnit.factor,
+            minimum_capacity=1 / PhysicalBaseUnit.factor,
             cost_per_unit=750 / 1000 * PhysicalBaseUnit.factor,
             cost_offset=1000,
             co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
@@ -172,7 +172,7 @@ else:
 air_heat_pump_config={
     1: InvestmentComponents(
         maximum_capacity=30*1000 / PhysicalBaseUnit.factor,
-        minimum_capacity=5*1000 / PhysicalBaseUnit.factor,
+        minimum_capacity=2*1000 / PhysicalBaseUnit.factor,
         cost_per_unit=1749.057 / 1000 * PhysicalBaseUnit.factor,
         cost_offset=19938.1,
         lifetime=20,
