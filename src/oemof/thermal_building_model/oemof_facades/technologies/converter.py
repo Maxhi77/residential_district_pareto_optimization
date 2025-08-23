@@ -25,7 +25,7 @@ class Converter(BaseComponent):
         """Creates a solph source with working_rate as variable cost and demand_rate added."""
         self.oemof_component_name = f"{self.name.lower()}_source"
         if self.investment:
-            epc = self.investment_component.calculate_epc()  # Get EPC from economics model
+            epc = self.investment_component.cost_per_unit  # Get EPC from economics model
             print(epc)
             return solph.components.Source(
                 label=self.oemof_component_name,

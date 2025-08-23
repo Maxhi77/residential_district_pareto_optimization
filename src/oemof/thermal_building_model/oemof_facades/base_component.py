@@ -35,20 +35,20 @@ class InvestmentComponents(TimeConfiguration):
     wacc: float = 0.03
     reference_unit_quantity: int = 1
     def __post_init__(self):
-        self.cost_offset =self.cost_offset * self.get_depreciation_period()
-        self.co2_per_capacity = self.co2_per_capacity * self.get_depreciation_period()  /  self.lifetime
-        self.co2_offset = self.co2_offset * self.get_depreciation_period()  /  self.lifetime
-    def calculate_epc(self) -> float:
-        """Calculates Equivalent Annual Cost (EPC) using annuity formula."""
+        self.cost_offset =self.calculate_epc(capex=self.cost_offset)
         capex = (
                 self.cost_per_unit
-                + self.cost_per_unit * self.operational_cost_relative_to_capacity * self.lifetime)  # ✅ Correct check
-
-        return economics.annuity(capex=capex, n=self.observation_period, u=self.lifetime, wacc=self.wacc) * self.reference_unit_quantity * self.get_depreciation_period()
+                + self.cost_per_unit * self.operational_cost_relative_to_capacity * self.lifetime)
+        self.cost_per_unit = self.calculate_epc(capex=capex)
+        self.co2_per_capacity = self.co2_per_capacity * self.get_depreciation_period()  /  self.lifetime
+        self.co2_offset = self.co2_offset * self.get_depreciation_period()  /  self.lifetime
+    def calculate_epc(self,capex):
+        return economics.annuity(capex=capex, n=self.observation_period, u=self.lifetime, wacc=self.wacc)
     def get_depreciation_period(self):
         return self.observation_period / self.lifetime
     def set_reference_unit_quantity(self, reference_unit_quantity: int):
         self.reference_unit_quantity = reference_unit_quantity
+        self.cost_per_unit = self.cost_per_unit * reference_unit_quantity
         self.cost_offset = self.cost_offset * reference_unit_quantity
         self.co2_per_capacity = self.co2_per_capacity * reference_unit_quantity
         self.co2_offset = self.co2_offset * reference_unit_quantity

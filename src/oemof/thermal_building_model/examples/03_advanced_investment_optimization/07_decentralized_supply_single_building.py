@@ -485,7 +485,8 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
             final_results[building_id][dataclasses[building_id]["electricity_demand_dataclass_building"].name] = dataclasses[building_id]["electricity_demand_dataclass_building"].post_process(results,components[building_id]["electricity_demand"])
 
             final_results[building_id][dataclasses[building_id]["heat_demand_dataclass"].name] = dataclasses[building_id]["heat_demand_dataclass"].post_process(results,components[building_id]["heat_demand"])
-
+            final_results[building_id]["buildings_in_cluster"] = dataclasses[building_id][
+                "building_dataclass"].buildings_in_cluster
         co2_investment = 0
         for building_id in components:
 

@@ -58,7 +58,7 @@ class Grid:
         price = self.calculate_average_price(self.operation_grid.working_rate)
         self.name_source = f"{self.name.lower()}_from_grid"
         if self.investment:
-            epc = self.investment_component.calculate_epc()  # Get EPC from economics model
+            epc = self.investment_component.cost_per_unit  # Get EPC from economics model
 
             return solph.components.Source(
                 label=f"{self.name.lower()}_from_grid",

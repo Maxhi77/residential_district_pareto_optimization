@@ -118,6 +118,7 @@ class ThermalBuilding(Demand):
     name: Optional[str] = None
     number_of_occupants:float = 0
     number_of_household:float = 1
+    buildings_in_cluster:float = 1
     number_of_time_steps: Optional[float] = None
     tabula_building_code: Optional[str] = None
     country: Optional[str] = None
@@ -225,6 +226,7 @@ class ThermalBuilding(Demand):
         self.co2_cost = sum(self.co2_cost_per_measure.values())
 
     def set_number_of_buildings_in_cluster(self,buildings_in_cluster):
+        self.buildings_in_cluster = buildings_in_cluster
         self.capex_annuity = self.capex_annuity * buildings_in_cluster
         self.co2_cost = self.co2_cost * buildings_in_cluster
     def get_roof_area_for_pv(self):
