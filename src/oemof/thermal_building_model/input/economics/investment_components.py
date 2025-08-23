@@ -70,8 +70,8 @@ if full_and_not_linearized:
         1: InvestmentComponents(
             maximum_capacity=100,
             minimum_capacity=0.2,
-            cost_per_unit=0,#856.272931
-            cost_offset=10,#2568
+            cost_per_unit=856.272931,#856.272931
+            cost_offset=0.2695 * 100,#2568
             co2_per_capacity=0.2695 * 100,
             lifetime=35,
             operational_cost_relative_to_capacity=0.01
