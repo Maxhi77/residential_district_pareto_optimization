@@ -807,7 +807,7 @@ def run_main(refurbish,building_id_in_cluster):
 if __name__ == "__main__":
     building_in_cluster=["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"] #,["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"]
     refurbishment =["no_refurbishment","usual_refurbishment","advanced_refurbishment"]  # Beispiel #"GEG_standard"
-    refurbishment =["GEG_standard"]
+    refurbishment =["no_refurbishment"]
     import multiprocessing
     import os
     for refubish in refurbishment:

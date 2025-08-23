@@ -18,7 +18,7 @@ hydrogen_grid_config = GridComponents(
 # Electricity Grid
 electricity_grid_config = GridComponents(
     working_rate=0.28 / 1000 * PhysicalBaseUnit.factor,
-    revenue=0.0733 / 1000,
+    revenue=0.0733 / 1000 * PhysicalBaseUnit.factor,
     price_change_factor=0.02,
     co2_per_flow=0.0783 / 1000 * PhysicalBaseUnit.factor)
 
