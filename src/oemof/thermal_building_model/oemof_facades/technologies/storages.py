@@ -35,7 +35,7 @@ class Storage(BaseComponent):
         self.oemof_component_name = f"{self.name.lower()}"
 
         if self.investment:
-            epc = self.investment_component.calculate_epc()  # Get EPC from economics model
+            epc = self.investment_component.cost_per_unit # Get EPC from economics model
             print(str(self.investment_component)+":"+ str(epc))
             return solph.components.GenericStorage(
                 label=self.oemof_component_name,
