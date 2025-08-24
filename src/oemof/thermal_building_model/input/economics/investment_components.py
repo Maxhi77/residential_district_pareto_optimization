@@ -39,7 +39,7 @@ if False:
     battery_config = create_investment_config("battery", battery_params)
 
 if full_and_not_linearized:
-    if False:
+    if True:
         battery_config = {
             1: InvestmentComponents(
                 maximum_capacity=30 * 1000 / PhysicalBaseUnit.factor,
@@ -57,7 +57,7 @@ if full_and_not_linearized:
                 co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
                 lifetime=20,
             )}
-    if True:
+    if False:
         battery_config = {
             1: InvestmentComponents(
                 maximum_capacity=70 * 1000 / PhysicalBaseUnit.factor,
@@ -66,7 +66,7 @@ if full_and_not_linearized:
                 cost_offset=1000,
                 co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
                 lifetime=20,
-            )}
+)}
     if True:
         hot_water_tank_config = {
             1: InvestmentComponents(
@@ -78,7 +78,7 @@ if full_and_not_linearized:
                 lifetime=35,
                 operational_cost_relative_to_capacity=0.01
             )}
-    if False:
+    if True:
         hot_water_tank_config = {
             1: InvestmentComponents(
                 maximum_capacity=2,
