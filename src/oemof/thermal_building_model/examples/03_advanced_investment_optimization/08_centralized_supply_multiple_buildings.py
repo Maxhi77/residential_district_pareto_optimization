@@ -1,7 +1,7 @@
 from oemof.thermal_building_model.oemof_facades.base_component import  PhysicalBaseUnit
 from oemof.solph.components import Converter
 import copy
-from oemof.thermal_building_model.oemof_facades.infrastructure.grids import ElectricityGrid, HeatGrid, GasGrid, HydrogenGrid
+from oemof.thermal_building_model.oemof_facades.infrastructure.grids import ElectricityGrid, GasGrid, HydrogenGrid
 from oemof.thermal_building_model.oemof_facades.infrastructure.carriers import ElectricityCarrier, HeatCarrier, \
     GasCarrier, HydrogenCarrier
 from oemof.thermal_building_model.oemof_facades.helper_functions import connect_buses, flatten_components_list
@@ -9,6 +9,8 @@ from oemof.thermal_building_model.oemof_facades.infrastructure.demands import El
 from oemof.thermal_building_model.oemof_facades.technologies.renewable_energy_source import PVSystem
 from oemof.thermal_building_model.oemof_facades.technologies.storages import Battery, HotWaterTank
 from oemof.thermal_building_model.oemof_facades.technologies.converter import AirHeatPump, GasHeater, CHP
+from oemof.thermal_building_model.oemof_facades.technologies.heat_grid import HeatGridInvestment
+
 from oemof.thermal_building_model.oemof_facades.refurbishment.building_model import ThermalBuilding
 from oemof.thermal_building_model.helpers.calculate_pv_electricity_yield import simulate_pv_yield
 from oemof import solph
@@ -31,8 +33,7 @@ import tsam.timeseriesaggregation as tsam
 
 import pandas as pd
 #  create solver
-def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster):
-
+def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence):
     solver = "gurobi"
     es = solph.EnergySystem(
         timeindex=t1_agg,
@@ -47,6 +48,14 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         ],
         infer_last_interval=False,
     )
+    dataclasses = {}
+    components = {}
+    building_id="heat_grid"
+
+    dataclasses[building_id]={}
+    components[building_id]={}
+
+
 
     if peak_new is False or None:
         electricity_grid_dataclass = ElectricityGrid()
@@ -92,12 +101,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
     es.add(*hydrogen)
     component_per_building = {}
 
-    dataclasses = {}
-    components = {}
-    building_id="heat_grid"
 
-    dataclasses[building_id]={}
-    components[building_id]={}
     heat_carrier_temperature_levels = [40,50,60,70,80]
     heat_carrier_dataclass = HeatCarrier(name="h_carrier_" + str(building_id),
                                          levels=heat_carrier_temperature_levels)
@@ -111,32 +115,45 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
     for key, config in hot_water_tank_config.items():
         hot_water_tank_config_building = copy.deepcopy(config)
 
-
-        hot_water_tank_input_bus = solph.buses.Bus(label=f"input_bus_{building_id}_{key}")
-        hot_water_tank_output_bus = solph.buses.Bus(label=f"output_bus_{building_id}_{key}")
-        hot_water_tank_dataclass = HotWaterTank(
-            name=f"heat_storage_{building_id}_{key}",
-            investment=True,
-            temperature_buses=heat_carrier_bus,
-            max_temperature=80,
-            min_temperature=min(heat_carrier_bus),
-            investment_component=hot_water_tank_config_building,
-            input_bus=hot_water_tank_input_bus,
-            output_bus=hot_water_tank_output_bus,
-        )
-        hot_water_tank_stratisfied_temp_levels_dict = hot_water_tank_dataclass.get_stratified_storage_temperature_levels()
+        hot_water_tank_input_bus = solph.buses.Bus(label=f"tank_input_bus_{building_id}_{key}")
+        hot_water_tank_output_bus = solph.buses.Bus(label=f"tank_output_bus_{building_id}_{key}")
+        if True:
+            hot_water_tank_dataclass = HotWaterTank(
+                name=f"heat_storage_{building_id}_{key}",
+                investment=True,
+                temperature_buses=heat_carrier_dataclass.get_bus(),
+                max_temperature=80,
+                min_temperature=(40 + heat_grid_temperature) / 2,
+                investment_component=hot_water_tank_config_building,
+                input_bus=heat_carrier_dataclass.get_bus()[80],
+                output_bus=heat_carrier_bus[80],
+            )
+        else:
+            hot_water_tank_dataclass = HotWaterTank(
+                name=f"heat_storage_{building_id}_{key}",
+                investment=True,
+                temperature_buses=heat_carrier_dataclass.get_bus(),
+                max_temperature=80,
+                min_temperature=40,
+                investment_component=hot_water_tank_config_building,
+                input_bus=hot_water_tank_input_bus,
+                output_bus=hot_water_tank_output_bus,
+            )
         hot_water_tank = hot_water_tank_dataclass.create_storage()
 
-        hot_water_tank_stratisfied = hot_water_tank_dataclass.create_stratified_storage(
-            hot_water_tank_stratisfied_temp_levels_dict, heat_carrier_bus)
-        dataclasses[building_id][
-            "hot_water_tank_stratisfied_temp_levels_" + str(key)] = hot_water_tank_stratisfied_temp_levels_dict
-
         dataclasses[building_id]["hot_water_tank_dataclass_" + str(key)] = hot_water_tank_dataclass
-        components[building_id]["hot_water_tank_stratisfied_" + str(key)] = hot_water_tank_stratisfied
-        components[building_id]["hot_water_tank_input_bus_" + str(key)] = hot_water_tank_input_bus
-        components[building_id]["hot_water_tank_output_bus_" + str(key)] = hot_water_tank_output_bus
         components[building_id]["hot_water_tank_" + str(key)] = hot_water_tank
+
+        if False:
+            hot_water_tank_stratisfied_temp_levels_dict = hot_water_tank_dataclass.get_stratified_storage_temperature_levels()
+            hot_water_tank_stratisfied = hot_water_tank_dataclass.create_stratified_storage(
+                hot_water_tank_stratisfied_temp_levels_dict, heat_carrier_bus)
+
+            dataclasses[building_id][
+                "hot_water_tank_stratisfied_temp_levels_" + str(key)] = hot_water_tank_stratisfied_temp_levels_dict
+            components[building_id]["hot_water_tank_stratisfied_" + str(key)] = hot_water_tank_stratisfied
+            components[building_id]["hot_water_tank_input_bus_" + str(key)] = hot_water_tank_input_bus
+            components[building_id]["hot_water_tank_output_bus_" + str(key)] = hot_water_tank_output_bus
 
     for key, config in air_heat_pump_config.items():
         air_heat_pump_config_building =  copy.deepcopy(config)
@@ -208,28 +225,61 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
         dataclasses[building_id]["battery_dataclass_"+str(key)] = battery_dataclass
         components[building_id]["battery_"+str(key)] = battery
+
+    max_required_heat_demand=None
+    heat_transfer_station_max_kW = []
+    for index, row in combined_cluster.iterrows():
+        if index >=1:
+            break
+        building_id = row['building_id']
+        buildings_in_cluster = row['buildings_in_cluster']
+        total_heat_demand_year = (data["ww_demand_" + str(building_id)]+ data["building_" + str(building_id)]) * buildings_in_cluster
+        heat_transfer_station_max_kW.append(max(total_heat_demand_year))
+        if max_required_heat_demand is None:
+            max_required_heat_demand =  total_heat_demand_year
+        else:
+            max_required_heat_demand = max_required_heat_demand + total_heat_demand_year
+    demand = 0
+    fictional_heat_grid_demand= data["ww_demand_" + str(building_id)]
+    fictional_heat_grid_demand[:]= 1
+    for cluster, count in cluster_occurence.items():
+        # Hole den entsprechenden WW-Demand aus 'data' für das Cluster (erste Zahl in cluster_order entspricht dem Cluster)
+        demand = demand + fictional_heat_grid_demand[cluster].sum() * count
+    heat_grid_investment = HeatGridInvestment(name="heat_grid_investment",
+                                    houses_with_transfer_station=31,
+                                    heat_transfer_station_max_kW =heat_transfer_station_max_kW,
+                                    pipe_length_in_meter = 937.00,
+                                    peak_load_in_kw = max(max_required_heat_demand),
+                                    fictional_demand = demand)
+    heat_grid_investment.tsam_total_amount = demand
+    heat_grid_investment.value_list = fictional_heat_grid_demand
+
+    heat_grid_bus = heat_grid_investment.get_bus()
+    heat_grid_loss=heat_grid_investment.calculate_heat_grid_loss_for_flow_temperature()
     for index, row in combined_cluster.iterrows():
 
+        if index >=1:
+            break
         building_id = row['building_id']
-        dataclasses[building_id] = {}
-        components[building_id] = {}
-
+        print(building_id)
+        dataclasses[building_id]={}
+        components[building_id]={}
         building_in_cluster =row['buildings_in_cluster']
         building_dataclass = copy.deepcopy(data_classes_comp.loc["building", building_id])
 
         temp_heating_demand_building = building_dataclass.level_heating_demand
-        heat_carrier_temperature_levels_building = [50, temp_heating_demand_building]
+        heat_carrier_temperature_levels_building = [50, heat_grid_temperature]
         heat_carrier_dataclass_building = HeatCarrier(name="h_carrier_" + str(building_id),
                                              levels=heat_carrier_temperature_levels_building)
         heat_carrier_bus_building = heat_carrier_dataclass_building.get_bus()
         heat_50_from_converter_building = Converter(label="conv_h_from_grid_50_"+str(building_id),
                                               inputs={heat_carrier_bus[50]: solph.flows.Flow()},
                                               outputs={heat_carrier_bus_building[50]: solph.flows.Flow()},
-                                              conversion_factors={heat_carrier_bus_building[50]: 1/building_in_cluster})
+                                              conversion_factors={heat_carrier_bus_building[50]: 1/(building_in_cluster*heat_grid_loss)})
         heat_heating_demand_from_converter_building = Converter(label="conv_h_from_grid_heatdemand_"+str(building_id),
-                                              inputs={heat_carrier_bus[temp_heating_demand_building]: solph.flows.Flow()},
-                                              outputs={heat_carrier_bus_building[temp_heating_demand_building]: solph.flows.Flow()},
-                                              conversion_factors={heat_carrier_bus_building[temp_heating_demand_building]: 1/building_in_cluster})
+                                              inputs={heat_carrier_bus[heat_grid_temperature]: solph.flows.Flow()},
+                                              outputs={heat_carrier_bus_building[heat_grid_temperature]: solph.flows.Flow()},
+                                              conversion_factors={heat_carrier_bus_building[heat_grid_temperature]: 1/(building_in_cluster*heat_grid_loss)})
 
         heat_demand_dataclass = data_classes_comp.loc["heat_demand", building_id]
         heat_demand_dataclass.value_list = data["ww_demand_"+str(building_id)]
@@ -254,6 +304,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
         dataclasses[building_id]["building_dataclass"] = building_dataclass
         components[building_id]["building_component"] = building_component
+        max(data["ww_demand_" + str(building_id)] + data["building_" + str(building_id)])
 
         electricity_carrier_dataclass_building = ElectricityCarrier(name="e_carrier_"+str(building_id))
         electricity_carrier_bus_building = electricity_carrier_dataclass_building.get_bus()
@@ -282,7 +333,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         for key, config in pv_system_config.items():
             pv_dataclass = copy.deepcopy(data_classes_comp[building_id]["pv_system"][key])
             pv_dataclass_config_building = copy.deepcopy(config)
-            pv_dataclass_config_building.set_reference_unit_quantity(reference_unit_quantity=building_in_cluster)
+
             pv_dataclass.investment_component=pv_dataclass_config_building
 
             pv_dataclass.value_list = data["pv_system_" + str(building_id)+"_"+str(key)]
@@ -313,7 +364,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                 es.add(comp_value)
                 print(comp_value)
     model = solph.Model(es)
-    if True:
+    if False:
         for building_id, building_data in dataclasses.items():
             if building_id=="heat_grid":
                 for key, config in hot_water_tank_config.items():
@@ -380,56 +431,58 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
         for building_id, building_data in components.items():
             final_results[building_id] = {}
-            for key,_ in pv_system_config.items():
-                final_results[building_id][dataclasses[building_id]["pv_dataclass_"+str(key)].name] = dataclasses[building_id]["pv_dataclass_"+str(key)].post_process(results,components[building_id]["pv_system_"+str(key)])
-            for key,_ in hot_water_tank_config.items():
-                final_results[building_id][dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)].name] = dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)].post_process(results,components[building_id]["hot_water_tank_"+str(key)])
-            for key,_ in battery_config.items():
-                final_results[building_id][dataclasses[building_id]["battery_dataclass_"+str(key)].name] = dataclasses[building_id]["battery_dataclass_"+str(key)].post_process(results,components[building_id]["battery_"+str(key)])
-            for key,_ in gas_heater_config.items():
-                final_results[building_id][dataclasses[building_id]["gas_heater_dataclass_"+str(key)].name] = dataclasses[building_id]["gas_heater_dataclass_"+str(key)].post_process(results,
-                                                                                                                                                                  components[building_id]["gas_heater_"+str(key)],
-                                                                                                                                                                  components[building_id]["gas_heater_converters_"+str(key)],
-                                                                                                                                                                  components[building_id]["heat_carrier_bus"],
-                                                                                                                                                                  components[building_id]["gas_carrier_bus_building"])
-            for key, _ in chp_config.items():
-                final_results[building_id][dataclasses[building_id]["chp_dataclass_" + str(key)].name] = \
-                dataclasses[building_id]["chp_dataclass_" + str(key)].post_process(results,
-                                                                                          components[building_id][
-                                                                                              "chp_" + str(key)],
-                                                                                          components[building_id][
-                                                                                              "chp_converters_" + str(
-                                                                                                  key)],
-                                                                                          components[building_id][
-                                                                                              "heat_carrier_bus"],
-                                                                                          components[building_id][
-                                                                                              "hydrogen_carrier_bus_building"])
-            for key,_ in air_heat_pump_config.items():
-                final_results[building_id][dataclasses[building_id]["air_heat_pump_dataclass_"+str(key)].name] = dataclasses[building_id]["air_heat_pump_dataclass_"+str(key)].post_process(results,
-                                                                                                                                                                        components[building_id]["air_heat_pump_"+str(key)],
-                                                                                                                                                                        components[building_id]["air_heat_pump_converters_"+str(key)],
-                                                                                                                                                                        components[building_id]["heat_carrier_bus"],
-                                                                                                                                                                        components[building_id]["electricity_carrier_bus_building"])
+            if building_id=="heat_grid":
+                for key,_ in hot_water_tank_config.items():
+                    final_results[building_id][dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)].name] = dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)].post_process(results,components[building_id]["hot_water_tank_"+str(key)])
+                for key,_ in battery_config.items():
+                    final_results[building_id][dataclasses[building_id]["battery_dataclass_"+str(key)].name] = dataclasses[building_id]["battery_dataclass_"+str(key)].post_process(results,components[building_id]["battery_"+str(key)])
+                for key,_ in gas_heater_config.items():
+                    final_results[building_id][dataclasses[building_id]["gas_heater_dataclass_"+str(key)].name] = dataclasses[building_id]["gas_heater_dataclass_"+str(key)].post_process(results,
+                                                                                                                                                                      components[building_id]["gas_heater_"+str(key)],
+                                                                                                                                                                      components[building_id]["gas_heater_converters_"+str(key)],
+                                                                                                                                                                      components[building_id]["heat_carrier_bus"],
+                                                                                                                                                                      gas_bus)
+                for key, _ in chp_config.items():
+                    final_results[building_id][dataclasses[building_id]["chp_dataclass_" + str(key)].name] = \
+                    dataclasses[building_id]["chp_dataclass_" + str(key)].post_process(results,
+                                                                                              components[building_id][
+                                                                                                  "chp_" + str(key)],
+                                                                                              components[building_id][
+                                                                                                  "chp_converters_" + str(
+                                                                                                      key)],
+                                                                                              components[building_id][
+                                                                                                  "heat_carrier_bus"],
+                                                                                              hydrogen_bus)
+                for key,_ in air_heat_pump_config.items():
+                    final_results[building_id][dataclasses[building_id]["air_heat_pump_dataclass_"+str(key)].name] = dataclasses[building_id]["air_heat_pump_dataclass_"+str(key)].post_process(results,
+                                                                                                                                                                            components[building_id]["air_heat_pump_"+str(key)],
+                                                                                                                                                                            components[building_id]["air_heat_pump_converters_"+str(key)],
+                                                                                                                                                                            components[building_id]["heat_carrier_bus"],
+                                                                                                                                                                            electricity_carrier_bus)
+            else:
+                final_results[building_id][dataclasses[building_id]["building_dataclass"].name] = dataclasses[building_id]["building_dataclass"].post_process(results,components[building_id]["building_component"])
 
-            final_results[building_id][dataclasses[building_id]["building_dataclass"].name] = dataclasses[building_id]["building_dataclass"].post_process(results,components[building_id]["building_component"])
+                final_results[building_id][dataclasses[building_id]["electricity_demand_dataclass_building"].name] = dataclasses[building_id]["electricity_demand_dataclass_building"].post_process(results,components[building_id]["electricity_demand"])
 
-            final_results[building_id][dataclasses[building_id]["electricity_demand_dataclass_building"].name] = dataclasses[building_id]["electricity_demand_dataclass_building"].post_process(results,components[building_id]["electricity_demand"])
-
-            final_results[building_id][dataclasses[building_id]["heat_demand_dataclass"].name] = dataclasses[building_id]["heat_demand_dataclass"].post_process(results,components[building_id]["heat_demand"])
+                final_results[building_id][dataclasses[building_id]["heat_demand_dataclass"].name] = dataclasses[building_id]["heat_demand_dataclass"].post_process(results,components[building_id]["heat_demand"])
+                final_results[building_id]["buildings_in_cluster"] = dataclasses[building_id]["building_dataclass"].buildings_in_cluster
+                for key,_ in pv_system_config.items():
+                    final_results[building_id][dataclasses[building_id]["pv_dataclass_"+str(key)].name] = dataclasses[building_id]["pv_dataclass_"+str(key)].post_process(results,components[building_id]["pv_system_"+str(key)])
 
         co2_investment = 0
         for building_id in components:
+            if building_id == "heat_grid":
+                # For each component, sum up the CO2 contributions to the overall system
+                co2_investment += sum(final_results[building_id][dataclasses[building_id]["battery_dataclass_"+str(key)].name]["investment_co2"] for key,_ in battery_config.items())
+                co2_investment += sum(final_results[building_id][dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)].name]["investment_co2"] for key,_ in hot_water_tank_config.items())
+                co2_investment += sum(final_results[building_id][dataclasses[building_id]["gas_heater_dataclass_"+str(key)].name]["investment_co2"] for key,_ in gas_heater_config.items())
+                co2_investment += sum(final_results[building_id][dataclasses[building_id]["chp_dataclass_"+str(key)].name]["investment_co2"] for key,_ in chp_config.items())
+                co2_investment += sum(final_results[building_id][dataclasses[building_id]["air_heat_pump_dataclass_"+str(key)].name]["investment_co2"] for key,_ in air_heat_pump_config.items())
+            else:
+                co2_investment += sum(final_results[building_id][dataclasses[building_id]["pv_dataclass_"+str(key)].name]["investment_co2"] for key,_ in pv_system_config.items())
 
-            # For each component, sum up the CO2 contributions to the overall system
-            co2_investment += sum(final_results[building_id][dataclasses[building_id]["battery_dataclass_"+str(key)].name]["investment_co2"] for key,_ in battery_config.items())
-            co2_investment += sum(final_results[building_id][dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)].name]["investment_co2"] for key,_ in hot_water_tank_config.items())
-            co2_investment += sum(final_results[building_id][dataclasses[building_id]["gas_heater_dataclass_"+str(key)].name]["investment_co2"] for key,_ in gas_heater_config.items())
-            co2_investment += sum(final_results[building_id][dataclasses[building_id]["chp_dataclass_"+str(key)].name]["investment_co2"] for key,_ in chp_config.items())
-            co2_investment += sum(final_results[building_id][dataclasses[building_id]["air_heat_pump_dataclass_"+str(key)].name]["investment_co2"] for key,_ in air_heat_pump_config.items())
-            co2_investment += sum(final_results[building_id][dataclasses[building_id]["pv_dataclass_"+str(key)].name]["investment_co2"] for key,_ in pv_system_config.items())
-
-            co2_investment += final_results[building_id][dataclasses[building_id]["building_dataclass"].name]["investment_co2"
-                                ]
+                co2_investment += final_results[building_id][dataclasses[building_id]["building_dataclass"].name]["investment_co2"
+                                    ]
         co2_operation = final_results[electricity_grid_dataclass.name]["flow_from_grid_co2"
                                 ]-final_results[electricity_grid_dataclass.name]["flow_into_grid_co2"
                                 ]+final_results[gas_grid_dataclass.name]["flow_from_grid_co2"
@@ -583,7 +636,8 @@ def run_main(heat_grid_temperature):
         data.index = date_time_index
         if True:
             for index, building_row in sfh_cluster.iterrows():
-
+                if index >=1:
+                    continue
                 data,data_classes_comp = process_cluster(
                     building_row=building_row,
                     building_type="SFH",
@@ -596,7 +650,7 @@ def run_main(heat_grid_temperature):
                     time_index=date_time_index,
                     heat_grid_temperature=heat_grid_temperature
                 )
-        if True:
+        if False:
             for index, building_row in mfh_cluster.iterrows():
 
                 data,data_classes_comp = process_cluster(
@@ -624,13 +678,36 @@ def run_main(heat_grid_temperature):
 
         )
         aggregation1.createTypicalPeriods()
+        cluster_occurence=aggregation1.clusterPeriodNoOccur
         data = aggregation1.typicalPeriods
         t1_agg = pd.date_range(
             "2025-01-01", periods=typical_periods * hours_per_period, freq="H"
         )
+        if False:
+            for index, row in combined_cluster.iterrows():
+                try:
+                    building_id = row['building_id']
+                    buildings_in_cluster = row['buildings_in_cluster']
 
+                    # Identify the corresponding 'ww_demand' column for each building_id
+                    ww_demand_column = f"ww_demand_{building_id}"
+                    e_demand_column = f"e_demand_{building_id}"
+                    building_demand_column = f"building_{building_id}"
+                    # Multiply the ww_demand column by the number of buildings in the cluster
+                    data[ww_demand_column] = data[ww_demand_column] * buildings_in_cluster
+                    data[e_demand_column] = data[e_demand_column] * buildings_in_cluster
+                    data[building_demand_column] = data[building_demand_column] * buildings_in_cluster
+                except:
+                    print(index)
+            all_ww_demand_columns = [col for col in data.columns if 'ww_demand' in col]
+            all_e_demand_columns = [col for col in data.columns if 'e_demand' in col]
+            all_building_demand_columns = [col for col in data.columns if 'building' in col]
 
-        final_results_ref, co2_ref, time = run_model(None, None,data,aggregation1,t1_agg,data_classes_comp,combined_cluster)
+            data['ww_demand_total'] = data[all_ww_demand_columns].sum(axis=1)
+            data['e_demand_total'] = data[all_e_demand_columns].sum(axis=1)
+            data['building_total'] = data[all_building_demand_columns].sum(axis=1)
+
+        final_results_ref, co2_ref, time = run_model(None, None,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence)
         co2_reduction_factor_ref = 1
         peak_reduction_factor_ref = 1
         results_loop_to_save[(co2_reduction_factor_ref, peak_reduction_factor_ref)] = {
@@ -666,7 +743,7 @@ def run_main(heat_grid_temperature):
 
                     peak_new = peak_reference * peak_reduction_factor
 
-                final_results, co2,time  = run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster)
+                final_results, co2,time  = run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence)
                 if final_results is None:
                     results_loop_to_save[(co2_reduction_factor, peak_reduction_factor)] = {
                         "results": None,
