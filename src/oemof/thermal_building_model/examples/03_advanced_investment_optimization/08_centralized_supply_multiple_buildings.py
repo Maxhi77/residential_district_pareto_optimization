@@ -233,7 +233,8 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         building_id = row['building_id']
         buildings_in_cluster = row['buildings_in_cluster']
         total_heat_demand_year = (data["ww_demand_" + str(building_id)]+ data["building_" + str(building_id)]) * buildings_in_cluster
-        heat_transfer_station_max_kW.append(max(total_heat_demand_year))
+        heat_transfer_station_max_kW.append(max(total_heat_demand_year),buildings_in_cluster)
+
         if max_required_heat_demand is None:
             max_required_heat_demand =  total_heat_demand_year
         else:
@@ -245,7 +246,6 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         # Hole den entsprechenden WW-Demand aus 'data' für das Cluster (erste Zahl in cluster_order entspricht dem Cluster)
         demand = demand + fictional_heat_grid_demand[cluster].sum() * count
     heat_grid_investment = HeatGridInvestment(name="heat_grid_investment",
-                                    houses_with_transfer_station=31,
                                     heat_transfer_station_max_kW =heat_transfer_station_max_kW,
                                     pipe_length_in_meter = 937.00,
                                     peak_load_in_kw = max(max_required_heat_demand),
