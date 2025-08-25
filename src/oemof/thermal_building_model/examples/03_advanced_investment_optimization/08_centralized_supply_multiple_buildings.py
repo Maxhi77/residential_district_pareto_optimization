@@ -733,12 +733,12 @@ def run_main(heat_grid_temperature):
         }
         co2_reference = co2_ref
         peak_reference = final_results_ref["Electricity"]["peak_from_grid"]
-        co2_reduction_factors = [1,0.1] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+        co2_reduction_factors =  [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
          #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
         for co2_reduction_factor in co2_reduction_factors:
             first_co2_run_in_peak_loop = True
-            peak_reduction_factors = [1,0.9]
+            peak_reduction_factors = [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
 
 
             if co2_reference > 0:
@@ -788,7 +788,7 @@ def run_main(heat_grid_temperature):
                         "time": time
                     }
             print("FINISHED PEAK LOOP START SAVING")
-            file_path = "results_heat_grid_"+str(ueu)+"_" + str(ev) +".pkl"
+            file_path = "results_heat_grid_"+str(heat_grid_temperature)+"_"+str(ueu)+"_" + str(ev) +".pkl"
             if os.path.exists(file_path):
                 # If the file exists, open it and load the data
                 with open(file_path, "rb") as f:
@@ -806,7 +806,7 @@ def run_main(heat_grid_temperature):
             # Save the updated or new results back to the pickle file
             with open(file_path, "wb") as f:
                 pickle.dump(existing_results, f)
-    file_path = "results_heat_grid_"+str(ueu)+"_" + str(ev) +".pkl"
+    file_path = "results_heat_grid_"+str(heat_grid_temperature)+"_"+str(ueu)+"_" + str(ev) +".pkl"
     if os.path.exists(file_path):
         # If the file exists, open it and load the data
         with open(file_path, "rb") as f:
