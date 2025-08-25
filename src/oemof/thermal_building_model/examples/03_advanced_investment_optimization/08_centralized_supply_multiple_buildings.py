@@ -233,7 +233,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         building_id = row['building_id']
         buildings_in_cluster = row['buildings_in_cluster']
         total_heat_demand_year = (data["ww_demand_" + str(building_id)]+ data["building_" + str(building_id)]) * buildings_in_cluster
-        heat_transfer_station_max_kW.append(max(total_heat_demand_year),buildings_in_cluster)
+        heat_transfer_station_max_kW.append((max(total_heat_demand_year),buildings_in_cluster))
 
         if max_required_heat_demand is None:
             max_required_heat_demand =  total_heat_demand_year
