@@ -70,7 +70,6 @@ class HeatGridInvestmentCosts(BaseComponent):
 class HeatGridInvestment(HeatGridInvestmentCosts):
     name: str = "HeatGrid"
     pipe_length_in_meter: float = None
-    houses_with_transfer_station: int = None
     heat_transfer_station_max_kW: Optional[List[float]] = None
     peak_load_in_kw: float = None
     inverter_losses: float = 0.05
@@ -79,9 +78,11 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
     def __post_init__(self):
 
         total_investment_costs = self.calculate_pipe_costs(self.pipe_length_in_meter)\
-                                 + self.calculate_transfer_station_costs(self.houses_with_transfer_station)\
+                                 + self.calculate_transfer_station_with_line_costs(self.heat_transfer_station_max_kW)*self.lifetime/25\
                                  + self.calculate_pump_station_costs(self.peak_load_in_kw)\
                                  + self.calculate_central_transfer_station_costs(self.peak_load_in_kw)
+        # additional annual cost of 2% Operation per year
+        total_investment_costs = total_investment_costs*1.02
         total_co2_cost = self.calculate_co2_cost_pipe(self.pipe_length_in_meter)\
                         + self.calculate_co2_cost_per_kW_transfer_station(list_kW_demand_transfer_station=self.heat_transfer_station_max_kW)
         self.investment_component = InvestmentComponents(
@@ -99,11 +100,35 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
         partially_paved_terrain_euro_per_meter=1045
         cost_pipes = pipe_length_in_meter * partially_paved_terrain_euro_per_meter
         return cost_pipes
-    def calculate_transfer_station_costs(self,houses_with_transfer_station):
+    def calculate_transfer_station_with_line_costs(self,heat_transfer_station_max_kW):
         # A Technologieatlas
-        cost_per_transfer_station= 9929
-        transfer_station_costs = cost_per_transfer_station * houses_with_transfer_station
-        return transfer_station_costs
+        indirect = False
+        total_transfer_station_costs = 0
+
+        for house_kw in heat_transfer_station_max_kW:
+            if house_kw < 5:
+                transfer_station_costs = 4300
+            elif house_kw < 10:
+                transfer_station_costs = (4300+6900) / 2
+            elif house_kw < 50:
+                transfer_station_costs = (6900 + 17200)/2
+            elif house_kw < 200:
+                transfer_station_costs = (17200+30800)/2
+            elif house_kw < 500:
+                transfer_station_costs = (54200+30800)/2
+            else:
+                transfer_station_costs = (54200)
+
+            if house_kw < 5:
+                service_line = 13897
+            elif house_kw < 50:
+                service_line = 14707
+            elif house_kw < 100:
+                service_line = 15577
+            else:
+                service_line = 17221
+            total_transfer_station_costs=total_transfer_station_costs + transfer_station_costs + service_line
+        return total_transfer_station_costs
 
     def calculate_central_transfer_station_costs(self,peak_load_in_kw):
         # A Technologieatlas
@@ -126,6 +151,8 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
         return 276.81 * pipe_length_in_meter
     def calculate_heat_grid_loss_for_flow_temperature(self,flow_temperature):
         # A heated debate
+        transfer_station_loss_building = 0.025
+        transfer_station_loss=0.045
         if flow_temperature == 40:
             heat_grid_loss = 0.045
         elif flow_temperature == 50:
@@ -136,4 +163,4 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
             heat_grid_loss = 0.085
         elif flow_temperature == 80:
             heat_grid_loss = 0.10
-        return 1 - heat_grid_loss
+        return 1 - (heat_grid_loss+transfer_station_loss_building+transfer_station_loss)
