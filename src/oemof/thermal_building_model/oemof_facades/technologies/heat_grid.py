@@ -105,7 +105,9 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
         indirect = False
         total_transfer_station_costs = 0
 
-        for house_kw in heat_transfer_station_max_kW:
+        for house in heat_transfer_station_max_kW:
+            house_kw=house[0]
+            number_of_houses=house[1]
             if house_kw < 5:
                 transfer_station_costs = 4300
             elif house_kw < 10:
@@ -127,7 +129,7 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
                 service_line = 15577
             else:
                 service_line = 17221
-            total_transfer_station_costs=total_transfer_station_costs + transfer_station_costs + service_line
+            total_transfer_station_costs=total_transfer_station_costs + (transfer_station_costs + service_line)*number_of_houses
         return total_transfer_station_costs
 
     def calculate_central_transfer_station_costs(self,peak_load_in_kw):
@@ -144,8 +146,10 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
         # A Technologieatlas
         co2_per_kw_transfer_station = 3.12886
         total_co2 = 0
-        for peak in list_kW_demand_transfer_station:
-            total_co2 = + total_co2 + peak*co2_per_kw_transfer_station
+        for house in list_kW_demand_transfer_station:
+            peak=house[0]
+            number_of_houses=house[1]
+            total_co2 = + total_co2 + peak*co2_per_kw_transfer_station*number_of_houses
         return total_co2
     def calculate_co2_cost_pipe(self,pipe_length_in_meter):
         return 276.81 * pipe_length_in_meter
