@@ -75,6 +75,9 @@ class Converter(BaseComponent):
                 "investment_co2":investment_co2,
                 "flow_into_converter":into_converter,
                 "flow_from_converter":out_converter,
+                "flow_into_converter_sum": sum_into_converter,
+                "flow_from_converter_sum": sum_out_converter,
+
                 "total_efficiency":total_efficiency}
     def get_capacity(self,results,component):
         if self.investment:

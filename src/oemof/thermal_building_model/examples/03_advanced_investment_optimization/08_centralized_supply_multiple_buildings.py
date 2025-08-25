@@ -24,7 +24,7 @@ import os
 import pickle
 from oemof.thermal_building_model.helpers import calculate_gain_by_sun
 from oemof.thermal_building_model.helpers.path_helper import get_project_root
-from oemof.thermal_building_model.input.economics.investment_components import battery_config,hot_water_tank_config,air_heat_pump_config,gas_heater_config,pv_system_config,chp_config
+from oemof.thermal_building_model.input.economics.investment_components_heat_grid import battery_config,hot_water_tank_config,air_heat_pump_config,gas_heater_config,pv_system_config,chp_config
 
 from oemof.thermal_building_model.tabula.tabula_reader import Building
 import pprint as pp
@@ -229,8 +229,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
     max_required_heat_demand=None
     heat_transfer_station_max_kW = []
     for index, row in combined_cluster.iterrows():
-        if index >=1:
-            break
+
         building_id = row['building_id']
         buildings_in_cluster = row['buildings_in_cluster']
         total_heat_demand_year = (data["ww_demand_" + str(building_id)]+ data["building_" + str(building_id)]) * buildings_in_cluster
@@ -253,13 +252,19 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                                     fictional_demand = demand)
     heat_grid_investment.tsam_total_amount = demand
     heat_grid_investment.value_list = fictional_heat_grid_demand
+    heat_grid_investment_bus = heat_grid_investment.get_bus()
+    heat_grid_investment_sink=  heat_grid_investment.create_sink(heat_grid_investment_bus)
+    heat_grid_investment_source = heat_grid_investment.create_source(heat_grid_investment_bus)
 
-    heat_grid_bus = heat_grid_investment.get_bus()
-    heat_grid_loss=heat_grid_investment.calculate_heat_grid_loss_for_flow_temperature()
+    heat_grid_loss=heat_grid_investment.calculate_heat_grid_loss_for_flow_temperature(heat_grid_temperature)
+    dataclasses["heat_grid"]["heat_grid_investment"] =heat_grid_investment
+
+    components["heat_grid"]["heat_grid_investment_bus"] = heat_grid_investment_bus
+    components["heat_grid"]["heat_grid_investment_sink"] = heat_grid_investment_sink
+    components["heat_grid"]["heat_grid_investment_source"] = heat_grid_investment_source
     for index, row in combined_cluster.iterrows():
 
-        if index >=1:
-            break
+
         building_id = row['building_id']
         print(building_id)
         dataclasses[building_id]={}
@@ -432,7 +437,10 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         for building_id, building_data in components.items():
             final_results[building_id] = {}
             if building_id=="heat_grid":
+                final_results["heat_grid"]["heat_grid_investment"]=dataclasses["heat_grid"]["heat_grid_investment"].post_process()
+                final_results["heat_grid"]["heat_grid_investment"]["max_required_demand"]=dataclasses["heat_grid"]["heat_grid_investment"].peak_load_in_kw
                 for key,_ in hot_water_tank_config.items():
+
                     final_results[building_id][dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)].name] = dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)].post_process(results,components[building_id]["hot_water_tank_"+str(key)])
                 for key,_ in battery_config.items():
                     final_results[building_id][dataclasses[building_id]["battery_dataclass_"+str(key)].name] = dataclasses[building_id]["battery_dataclass_"+str(key)].post_process(results,components[building_id]["battery_"+str(key)])
@@ -461,6 +469,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                                                                                                                                                                             electricity_carrier_bus)
             else:
                 final_results[building_id][dataclasses[building_id]["building_dataclass"].name] = dataclasses[building_id]["building_dataclass"].post_process(results,components[building_id]["building_component"])
+                final_results[building_id]["refurbishment_status"] = dataclasses[building_id]["building_dataclass"].refurbishment_status
 
                 final_results[building_id][dataclasses[building_id]["electricity_demand_dataclass_building"].name] = dataclasses[building_id]["electricity_demand_dataclass_building"].post_process(results,components[building_id]["electricity_demand"])
 
@@ -478,6 +487,8 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                 co2_investment += sum(final_results[building_id][dataclasses[building_id]["gas_heater_dataclass_"+str(key)].name]["investment_co2"] for key,_ in gas_heater_config.items())
                 co2_investment += sum(final_results[building_id][dataclasses[building_id]["chp_dataclass_"+str(key)].name]["investment_co2"] for key,_ in chp_config.items())
                 co2_investment += sum(final_results[building_id][dataclasses[building_id]["air_heat_pump_dataclass_"+str(key)].name]["investment_co2"] for key,_ in air_heat_pump_config.items())
+                co2_investment += final_results["heat_grid"]["heat_grid_investment"]["investment_co2"]
+
             else:
                 co2_investment += sum(final_results[building_id][dataclasses[building_id]["pv_dataclass_"+str(key)].name]["investment_co2"] for key,_ in pv_system_config.items())
 
@@ -555,8 +566,10 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
                 time_index=time_index,
             )
         matching_buildings = {key: value for key, value in buildung_dict.items() if
-                              value.level_heating_demand == heat_grid_temperature}
-
+                              value.level_heating_demand <= heat_grid_temperature}
+        print(building_id)
+        print(heat_grid_temperature)
+        print(matching_buildings)
         assert matching_buildings, "Fehler: Es wurden keine Gebäude gefunden, die den gewünschten Heizbedarf entsprechen."
 
         min_capex_building = min(matching_buildings, key=lambda x: matching_buildings[x].capex_annuity)
@@ -636,8 +649,7 @@ def run_main(heat_grid_temperature):
         data.index = date_time_index
         if True:
             for index, building_row in sfh_cluster.iterrows():
-                if index >=1:
-                    continue
+
                 data,data_classes_comp = process_cluster(
                     building_row=building_row,
                     building_type="SFH",
@@ -650,7 +662,7 @@ def run_main(heat_grid_temperature):
                     time_index=date_time_index,
                     heat_grid_temperature=heat_grid_temperature
                 )
-        if False:
+        if True:
             for index, building_row in mfh_cluster.iterrows():
 
                 data,data_classes_comp = process_cluster(
@@ -721,12 +733,12 @@ def run_main(heat_grid_temperature):
         }
         co2_reference = co2_ref
         peak_reference = final_results_ref["Electricity"]["peak_from_grid"]
-        co2_reduction_factors = [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+        co2_reduction_factors = [1,0.1] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
          #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
         for co2_reduction_factor in co2_reduction_factors:
             first_co2_run_in_peak_loop = True
-            peak_reduction_factors = [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+            peak_reduction_factors = [1,0.9]
 
 
             if co2_reference > 0:
