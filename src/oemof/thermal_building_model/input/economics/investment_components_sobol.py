@@ -11,8 +11,8 @@ battery_config = {
 )}
 hot_water_tank_config = {
     1: InvestmentComponents(
-        maximum_capacity=100,
-        minimum_capacity=0.2,
+        maximum_capacity=40,
+        minimum_capacity=1,
         cost_per_unit=856.272931,  # 856.272931
         cost_offset=2568,  # 2568
         co2_per_capacity=0.2695 * 100,
