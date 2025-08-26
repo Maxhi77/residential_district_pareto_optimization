@@ -380,7 +380,7 @@ def run_multiprocessing(gap_starter,
                         "totex": None,
                         "peak": None
                     }
-        if counter % 5== 0 or counter %( len(param_values)-1)== 0:
+        if counter % 1000== 0 or counter %( len(param_values)-1)== 0:
             file_path="results_sobol_"+str(gap_starter)+"_"+str(counter)+".pkl"
             # If the file doesn't exist, create it and save the results
             existing_results = results_loop_to_save
