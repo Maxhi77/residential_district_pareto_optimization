@@ -17,7 +17,7 @@ import pickle
 import multiprocessing
 from SALib.sample import saltelli
 
-def main(target_residents,building_id, floor_area,demand_path,heating_system,refurbishment_status):
+def main(target_residents,building_id, floor_area,demand_path,heating_system,refurbishment_status_tabula):
     solver = "gurobi"  # 'glpk', 'gurobi',....
     number_of_time_steps = 8760
 
@@ -369,7 +369,7 @@ def run_multiprocessing(gap_starter,
 
         demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
 
-        final_results, co2  = main(target_residents,tabula_building_code, building_size,demand_path,heating_system,refurbishment_status)
+        final_results, co2  = main(target_residents,tabula_building_code, building_size,demand_path,heating_system,refurbishment_status_tabula)
         totex = final_results["totex"]
         peak = (final_results["Electricity"]["peak_into_grid"],
         final_results["Electricity"]["peak_from_grid"])
