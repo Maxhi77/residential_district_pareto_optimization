@@ -71,8 +71,7 @@ def main(target_residents,building_id, floor_area,demand_path,heating_system,ref
     heat_demand = heat_demand_dataclass.create_demand()
     hot_water_tank_config_building = copy.deepcopy(hot_water_tank_config)
 
-    hot_water_tank_input_bus = solph.buses.Bus(label=f"input_bus")
-    hot_water_tank_output_bus = solph.buses.Bus(label=f"output_bus")
+
     hot_water_tank_dataclass = HotWaterTank(
         name="heat_storage",
         investment=True,
@@ -80,19 +79,13 @@ def main(target_residents,building_id, floor_area,demand_path,heating_system,ref
         max_temperature=80,
         min_temperature=min(heat_carrier_bus),
         investment_component=hot_water_tank_config_building,
-        input_bus=hot_water_tank_input_bus,
-        output_bus=hot_water_tank_output_bus,
+        input_bus=heat_carrier_bus[70],
+        output_bus=heat_carrier_bus[70],
     )
-    hot_water_tank_stratisfied_temp_levels_dict = hot_water_tank_dataclass.get_stratified_storage_temperature_levels()
     hot_water_tank = hot_water_tank_dataclass.create_storage()
 
-    hot_water_tank_stratisfied = hot_water_tank_dataclass.create_stratified_storage(
-        hot_water_tank_stratisfied_temp_levels_dict, heat_carrier_bus)
-    for component in hot_water_tank_stratisfied.values():
-        es.add(component)
     es.add(hot_water_tank)
-    es.add(hot_water_tank_input_bus)
-    es.add(hot_water_tank_output_bus)
+
     if heating_system==0:
         air_heat_pump_dataclass = AirHeatPump(heat_carrier_bus= heat_carrier_dataclass.get_bus(),
                                               investment=True,
