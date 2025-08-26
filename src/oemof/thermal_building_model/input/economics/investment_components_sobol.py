@@ -32,7 +32,7 @@ pv_system_config = {1:
 
 air_heat_pump_config={
     1: InvestmentComponents(
-        maximum_capacity=100*1000 / PhysicalBaseUnit.factor,
+        maximum_capacity=120*1000 / PhysicalBaseUnit.factor,
         minimum_capacity=2*1000 / PhysicalBaseUnit.factor,
         cost_per_unit=1749.057 / 1000 * PhysicalBaseUnit.factor,
         cost_offset=19938.1,
@@ -43,7 +43,7 @@ air_heat_pump_config={
 
 gas_heater_config={
     1: InvestmentComponents(
-        maximum_capacity=100*1000 / PhysicalBaseUnit.factor,
+        maximum_capacity=120*1000 / PhysicalBaseUnit.factor,
         minimum_capacity=2*1000 / PhysicalBaseUnit.factor,
         cost_per_unit=367.47 / 1000 * PhysicalBaseUnit.factor,
         cost_offset=7946.69,
