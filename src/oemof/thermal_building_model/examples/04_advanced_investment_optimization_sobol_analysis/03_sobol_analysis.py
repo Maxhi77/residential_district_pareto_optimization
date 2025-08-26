@@ -359,7 +359,7 @@ def run_multiprocessing(gap_starter,
             else:
                 return "Results_INVALID"
         result_key = format_household_key(chosen_household)
-
+        #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles\{result_key}'
         demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
 
         final_results, co2  = main(target_residents,tabula_building_code, building_size,demand_path,heating_system,refurbishment_status_tabula)
@@ -380,7 +380,7 @@ def run_multiprocessing(gap_starter,
                         "totex": None,
                         "peak": None
                     }
-        if counter % 1000== 0 or counter %( len(param_values)-1)== 0:
+        if counter % 5== 0 or counter %( len(param_values)-1)== 0:
             file_path="results_sobol_"+str(gap_starter)+"_"+str(counter)+".pkl"
             # If the file doesn't exist, create it and save the results
             existing_results = results_loop_to_save
