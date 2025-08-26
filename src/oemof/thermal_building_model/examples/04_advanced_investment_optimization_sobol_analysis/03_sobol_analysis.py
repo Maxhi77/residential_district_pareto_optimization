@@ -14,7 +14,7 @@ from oemof.thermal_building_model.input.economics.investment_components_sobol im
 import copy
 import os
 import pickle
-
+import multiprocessing
 from SALib.sample import saltelli
 
 def main(target_residents,building_id, floor_area,demand_path,heating_system,refurbishment_status):
@@ -273,130 +273,148 @@ household_dicts = {
 }
 
 resident_ranges = get_resident_range(household_dicts)
-
-# Beispiel-Durchlauf
-results_loop_to_save = {}
-counter = 0
 gap_starter = 0
-# Beispiel-Durchlauf
-for params in param_values:
-    if (gap_starter+1) * 9000<counter:
-        counter += 1
-        continue
-    if counter < gap_starter*9000:
-        counter += 1
-        continue
-    heating_system=int(params[idx_heating_system])
-    refurbishment_status = int(params[idx_refurbishment_status])
-    building_size = params[idx_size]
-    household_type = int(params[idx_household_type])
-    normalized_residents = params[idx_residents]
-    min_r, max_r = resident_ranges[household_type]
-    target_residents = round(min_r + normalized_residents * (max_r - min_r))
 
-    tabula_year_class = int(params[idx_year_class])  # Die Nummer, die du brauchst
+def run_multiprocessing(gap_starter,
+                        idx_size,
+                        idx_year_class,
+                        idx_residents,
+                        idx_household_type,
+                        idx_refurbishment_status,
+                        idx_heating_system,
+                        household_dicts,
+                        resident_ranges):
+    # Beispiel-Durchlauf
+    results_loop_to_save = {}
+    counter = 0
+    # Beispiel-Durchlauf
+    for params in param_values:
+        if (gap_starter+1) * 9000<counter:
+            counter += 1
+            continue
+        if counter < gap_starter*9000:
+            counter += 1
+            continue
+        heating_system=int(params[idx_heating_system])
+        refurbishment_status = int(params[idx_refurbishment_status])
+        building_size = params[idx_size]
+        household_type = int(params[idx_household_type])
+        normalized_residents = params[idx_residents]
+        min_r, max_r = resident_ranges[household_type]
+        target_residents = round(min_r + normalized_residents * (max_r - min_r))
 
-
-    # Passende Haushalte filtern
-    possible_households = [
-        (name, res) for name, res in household_dicts[household_type].items()
-        if res == target_residents
-    ]
-
-    if possible_households:
-        chosen_household, _ = random.choice(possible_households)
-    else:
-        chosen_household = "Kein passender Haushalt gefunden"
-    # TABULA-Building-Code generieren
-
-    if tabula_year_class == 1:
-        year_of_construction = 1850
-    elif tabula_year_class == 2:
-        year_of_construction = 1910
-    elif tabula_year_class == 3:
-        year_of_construction = 1930
-    elif tabula_year_class == 4:
-        year_of_construction = 1950
-    elif tabula_year_class == 5:
-        year_of_construction = 1960
-    elif tabula_year_class == 6:
-        year_of_construction = 1970
-    elif tabula_year_class == 7:
-        year_of_construction = 1980
-    elif tabula_year_class == 8:
-        year_of_construction = 1990
-    elif tabula_year_class == 9:
-        year_of_construction = 2000
-    elif tabula_year_class == 10:
-        year_of_construction = 2005
-    elif tabula_year_class == 11:
-        year_of_construction = 2010
-    elif tabula_year_class == 12:
-        year_of_construction = 2020
-
-    if refurbishment_status == 0:
-        refurbishment_status_tabula ="no_refurbishment"
-    elif refurbishment_status == 1:
-        refurbishment_status_tabula="usual_refurbishment"
-    elif refurbishment_status == 2:
-        refurbishment_status_tabula="advanced_refurbishment"
-    tabula_building_code = f"DE.N.SFH.{tabula_year_class:02d}.Gen.ReEx.001.001"
-
-    print(f"Typ: {household_type}, Ziel-Bewohner: {target_residents}, Haushalt: {chosen_household}")
-    print(f"TABULA-Code: {year_of_construction}\n")
-    print("building size: " +str(building_size) )
-    print("counter: " + str(counter))
-    import re
+        tabula_year_class = int(params[idx_year_class])  # Die Nummer, die du brauchst
 
 
-    def format_household_key(chosen_household):
-        match = re.match(r"CHR0?(\d+)", chosen_household)
-        if match:
-            number = int(match.group(1))  # int entfernt führende Nullen
-            return f"Results_CHH_{number}"  # ohne führende Null
+        # Passende Haushalte filtern
+        possible_households = [
+            (name, res) for name, res in household_dicts[household_type].items()
+            if res == target_residents
+        ]
+
+        if possible_households:
+            chosen_household, _ = random.choice(possible_households)
         else:
-            return "Results_INVALID"
-    result_key = format_household_key(chosen_household)
+            chosen_household = "Kein passender Haushalt gefunden"
+        # TABULA-Building-Code generieren
 
-    demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
+        if tabula_year_class == 1:
+            year_of_construction = 1850
+        elif tabula_year_class == 2:
+            year_of_construction = 1910
+        elif tabula_year_class == 3:
+            year_of_construction = 1930
+        elif tabula_year_class == 4:
+            year_of_construction = 1950
+        elif tabula_year_class == 5:
+            year_of_construction = 1960
+        elif tabula_year_class == 6:
+            year_of_construction = 1970
+        elif tabula_year_class == 7:
+            year_of_construction = 1980
+        elif tabula_year_class == 8:
+            year_of_construction = 1990
+        elif tabula_year_class == 9:
+            year_of_construction = 2000
+        elif tabula_year_class == 10:
+            year_of_construction = 2005
+        elif tabula_year_class == 11:
+            year_of_construction = 2010
+        elif tabula_year_class == 12:
+            year_of_construction = 2020
 
-    final_results, co2  = main(target_residents,tabula_building_code, building_size,demand_path,heating_system,refurbishment_status)
-    totex = final_results["totex"]
-    peak = (final_results["Electricity"]["peak_into_grid"],
-    final_results["Electricity"]["peak_from_grid"])
-    results_loop_to_save[(counter,building_size, household_type,target_residents,year_of_construction)] = {
-            "results": final_results,
+        if refurbishment_status == 0:
+            refurbishment_status_tabula ="no_refurbishment"
+        elif refurbishment_status == 1:
+            refurbishment_status_tabula="usual_refurbishment"
+        elif refurbishment_status == 2:
+            refurbishment_status_tabula="advanced_refurbishment"
+        tabula_building_code = f"DE.N.SFH.{tabula_year_class:02d}.Gen.ReEx.001.001"
 
-            "co2": co2,
-            "totex": totex,
-            "peak": peak
-    }
-    if False:
+        print(f"Typ: {household_type}, Ziel-Bewohner: {target_residents}, Haushalt: {chosen_household}")
+        print(f"TABULA-Code: {year_of_construction}\n")
+        print("building size: " +str(building_size) )
+        print("counter: " + str(counter))
+        import re
+
+
+        def format_household_key(chosen_household):
+            match = re.match(r"CHR0?(\d+)", chosen_household)
+            if match:
+                number = int(match.group(1))  # int entfernt führende Nullen
+                return f"Results_CHH_{number}"  # ohne führende Null
+            else:
+                return "Results_INVALID"
+        result_key = format_household_key(chosen_household)
+
+        demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
+
+        final_results, co2  = main(target_residents,tabula_building_code, building_size,demand_path,heating_system,refurbishment_status)
+        totex = final_results["totex"]
+        peak = (final_results["Electricity"]["peak_into_grid"],
+        final_results["Electricity"]["peak_from_grid"])
         results_loop_to_save[(counter,building_size, household_type,target_residents,year_of_construction)] = {
-                    "results": None,
-                    "co2": None,
-                    "totex": None,
-                    "peak": None
-                }
-    if counter % 1000== 0 or counter %( len(param_values)-1)== 0:
-        file_path="results_sobol_"+str(gap_starter)+"_"+str(counter)+".pkl"
-        if os.path.exists(file_path):
-            # If the file exists, open it and load the data
-            with open(file_path, "rb") as f:
-                existing_results = pickle.load(f)
-            print(f"Loaded existing results for {file_path}")
+                "results": final_results,
 
-            # Now you can add more data to existing_results
-            existing_results.update(results_loop_to_save)  # Example of adding new data
-
-        else:
+                "co2": co2,
+                "totex": totex,
+                "peak": peak
+        }
+        if False:
+            results_loop_to_save[(counter,building_size, household_type,target_residents,year_of_construction)] = {
+                        "results": None,
+                        "co2": None,
+                        "totex": None,
+                        "peak": None
+                    }
+        if counter % 1000== 0 or counter %( len(param_values)-1)== 0:
+            file_path="results_sobol_"+str(gap_starter)+"_"+str(counter)+".pkl"
             # If the file doesn't exist, create it and save the results
             existing_results = results_loop_to_save
             print(f"New results created for {file_path}")
 
-        # Save the updated or new results back to the pickle file
-        with open(file_path, "wb") as f:
-            pickle.dump(existing_results, f)
-        # Save the updated or new results back to the pickle file
+            # Save the updated or new results back to the pickle file
+            with open(file_path, "wb") as f:
+                pickle.dump(existing_results, f)
+            # Save the updated or new results back to the pickle file
+            results_loop_to_save = {}
+        counter += 1
+if __name__ == "__main__":
+    gap_values = range(10)  # Gap von 0 bis 9
+    processes = []
+    for gap_starter in gap_values:
+        p = multiprocessing.Process(target=run_multiprocessing, args=(gap_starter,
+                        idx_size,
+                        idx_year_class,
+                        idx_residents,
+                        idx_household_type,
+                        idx_refurbishment_status,
+                        idx_heating_system,
+                        household_dicts,
+                        resident_ranges))
+        processes.append(p)
+        p.start()
 
-    counter += 1
+    for p in processes:
+        p.join()
+
