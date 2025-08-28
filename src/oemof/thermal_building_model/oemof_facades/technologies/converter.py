@@ -121,7 +121,7 @@ class GasHeater(Converter):
     name: str = "GasHeater"
     nominal_power: Optional[float] = 10000
     heat_carrier_bus: Optional[dict[Bus]] = None
-    efficiency: Optional[float] = 0.95
+    efficiency: Optional[float] = 0.99
     investment_component: InvestmentComponents = field(default_factory=lambda: copy.deepcopy(gas_heater_config))
 
     def create_converters(self,
