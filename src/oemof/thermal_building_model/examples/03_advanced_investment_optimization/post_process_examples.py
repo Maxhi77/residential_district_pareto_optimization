@@ -6,7 +6,8 @@ from pathlib import Path
 import pickle
 from typing import Dict, Any, Iterable, List, Tuple, Optional
 import math
-
+import pickle
+from pathlib import Path
 Number = float
 import pandas as pd
 from pareto_optimal_help_functions import combine_all_buildings
@@ -25,14 +26,17 @@ import pickle
 from pathlib import Path
 
 
-def load_data(refurbishment_strategies, buildings_in_ueu):
+def load_data(refurbishment_strategies, buildings_in_ueu,base_dir):
+    if base_dir is None:
+        base_dir = Path.cwd()
+    else:
+        base_dir = Path(base_dir)
+
+    print("Arbeitsverzeichnis:", base_dir)
     connection_setup = ["uncon"]
     ueu = "DENI03403000SEC5658"
     building_dict = {}
 
-    # aktuelles Arbeitsverzeichnis statt fixem Pfad
-    base_dir = Path.cwd()
-    print("Arbeitsverzeichnis:", base_dir)
 
     for building in buildings_in_ueu:
         building_dict[building] = {}
@@ -53,6 +57,32 @@ def load_data(refurbishment_strategies, buildings_in_ueu):
 
     return building_dict
 
+def load_heat_grid_data(numbers, ueu="DENI03403000SEC5658", base_dir=None):
+
+    if base_dir is None:
+        base_dir = Path.cwd()
+    else:
+        base_dir = Path(base_dir)
+
+    print("Arbeitsverzeichnis:", base_dir)
+
+    heat_grid_dict = {}
+
+    for num in numbers:
+        file_name = f"results_heat_grid_{num}_processed_bds_in_{ueu}_no_EV.pkl"
+        full_path = base_dir / file_name
+        try:
+            with open(full_path, "rb") as f:
+                data = pickle.load(f)
+                heat_grid_dict[num] = data
+        except FileNotFoundError:
+            print(f"❌ Datei fehlt: {full_path}")
+            heat_grid_dict[num] = None
+        except Exception as e:
+            print(f"⚠️ Fehler bei {num}: {e}")
+            heat_grid_dict[num] = None
+
+    return heat_grid_dict
 
 buildings_in_ueu = ["DENILD1100004s6k","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004qZL","DENILD1100004rSr"]
 refurbishment_strategies = ["no_refurbishment", "usual_refurbishment", "advanced_refurbishment", "GEG_standard"]
@@ -69,10 +99,10 @@ pareto_front_per_building = {}
 per_bldg, combined_front = combine_all_buildings(
     building_dict,
     refurbishment_strategies=refurbishment_strategies,
-    tau=1e-12,                      # Stricter dominance threshold
-    eps_rel_each=(0.001, 0.001, 0.001),  # More precise pruning for each building
-    eps_rel_merge=(0.005, 0.005, 0.005), # Stricter merging
-    max_points_after_each_merge=8000    # Allow more points after each merge
+    tau=1e-9,  # numerisch streng
+    eps_rel_each=(0.0015, 0.0015, 0.0015),      # etwas feiner je Gebäude
+    eps_rel_merge=(0.004, 0.004, 0.004),        # enger beim Mergen
+    max_points_after_each_merge=13000           # mehr Punkte zulassen
 )
 with open(f"processed_08_26_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
     pickle.dump([building_dict,per_bldg,combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
