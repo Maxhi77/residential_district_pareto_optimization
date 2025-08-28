@@ -26,7 +26,7 @@ import pickle
 from pathlib import Path
 
 
-def load_data(refurbishment_strategies, buildings_in_ueu,base_dir):
+def load_data(refurbishment_strategies, buildings_in_ueu,base_dir=None):
     if base_dir is None:
         base_dir = Path.cwd()
     else:
