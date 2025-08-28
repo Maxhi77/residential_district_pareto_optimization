@@ -203,8 +203,8 @@ class AirHeatPump(Converter):
                           electricity_bus:Bus,
                           heat_carrier_bus: Optional[dict[Bus]]):
         converters = []
-        cop = []
         for temperature, bus in heat_carrier_bus.items():
+            cop = []
             for air_temp in self.air_temperature:
                 cop.append(calculate_cop(
                     temp_input=celsius_to_kelvin(air_temp),
