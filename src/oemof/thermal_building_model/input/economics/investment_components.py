@@ -39,7 +39,7 @@ if False:
     battery_config = create_investment_config("battery", battery_params)
 
 if full_and_not_linearized:
-    if True:
+    if False:
         battery_config = {
             1: InvestmentComponents(
                 maximum_capacity=30 * 1000 / PhysicalBaseUnit.factor,
@@ -57,17 +57,18 @@ if full_and_not_linearized:
                 co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
                 lifetime=20,
             )}
-    if False:
+    if True:
         battery_config = {
             1: InvestmentComponents(
                 maximum_capacity=70 * 1000 / PhysicalBaseUnit.factor,
                 minimum_capacity=1 / PhysicalBaseUnit.factor,
-                cost_per_unit=700 / 1000 * PhysicalBaseUnit.factor,
+                cost_per_unit=750 / 1000 * PhysicalBaseUnit.factor,
                 cost_offset=1000,
                 co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
+                operational_cost_relative_to_capacity=0.02,
                 lifetime=20,
 )}
-    if True:
+    if False:
         hot_water_tank_config = {
             1: InvestmentComponents(
                 maximum_capacity=100,
@@ -86,7 +87,7 @@ if full_and_not_linearized:
                 cost_per_unit=1355.431,#
                 cost_offset=1483,#
                 co2_per_capacity=0.2695*200,
-                lifetime=35,
+                lifetime=30,
                 operational_cost_relative_to_capacity=0.01
             ),
             2: InvestmentComponents(
@@ -95,7 +96,7 @@ if full_and_not_linearized:
                 cost_per_unit=856.272931,
                 cost_offset=2568,
                 co2_per_capacity=0.2695*100,
-                lifetime=35,
+                lifetime=30,
                 operational_cost_relative_to_capacity=0.01
             )}
     if False:
@@ -123,9 +124,9 @@ if full_and_not_linearized:
                 InvestmentComponents(
                     maximum_capacity=100 * 1000 / PhysicalBaseUnit.factor,
                     minimum_capacity=0 ,
-                    cost_per_unit=1350 / 1000 * PhysicalBaseUnit.factor,
-                    cost_offset=500,
-                    operational_cost_relative_to_capacity=0.02,
+                    cost_per_unit=1500 / 1000 * PhysicalBaseUnit.factor,
+                    cost_offset=1000,
+                    operational_cost_relative_to_capacity=0.01,
                     co2_per_capacity=0.91 * PhysicalBaseUnit.factor,
                     lifetime=25,
                 )}
