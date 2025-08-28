@@ -204,8 +204,8 @@ class HotWaterTank(Storage):
     name: str = "LayeredWaterTank"
     temperature_buses: Optional[Bus] = None
     loss_rate: float = 0.005
-    charging_efficiency: float = 0.99
-    discharging_efficiency: float = 0.99
+    charging_efficiency: float = 0.975
+    discharging_efficiency: float = 0.975
     charging_capacity_rate: float = 1
     discharging_capacity_rate: float = 1
     # ambient_temperature: [dict[str, float], None] = None
