@@ -19,30 +19,40 @@ def remove_series(obj):
         return [remove_series(v) for v in obj if not isinstance(v, pd.Series)]
     else:
         return obj
-def load_data(refurbishment_strategies,buildings_in_ueu):
+
+
+import pickle
+from pathlib import Path
+
+
+def load_data(refurbishment_strategies, buildings_in_ueu):
     connection_setup = ["uncon"]
     ueu = "DENI03403000SEC5658"
     building_dict = {}
-    base_dir = Path(
-        r"C:\Users\hill_mx\Desktop\Paper UEC UEU\Ergebnisse\2025_08_26")
-    building_dict = {}
+
+    # aktuelles Arbeitsverzeichnis statt fixem Pfad
+    base_dir = Path.cwd()
+    print("Arbeitsverzeichnis:", base_dir)
+
     for building in buildings_in_ueu:
         building_dict[building] = {}
         for refurbishment in refurbishment_strategies:
-            file_path = f"results_dec_processed_bds_in_{ueu}_{refurbishment}_no_EV_{building}.pkl"
-            full_path = base_dir / file_path
+            file_name = f"results_dec_processed_bds_in_{ueu}_{refurbishment}_no_EV_{building}.pkl"
+            full_path = base_dir / file_name
             try:
-                with open(
-                        r"C:\Users\hill_mx\Desktop\Paper UEC UEU\Ergebnisse\2025_08_26/"+file_path,
-                        "rb") as f:
+                with open(full_path, "rb") as f:
                     data = pickle.load(f)
-                    cleaned_data = remove_series(data)
+                    cleaned_data = remove_series(data)  # nehme an, deine Funktion existiert
                     building_dict[building][refurbishment] = cleaned_data
-            except:
-                print(building)
-                print(refurbishment)
+            except FileNotFoundError:
+                print(f"Datei fehlt: {full_path}")
                 building_dict[building][refurbishment] = None
+            except Exception as e:
+                print(f"Fehler bei {building}, {refurbishment}: {e}")
+                building_dict[building][refurbishment] = None
+
     return building_dict
+
 
 buildings_in_ueu = ["DENILD1100004s6k","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004qZL","DENILD1100004rSr"]
 refurbishment_strategies = ["no_refurbishment", "usual_refurbishment", "advanced_refurbishment", "GEG_standard"]
