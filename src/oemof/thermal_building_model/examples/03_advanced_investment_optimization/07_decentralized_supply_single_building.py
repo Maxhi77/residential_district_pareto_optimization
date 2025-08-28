@@ -23,6 +23,7 @@ import pickle
 from oemof.thermal_building_model.helpers import calculate_gain_by_sun
 from oemof.thermal_building_model.helpers.path_helper import get_project_root
 from oemof.thermal_building_model.input.economics.investment_components import battery_config,hot_water_tank_config,air_heat_pump_config,gas_heater_config,pv_system_config,chp_config
+from oemof.thermal_building_model.input.economics.operation_grid_economics import natural_gas_grid_config, bio_gas_grid_config
 
 from oemof.thermal_building_model.tabula.tabula_reader import Building
 import pprint as pp
@@ -67,16 +68,25 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
                     electricity_grid_source,
                     electricity_carrier_bus]
     es.add(*electricity)
-    gas_grid_dataclass = GasGrid()
-    gas_grid_bus_from_grid = gas_grid_dataclass.get_bus_from_grid()
-    gas_grid_source = gas_grid_dataclass.create_source()
+
+    natural_gas_grid_config_grid = copy.deepcopy(natural_gas_grid_config)
+    natural_gas_grid_dataclass = GasGrid(operation_grid=natural_gas_grid_config_grid,
+                                 name="NaturalGas")
+    natural_gas_grid_bus_from_grid = natural_gas_grid_dataclass.get_bus_from_grid()
+    natural_gas_grid_source = natural_gas_grid_dataclass.create_source()
+
+    bio_gas_grid_config_grid = copy.deepcopy(bio_gas_grid_config)
+    bio_gas_grid_dataclass = GasGrid(operation_grid=bio_gas_grid_config_grid,
+                                 name="BioGas")
+    bio_gas_grid_bus_from_grid = bio_gas_grid_dataclass.get_bus_from_grid()
+    bio_gas_grid_source = bio_gas_grid_dataclass.create_source()
 
     gas_carrier_dataclass = GasCarrier()
     gas_bus = gas_carrier_dataclass.get_bus()
-    connect_buses(input=gas_grid_bus_from_grid, target=gas_bus)
+    connect_buses(input=natural_gas_grid_bus_from_grid, target=gas_bus)
+    connect_buses(input=bio_gas_grid_bus_from_grid, target=gas_bus)
 
-
-    gas = [gas_grid_bus_from_grid,gas_grid_source,gas_bus]
+    gas = [natural_gas_grid_bus_from_grid,natural_gas_grid_source,bio_gas_grid_source,bio_gas_grid_bus_from_grid,gas_bus]
     es.add(*gas)
     if True:
         hydrogen_grid_dataclass = HydrogenGrid()
@@ -100,9 +110,11 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
             continue
         building_id =row['building_id']
         building_in_cluster =row['buildings_in_cluster']
-        if False:
+        building_in_cluster_to_save = row['buildings_in_cluster']
+        if True:
             print("BUILDINGS IN CLUSTER ==1")
-            building_in_cluster = 1
+            building_in_cluster =1
+            building_in_cluster_to_save = row['buildings_in_cluster']
         dataclasses[building_id] = {}
         components[building_id] = {}
         if True:
@@ -432,13 +444,15 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
 
         model.solve(solver=solver, solve_kwargs={"tee": True},
-                                              cmdline_options={"mipgap": 0.02}
+                                              cmdline_options={"mipgap": 0.01}
         )
         meta_results = solph.processing.meta_results(model)
         results = solph.processing.results(model)
         final_results = {}
         final_results[electricity_grid_dataclass.name] = electricity_grid_dataclass.post_process(results,electricity_grid_source,electricity_grid_sink)
-        final_results[gas_grid_dataclass.name] = gas_grid_dataclass.post_process(results,gas_grid_source,None)
+        final_results[natural_gas_grid_dataclass.name] = natural_gas_grid_dataclass.post_process(results,natural_gas_grid_source,None)
+        final_results[bio_gas_grid_dataclass.name] = bio_gas_grid_dataclass.post_process(results,bio_gas_grid_source,None)
+
         if True:
             final_results[hydrogen_grid_dataclass.name] = hydrogen_grid_dataclass.post_process(results, hydrogen_grid_source, None)
         if False:
@@ -485,8 +499,9 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
             final_results[building_id][dataclasses[building_id]["electricity_demand_dataclass_building"].name] = dataclasses[building_id]["electricity_demand_dataclass_building"].post_process(results,components[building_id]["electricity_demand"])
 
             final_results[building_id][dataclasses[building_id]["heat_demand_dataclass"].name] = dataclasses[building_id]["heat_demand_dataclass"].post_process(results,components[building_id]["heat_demand"])
-            final_results[building_id]["buildings_in_cluster"] = dataclasses[building_id][
-                "building_dataclass"].buildings_in_cluster
+            final_results[building_id]["buildings_in_cluster"] = building_in_cluster_to_save
+            final_results[building_id]["buildings_in_cluster_used"] = dataclasses[building_id][
+            "building_dataclass"].buildings_in_cluster
         co2_investment = 0
         for building_id in components:
 
@@ -503,7 +518,8 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
                                 ]
         co2_operation = final_results[electricity_grid_dataclass.name]["flow_from_grid_co2"
                                 ]-final_results[electricity_grid_dataclass.name]["flow_into_grid_co2"
-                                ]+final_results[gas_grid_dataclass.name]["flow_from_grid_co2"
+                                ]+final_results[natural_gas_grid_dataclass.name]["flow_from_grid_co2"
+                                ]+final_results[bio_gas_grid_dataclass.name]["flow_from_grid_co2"
                                 ]+final_results[hydrogen_grid_dataclass.name]["flow_from_grid_co2"
                                 ]
 
@@ -605,7 +621,15 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
                                           "building_type":building_type}
         return data, data_classes_comp
 
+def compute_co2_target(co2_ref, factor):
+    # preserves your original handling of negative references
+    if co2_ref > 0:
+        return co2_ref * factor
+    else:
+        return co2_ref * (1 + 1 - factor)
 
+def compute_peak_target(peak_ref, factor):
+    return peak_ref * factor
 
 def run_main(refurbish,building_id_in_cluster):
     base_path = os.path.dirname(os.path.abspath(__file__))
@@ -807,9 +831,9 @@ def run_main(refurbish,building_id_in_cluster):
 if __name__ == "__main__":
     #building_in_cluster=["DENILD1100004s6k","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004qZL","DENILD1100004rSr"] #,["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"]
 
-    building_in_cluster=["DENILD1100004rSr"] #,["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"]
+    building_in_cluster=["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"] #,["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"]
     refurbishment =["no_refurbishment","usual_refurbishment","advanced_refurbishment"]  # Beispiel #"GEG_standard"
-    refurbishment =["usual_refurbishment"]
+    refurbishment =["no_refurbishment"]
     import multiprocessing
     import os
     for refubish in refurbishment:
