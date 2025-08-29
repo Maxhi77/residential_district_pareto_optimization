@@ -86,7 +86,7 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
     total_heat_demand: float = 0
     def __post_init__(self):
         #lifetime 30 years
-        main_line_costs = self.calculate_pipe_costs(self.pipe_length_in_meter)
+        main_line_costs = self.calculate_pipe_costs(self.pipe_length_in_meter,self.flow_temperature)
         main_line_co2 = self.calculate_co2_cost_pipe(self.pipe_length_in_meter)
         self.main_line = InvestmentComponents(
             cost_offset=main_line_costs,  # 2568
@@ -137,7 +137,12 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
                             self.house_station.cost_offset+
                             self.central_transfer_station.cost_offset+
                             self.pump_station.cost_offset)
-        self.total_co2 = self.main_line.co2_offset + self.house_station.co2_offset
+        self.total_co2 = (self.main_line.co2_offset +
+                            self.distribution_network.co2_offset +
+                            self.house_service_line.co2_offset +
+                            self.house_station.co2_offset+
+                            self.central_transfer_station.co2_offset+
+                            self.pump_station.co2_offset)
 
     def interpolate(self,value_40, value_70, flow_temperature):
         if flow_temperature >= 70:

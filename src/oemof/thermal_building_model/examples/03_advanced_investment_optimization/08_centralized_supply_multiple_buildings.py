@@ -226,29 +226,34 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         dataclasses[building_id]["battery_dataclass_"+str(key)] = battery_dataclass
         components[building_id]["battery_"+str(key)] = battery
 
-    max_required_heat_demand=None
+    total_heat_demand_year=None
     heat_transfer_station_max_kW = []
     for index, row in combined_cluster.iterrows():
 
         building_id = row['building_id']
         buildings_in_cluster = row['buildings_in_cluster']
-        total_heat_demand_year = (data["ww_demand_" + str(building_id)]+ data["building_" + str(building_id)]) * buildings_in_cluster
-        heat_transfer_station_max_kW.append((max(total_heat_demand_year),buildings_in_cluster))
+        total_heat_demand_year_per_building = (data["ww_demand_" + str(building_id)]+ data["building_" + str(building_id)]) * buildings_in_cluster
+        heat_transfer_station_max_kW.append((max(total_heat_demand_year_per_building),buildings_in_cluster))
 
-        if max_required_heat_demand is None:
-            max_required_heat_demand =  total_heat_demand_year
+        if total_heat_demand_year is None:
+            total_heat_demand_year =  total_heat_demand_year_per_building
         else:
-            max_required_heat_demand = max_required_heat_demand + total_heat_demand_year
+            total_heat_demand_year = total_heat_demand_year + total_heat_demand_year_per_building
     demand = 0
+
     fictional_heat_grid_demand= data["ww_demand_" + str(building_id)]
     fictional_heat_grid_demand[:]= 1
+    total_heat_demand_year_sum=0
     for cluster, count in cluster_occurence.items():
         # Hole den entsprechenden WW-Demand aus 'data' für das Cluster (erste Zahl in cluster_order entspricht dem Cluster)
         demand = demand + fictional_heat_grid_demand[cluster].sum() * count
+        total_heat_demand_year_sum  += total_heat_demand_year[cluster].sum() * count
     heat_grid_investment = HeatGridInvestment(name="heat_grid_investment",
                                     heat_transfer_station_max_kW =heat_transfer_station_max_kW,
                                     pipe_length_in_meter = 937.00,
-                                    peak_load_in_kw = max(max_required_heat_demand),
+                                    peak_load_in_kw = max(total_heat_demand_year),
+                                    flow_temperature = heat_grid_temperature,
+                                    total_heat_demand = total_heat_demand_year_sum,
                                     fictional_demand = demand)
     heat_grid_investment.tsam_total_amount = demand
     heat_grid_investment.value_list = fictional_heat_grid_demand
@@ -302,6 +307,12 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         components[building_id]["heat_heating_demand_from_converter_building"] = heat_heating_demand_from_converter_building
 
         building_dataclass.value_list = data["building_"+str(building_id)]
+        demand = 0
+        for cluster, count in cluster_occurence.items():
+            # Hole den entsprechenden WW-Demand aus 'data' für das Cluster (erste Zahl in cluster_order entspricht dem Cluster)
+            demand = demand + data["building_" + str(building_id)][cluster].sum() * count
+
+        building_dataclass.tsam_total_amount = demand
         building_dataclass.set_number_of_buildings_in_cluster(building_in_cluster)
         building_dataclass.bus=heat_carrier_bus_building[building_dataclass.level_heating_demand]
 
@@ -551,29 +562,44 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
         electricity_demand = ElectricityDemand(name=f"e_demand_{building_id}", value_list=demand_electricity)
         heat_demand = WarmWater(name=f"ww_demand_{building_id}", value_list=demand_warm_water, level=40)
         buildung_dict={}
-        for refurbishment in ["no_refurbishment","usual_refurbishment","advanced_refurbishment","GEG_standard"]:
-            buildung_dict[refurbishment] = ThermalBuilding(
-                name=f"building_{building_id}",
-                floor_area=building_floor_area,
-                number_of_occupants=number_of_occupants,
-                number_of_household=number_of_households,
-                country="DE",
-                construction_year=year_of_construction,
-                class_building="average",
-                building_type=building_type,
-                refurbishment_status=refurbishment,
-                heat_level_calculation=True,
-                time_index=time_index,
-            )
-        matching_buildings = {key: value for key, value in buildung_dict.items() if
-                              value.level_heating_demand <= heat_grid_temperature}
-        print(building_id)
-        print(heat_grid_temperature)
-        print(matching_buildings)
-        assert matching_buildings, "Fehler: Es wurden keine Gebäude gefunden, die den gewünschten Heizbedarf entsprechen."
+        if heat_grid_temperature==40:
+            building = ThermalBuilding(
+                    name=f"building_{building_id}",
+                    floor_area=building_floor_area,
+                    number_of_occupants=number_of_occupants,
+                    number_of_household=number_of_households,
+                    country="DE",
+                    construction_year=year_of_construction,
+                    class_building="average",
+                    building_type=building_type,
+                    refurbishment_status="advanced_refurbishment",
+                    heat_level_calculation=True,
+                    time_index=time_index,
+                )
+        else:
+            for refurbishment in ["no_refurbishment","usual_refurbishment","advanced_refurbishment","GEG_standard"]:
+                buildung_dict[refurbishment] = ThermalBuilding(
+                    name=f"building_{building_id}",
+                    floor_area=building_floor_area,
+                    number_of_occupants=number_of_occupants,
+                    number_of_household=number_of_households,
+                    country="DE",
+                    construction_year=year_of_construction,
+                    class_building="average",
+                    building_type=building_type,
+                    refurbishment_status=refurbishment,
+                    heat_level_calculation=True,
+                    time_index=time_index,
+                )
+            matching_buildings = {key: value for key, value in buildung_dict.items() if
+                                  value.level_heating_demand <= heat_grid_temperature}
+            print(building_id)
+            print(heat_grid_temperature)
+            print(matching_buildings)
+            assert matching_buildings, "Fehler: Es wurden keine Gebäudej gefunden, die den gewünschten Heizbedarf entsprechen."
 
-        min_capex_building = min(matching_buildings, key=lambda x: matching_buildings[x].capex_annuity)
-        building = matching_buildings[min_capex_building]
+            min_capex_building = min(matching_buildings, key=lambda x: matching_buildings[x].capex_annuity)
+            building = matching_buildings[min_capex_building]
 
         # PV-Ertrag pro Watt
         pv_yield_per_wp = simulate_pv_yield(
@@ -733,10 +759,9 @@ def run_main(heat_grid_temperature):
         }
         co2_reference = co2_ref
         peak_reference = final_results_ref["Electricity"]["peak_from_grid"]
-        if heat_grid_temperature<70:
-            co2_reduction_factors=[1,0.975, 0.95,0.925, 0.9,0.875, 0.85,0.825, 0.8,0.75, 0.75,0.725, 0.7,0.675, 0.65,0.625, 0.6,0.575, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.05]
-        else:
-            co2_reduction_factors =  [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+
+
+        co2_reduction_factors =  [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
          #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
         for co2_reduction_factor in co2_reduction_factors:
@@ -829,8 +854,7 @@ def run_main(heat_grid_temperature):
         pickle.dump(existing_results, f)
 
 if __name__ == "__main__":
-    heat_grid_supply_temperatures =[70,60,50,40]  # Beispiel #"GEG_standard"
-    refurbishment =["advanced_refurbishment"]
+    heat_grid_supply_temperatures =[40]  # Beispiel #"GEG_standard"
     import multiprocessing
     import os
     for heat_grid_temperature in heat_grid_supply_temperatures:

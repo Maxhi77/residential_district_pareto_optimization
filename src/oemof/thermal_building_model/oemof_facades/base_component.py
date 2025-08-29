@@ -25,7 +25,7 @@ class TimeConfiguration:
 @dataclass
 class InvestmentComponents(TimeConfiguration):
     maximum_capacity: float
-    cost_per_unit: float
+    cost_per_unit: float = 0
     cost_offset: float = 0
     co2_per_capacity: float = 0
     co2_offset: float = 0
