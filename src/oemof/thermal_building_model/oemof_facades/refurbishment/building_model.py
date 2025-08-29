@@ -352,7 +352,7 @@ class ThermalBuilding(Demand):
                                         self.floor_config.cost_offset) * area
                 capex_annuity[key.replace('a_', '')] = self.floor_config.calculate_epc(investment_cost[key.replace('a_', '')])
                 co2_cost[key.replace('a_', '')] = (insulation_thickness[key.replace('a_', '')] *
-                                        self.floor_config.co2_per_unit * area) *self.floor_config.get_depreciation_period() /self.floor_config.lifetime
+                                        self.floor_config.co2_per_unit * area)  /self.floor_config.lifetime
             for key, area in self.building_object.a_wall.items():
                 investment_cost[key.replace('a_', '')] = (insulation_thickness[key.replace('a_', '')] *
                                         self.wall_config.cost_per_unit +
@@ -360,7 +360,7 @@ class ThermalBuilding(Demand):
                 capex_annuity[key.replace('a_', '')] = self.wall_config.calculate_epc(investment_cost[key.replace('a_', '')])
 
                 co2_cost[key.replace('a_', '')] = (insulation_thickness[key.replace('a_', '')] *
-                                        self.wall_config.co2_per_unit * area) *self.wall_config.get_depreciation_period()/self.wall_config.lifetime
+                                        self.wall_config.co2_per_unit * area)/self.wall_config.lifetime
             for key, area in self.building_object.a_roof.items():
                 investment_cost[key.replace('a_', '')] = (insulation_thickness[key.replace('a_', '')] *
                                         self.roof_config.cost_per_unit +
@@ -368,7 +368,7 @@ class ThermalBuilding(Demand):
                 capex_annuity[key.replace('a_', '')] = self.roof_config.calculate_epc(investment_cost[key.replace('a_', '')])
 
                 co2_cost[key.replace('a_', '')] = (insulation_thickness[key.replace('a_', '')] *
-                                        self.roof_config.co2_per_unit * area) *self.roof_config.get_depreciation_period()/self.roof_config.lifetime
+                                        self.roof_config.co2_per_unit * area) /self.roof_config.lifetime
 
             for key, area in self.building_object.a_window.items():
                 if area==0:
@@ -382,7 +382,7 @@ class ThermalBuilding(Demand):
                     capex_annuity[key.replace('a_', '')] = self.window_config[insulation_replacement[key.replace('a_', '')]].calculate_epc(
                         investment_cost[key.replace('a_', '')])
 
-                    co2_cost[key.replace('a_', '')] = (self.window_config[insulation_replacement[key.replace('a_', '')]].co2_per_unit * area) *self.window_config[insulation_replacement[key.replace('a_', '')]].get_depreciation_period()/self.window_config[insulation_replacement[key.replace('a_', '')]].lifetime
+                    co2_cost[key.replace('a_', '')] = (self.window_config[insulation_replacement[key.replace('a_', '')]].co2_per_unit * area) /self.window_config[insulation_replacement[key.replace('a_', '')]].lifetime
             for key, area in self.building_object.a_door.items():
                 square_meter_average_door = 2
                 investment_cost[key.replace('a_', '')] = (self.door_config[insulation_replacement[key.replace('a_', '')]].cost_per_unit *
@@ -391,6 +391,6 @@ class ThermalBuilding(Demand):
                     insulation_replacement[key.replace('a_', '')]].calculate_epc(
                     investment_cost[key.replace('a_', '')])
                 co2_cost[key.replace('a_', '')] = (
-                            self.door_config[insulation_replacement[key.replace('a_', '')]].co2_per_unit * area / square_meter_average_door) *self.door_config[insulation_replacement[key.replace('a_', '')]].get_depreciation_period()/self.door_config[insulation_replacement[key.replace('a_', '')]].lifetime
+                            self.door_config[insulation_replacement[key.replace('a_', '')]].co2_per_unit * area / square_meter_average_door) /self.door_config[insulation_replacement[key.replace('a_', '')]].lifetime
 
             return investment_cost, capex_annuity, co2_cost
