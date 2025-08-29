@@ -202,10 +202,10 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
 
             # Define the service line values for flow_temperature = 70
             service_line_40 = {
-                'house_kw_5': 11.025,
-                'house_kw_50': 11.668,
-                'house_kw_100': 12.358,
-                'house_kw_100_plus': None  # Assuming you will calculate or extrapolate it
+                'house_kw_5': 11025,
+                'house_kw_50': 11668,
+                'house_kw_100': 12358,
+                'house_kw_100_plus': 14707  # Assuming you will calculate or extrapolate it
             }
 
             # Function to calculate the interpolated value for a given house_kw range
