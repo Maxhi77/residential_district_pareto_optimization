@@ -110,9 +110,6 @@ class FixedRefurbStrategy:
         else:
             return self.co2_costs_per_unit * units
 
-    def get_depreciation_period(self):
-        return self.depreciation_period
-
     def set_units(self, units: int | float):
         self.units = float(units)
 
