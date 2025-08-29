@@ -75,7 +75,7 @@ if full_and_not_linearized:
                 minimum_capacity=50,
                 cost_per_unit=28.04,
                 cost_offset=88490,
-                co2_per_capacity=0.2695 * 100,
+                co2_per_capacity=3.53 * 100,
                 lifetime=35,
                 operational_cost_relative_to_capacity=0.01
             ),
@@ -84,11 +84,11 @@ if full_and_not_linearized:
                 minimum_capacity=1000,
                 cost_per_unit=33.74,
                 cost_offset=53990,
-                co2_per_capacity=0.2695*100,
+                co2_per_capacity=2.93*100,
                 lifetime=35,
                 operational_cost_relative_to_capacity=0.01
             )}
-    if True:
+    if False:
         hot_water_tank_config = {
             1: InvestmentComponents(
                 maximum_capacity=10000,

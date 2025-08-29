@@ -86,7 +86,7 @@ if full_and_not_linearized:
                 minimum_capacity=0,
                 cost_per_unit=1355.431,#
                 cost_offset=1483,#
-                co2_per_capacity=0.2695*200,
+                co2_per_capacity=4.13*100,
                 lifetime=30,
                 operational_cost_relative_to_capacity=0.01
             ),
@@ -95,7 +95,7 @@ if full_and_not_linearized:
                 minimum_capacity=2,
                 cost_per_unit=856.272931,
                 cost_offset=2568,
-                co2_per_capacity=0.2695*100,
+                co2_per_capacity=3.53*100,
                 lifetime=30,
                 operational_cost_relative_to_capacity=0.01
             )}
