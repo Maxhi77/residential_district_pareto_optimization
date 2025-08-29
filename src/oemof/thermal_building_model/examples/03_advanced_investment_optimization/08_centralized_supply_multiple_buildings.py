@@ -10,6 +10,7 @@ from oemof.thermal_building_model.oemof_facades.technologies.renewable_energy_so
 from oemof.thermal_building_model.oemof_facades.technologies.storages import Battery, HotWaterTank
 from oemof.thermal_building_model.oemof_facades.technologies.converter import AirHeatPump, GasHeater, CHP
 from oemof.thermal_building_model.oemof_facades.technologies.heat_grid import HeatGridInvestment
+from oemof.thermal_building_model.input.economics.operation_grid_economics import natural_gas_grid_config, bio_gas_grid_config
 
 from oemof.thermal_building_model.oemof_facades.refurbishment.building_model import ThermalBuilding
 from oemof.thermal_building_model.helpers.calculate_pv_electricity_yield import simulate_pv_yield
@@ -76,16 +77,24 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                     electricity_grid_source,
                     electricity_carrier_bus]
     es.add(*electricity)
-    gas_grid_dataclass = GasGrid()
-    gas_grid_bus_from_grid = gas_grid_dataclass.get_bus_from_grid()
-    gas_grid_source = gas_grid_dataclass.create_source()
+    natural_gas_grid_config_grid = copy.deepcopy(natural_gas_grid_config)
+    natural_gas_grid_dataclass = GasGrid(operation_grid=natural_gas_grid_config_grid,
+                                 name="NaturalGas")
+    natural_gas_grid_bus_from_grid = natural_gas_grid_dataclass.get_bus_from_grid()
+    natural_gas_grid_source = natural_gas_grid_dataclass.create_source()
+
+    bio_gas_grid_config_grid = copy.deepcopy(bio_gas_grid_config)
+    bio_gas_grid_dataclass = GasGrid(operation_grid=bio_gas_grid_config_grid,
+                                 name="BioGas")
+    bio_gas_grid_bus_from_grid = bio_gas_grid_dataclass.get_bus_from_grid()
+    bio_gas_grid_source = bio_gas_grid_dataclass.create_source()
 
     gas_carrier_dataclass = GasCarrier()
     gas_bus = gas_carrier_dataclass.get_bus()
-    connect_buses(input=gas_grid_bus_from_grid, target=gas_bus)
+    connect_buses(input=natural_gas_grid_bus_from_grid, target=gas_bus)
+    connect_buses(input=bio_gas_grid_bus_from_grid, target=gas_bus)
 
-
-    gas = [gas_grid_bus_from_grid,gas_grid_source,gas_bus]
+    gas = [natural_gas_grid_bus_from_grid,bio_gas_grid_bus_from_grid,bio_gas_grid_source,natural_gas_grid_source,gas_bus]
     es.add(*gas)
 
     hydrogen_grid_dataclass = HydrogenGrid()
@@ -163,11 +172,18 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                                               name="hp_"+str(building_id)+"_"+str(key),
                                               air_temperature=data["air_temperature"],
                                               investment_component=air_heat_pump_config_building)
+
+
         air_heat_pump_bus = air_heat_pump_dataclass.get_bus()
         air_heat_pump= air_heat_pump_dataclass.create_source()
+        new_key = int((80 + heat_grid_temperature) / 2)
         air_heat_pump_converters= air_heat_pump_dataclass.create_converters(heat_pump_bus = air_heat_pump_bus,
                                                                          electricity_bus = electricity_carrier_bus,
-                                                                         heat_carrier_bus=heat_carrier_dataclass.get_bus())
+                                                                         heat_carrier_bus={
+                                                                                 new_key if k == 80 else k: v for k, v
+                                                                                 in heat_carrier_bus.items()})
+
+
 
         dataclasses[building_id]["air_heat_pump_dataclass_"+str(key)] = air_heat_pump_dataclass
         components[building_id]["air_heat_pump_converters_"+str(key)] = air_heat_pump_converters
@@ -285,11 +301,11 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         heat_50_from_converter_building = Converter(label="conv_h_from_grid_50_"+str(building_id),
                                               inputs={heat_carrier_bus[50]: solph.flows.Flow()},
                                               outputs={heat_carrier_bus_building[50]: solph.flows.Flow()},
-                                              conversion_factors={heat_carrier_bus_building[50]: 1/(building_in_cluster*heat_grid_loss)})
+                                              conversion_factors={heat_carrier_bus_building[50]: 1/(building_in_cluster)*heat_grid_loss})
         heat_heating_demand_from_converter_building = Converter(label="conv_h_from_grid_heatdemand_"+str(building_id),
                                               inputs={heat_carrier_bus[heat_grid_temperature]: solph.flows.Flow()},
                                               outputs={heat_carrier_bus_building[heat_grid_temperature]: solph.flows.Flow()},
-                                              conversion_factors={heat_carrier_bus_building[heat_grid_temperature]: 1/(building_in_cluster*heat_grid_loss)})
+                                              conversion_factors={heat_carrier_bus_building[heat_grid_temperature]: 1/(building_in_cluster)*heat_grid_loss})
 
         heat_demand_dataclass = data_classes_comp.loc["heat_demand", building_id]
         heat_demand_dataclass.value_list = data["ww_demand_"+str(building_id)]
@@ -432,15 +448,15 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
 
         model.solve(solver=solver, solve_kwargs={"tee": True},
-                                              cmdline_options={"mipgap": 0.02}
+                                              cmdline_options={"mipgap": 0.01}
         )
         meta_results = solph.processing.meta_results(model)
         results = solph.processing.results(model)
         final_results = {}
         final_results[electricity_grid_dataclass.name] = electricity_grid_dataclass.post_process(results,electricity_grid_source,electricity_grid_sink
                                                 )
-        final_results[gas_grid_dataclass.name] = gas_grid_dataclass.post_process(results,gas_grid_source,None)
-
+        final_results[natural_gas_grid_dataclass.name] = natural_gas_grid_dataclass.post_process(results,natural_gas_grid_source,None)
+        final_results[bio_gas_grid_dataclass.name] = bio_gas_grid_dataclass.post_process(results, bio_gas_grid_source, None)
         final_results[hydrogen_grid_dataclass.name] = hydrogen_grid_dataclass.post_process(results, hydrogen_grid_source, None)
         if False:
             final_results[heat_grid_dataclass.name] = heat_grid_dataclass.post_process(results,heat_grid_source,None)
@@ -507,7 +523,8 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                                     ]
         co2_operation = final_results[electricity_grid_dataclass.name]["flow_from_grid_co2"
                                 ]-final_results[electricity_grid_dataclass.name]["flow_into_grid_co2"
-                                ]+final_results[gas_grid_dataclass.name]["flow_from_grid_co2"
+                                ]+final_results[natural_gas_grid_dataclass.name]["flow_from_grid_co2"
+                                ]+final_results[bio_gas_grid_dataclass.name]["flow_from_grid_co2"
                                 ]+final_results[hydrogen_grid_dataclass.name]["flow_from_grid_co2"
                                 ]
 
@@ -595,7 +612,6 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
                                   value.level_heating_demand <= heat_grid_temperature}
             print(building_id)
             print(heat_grid_temperature)
-            print(matching_buildings)
             assert matching_buildings, "Fehler: Es wurden keine Gebäudej gefunden, die den gewünschten Heizbedarf entsprechen."
 
             min_capex_building = min(matching_buildings, key=lambda x: matching_buildings[x].capex_annuity)
@@ -854,7 +870,7 @@ def run_main(heat_grid_temperature):
         pickle.dump(existing_results, f)
 
 if __name__ == "__main__":
-    heat_grid_supply_temperatures =[40]  # Beispiel #"GEG_standard"
+    heat_grid_supply_temperatures =[40,50,60,70]  # Beispiel #"GEG_standard"
     import multiprocessing
     import os
     for heat_grid_temperature in heat_grid_supply_temperatures:
