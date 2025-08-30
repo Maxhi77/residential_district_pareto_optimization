@@ -802,7 +802,7 @@ def run_main(refurbish,building_id_in_cluster):
                         "time": time
                     }
             print("FINISHED PEAK LOOP START SAVING")
-            file_path="results_dec_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(building_id_in_cluster)+".pkl"
+            file_path="1results_dec_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(building_id_in_cluster)+".pkl"
             if os.path.exists(file_path):
                 # If the file exists, open it and load the data
                 with open(file_path, "rb") as f:
@@ -820,7 +820,7 @@ def run_main(refurbish,building_id_in_cluster):
             # Save the updated or new results back to the pickle file
             with open(file_path, "wb") as f:
                 pickle.dump(existing_results, f)
-    file_path = "results_dec_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) +"_" + str(
+    file_path = "1results_dec_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) +"_" + str(
         building_id_in_cluster) + ".pkl"
     if os.path.exists(file_path):
         # If the file exists, open it and load the data
@@ -845,7 +845,7 @@ if __name__ == "__main__":
 
     building_in_cluster=["DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"] #,["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"]
     refurbishment =["no_refurbishment","usual_refurbishment","advanced_refurbishment"]  # Beispiel #"GEG_standard"
-    refurbishment =["GEG_standard"]
+    refurbishment =["advanced_refurbishment"]
     import multiprocessing
     import os
     for refubish in refurbishment:
