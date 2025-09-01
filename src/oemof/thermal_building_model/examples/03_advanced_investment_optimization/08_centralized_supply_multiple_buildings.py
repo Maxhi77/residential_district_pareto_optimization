@@ -290,7 +290,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         print(building_id)
         dataclasses[building_id]={}
         components[building_id]={}
-        building_in_cluster =row['buildings_in_cluster']
+        buildings_in_cluster =row['buildings_in_cluster']
         building_dataclass = copy.deepcopy(data_classes_comp.loc["building", building_id])
 
         temp_heating_demand_building = building_dataclass.level_heating_demand
@@ -301,11 +301,11 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         heat_50_from_converter_building = Converter(label="conv_h_from_grid_50_"+str(building_id),
                                               inputs={heat_carrier_bus[50]: solph.flows.Flow()},
                                               outputs={heat_carrier_bus_building[50]: solph.flows.Flow()},
-                                              conversion_factors={heat_carrier_bus_building[50]: 1/(building_in_cluster)*heat_grid_loss})
+                                              conversion_factors={heat_carrier_bus_building[50]: 1/(buildings_in_cluster)*heat_grid_loss})
         heat_heating_demand_from_converter_building = Converter(label="conv_h_from_grid_heatdemand_"+str(building_id),
                                               inputs={heat_carrier_bus[heat_grid_temperature]: solph.flows.Flow()},
                                               outputs={heat_carrier_bus_building[heat_grid_temperature]: solph.flows.Flow()},
-                                              conversion_factors={heat_carrier_bus_building[heat_grid_temperature]: 1/(building_in_cluster)*heat_grid_loss})
+                                              conversion_factors={heat_carrier_bus_building[heat_grid_temperature]: 1/(buildings_in_cluster)*heat_grid_loss})
 
         heat_demand_dataclass = data_classes_comp.loc["heat_demand", building_id]
         heat_demand_dataclass.value_list = data["ww_demand_"+str(building_id)]
@@ -329,7 +329,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
             demand = demand + data["building_" + str(building_id)][cluster].sum() * count
 
         building_dataclass.tsam_total_amount = demand
-        building_dataclass.set_number_of_buildings_in_cluster(building_in_cluster)
+        building_dataclass.set_number_of_buildings_in_cluster(buildings_in_cluster)
         building_dataclass.bus=heat_carrier_bus_building[building_dataclass.level_heating_demand]
 
         building_component = building_dataclass.create_demand()
@@ -343,11 +343,11 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         grid_into_converter_building = Converter(label="conv_e_into_grid_"+str(building_id),
                                               inputs={electricity_carrier_bus_building: solph.flows.Flow()},
                                               outputs={electricity_carrier_bus: solph.flows.Flow()},
-                                              conversion_factors={electricity_carrier_bus_building: 1/building_in_cluster })
+                                              conversion_factors={electricity_carrier_bus_building: 1/buildings_in_cluster })
         grid_from_converter_building = Converter(label="conv_e_from_grid_"+str(building_id),
                                               inputs={electricity_carrier_bus: solph.flows.Flow()},
                                               outputs={electricity_carrier_bus_building: solph.flows.Flow()},
-                                              conversion_factors={electricity_carrier_bus_building: 1/ building_in_cluster})
+                                              conversion_factors={electricity_carrier_bus_building: 1/ buildings_in_cluster})
 
         electricity_demand_dataclass_building = data_classes_comp.loc["electricity_demand", building_id]
         electricity_demand_dataclass_building.value_list = data["e_demand_"+str(building_id)]
@@ -365,6 +365,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         for key, config in pv_system_config.items():
             pv_dataclass = copy.deepcopy(data_classes_comp[building_id]["pv_system"][key])
             pv_dataclass_config_building = copy.deepcopy(config)
+            pv_dataclass_config_building.set_reference_unit_quantity(reference_unit_quantity=buildings_in_cluster)
 
             pv_dataclass.investment_component=pv_dataclass_config_building
 
