@@ -98,29 +98,74 @@ def pareto_prune_building(
 
 # ---------- ε-Dominanz (optional, hält Mengen klein) ----------
 
-def epsilon_bucket_key(c: Number, p: Number, k: Number, eps_rel: Tuple[float,float,float]) -> Tuple[int,int,int]:
-    # log1p-Bucketing robust bei Skalenunterschieden; Werte müssen >=0 sein
-    ex, ey, ez = max(eps_rel[0],1e-12), max(eps_rel[1],1e-12), max(eps_rel[2],1e-12)
+def epsilon_bucket_key(
+    c: Number, p: Number, k: Number,
+    eps_rel: Tuple[float,float,float],
+    modes: Tuple[str,str,str]=('log','log','log'),
+    scales: Tuple[float,float,float]=(1.0,1.0,10000.0),
+) -> Tuple[int,int,int]:
+    """
+    modes: 'log' oder 'lin' je Achse
+    scales: Vor-Skalierung je Achse (z.B. Totex in 10k-Schritten)
+    """
+    ex, ey, ez = (max(eps_rel[0],1e-12), max(eps_rel[1],1e-12), max(eps_rel[2],1e-12))
+    def bucket(v, e, mode, s):
+        v = max(v, 0.0)/s
+        if mode == 'log':
+            return math.floor(math.log1p(v)/e)
+        else:  # 'lin'
+            return math.floor(v/e)
     return (
-        math.floor(math.log1p(max(c,0.0))/ex),
-        math.floor(math.log1p(max(p,0.0))/ey),
-        math.floor(math.log1p(max(k,0.0))/ez),
+        bucket(c, ex, modes[0], scales[0]),
+        bucket(p, ey, modes[1], scales[1]),
+        bucket(k, ez, modes[2], scales[2]),
     )
 
-def epsilon_reduce(records: List[Dict[str,Any]], eps_rel=(0.01,0.01,0.01)) -> List[Dict[str,Any]]:
+def epsilon_reduce(
+    records: List[Dict[str,Any]],
+    eps_rel: Tuple[float,float,float]=(0.01,0.01,0.01),
+    modes: Tuple[str,str,str]=('log','log','log'),
+    scales: Tuple[float,float,float]=(1.0,1.0,1.0),
+) -> List[Dict[str,Any]]:
     """
     Pro Rasterzelle behalte den 'besten' Vertreter (hier: geringste Summe).
+    Nutzt epsilon_bucket_key(..., modes, scales).
     """
     buckets: Dict[Tuple[int,int,int], Dict[str,Any]] = {}
     for r in records:
-        key = epsilon_bucket_key(r['co2'], r['peak'], r['totex'], eps_rel)
+        key = epsilon_bucket_key(r['co2'], r['peak'], r['totex'], eps_rel, modes, scales)
         best = buckets.get(key)
         if best is None or (r['co2'] + r['peak'] + r['totex']) < (best['co2'] + best['peak'] + best['totex']):
             buckets[key] = r
     return list(buckets.values())
 
-# ---------- Kombination mehrerer Gebäude ----------
 
+# ---------- Kombination mehrerer Gebäude ----------
+def crowding_distance(records, keys=('co2','peak','totex')):
+    n = len(records)
+    if n == 0:
+        return []
+    dist = [0.0]*n
+    for k in keys:
+        order = sorted(range(n), key=lambda i: records[i][k])
+        kmin = records[order[0]][k]; kmax = records[order[-1]][k]
+        rng = (kmax - kmin) if kmax > kmin else 1.0
+        dist[order[0]] = float('inf')
+        dist[order[-1]] = float('inf')
+        for r in range(1, n-1):
+            prev_v = records[order[r-1]][k]
+            next_v = records[order[r+1]][k]
+            dist[order[r]] += (next_v - prev_v) / rng
+    return dist
+
+def select_by_crowding(records, k, keys=('co2','peak','totex')):
+    if len(records) <= k:
+        return records
+    # ohne weitere Sortierung, wir haben schon Pareto-geprunet
+    dist = crowding_distance(records, keys)
+    idx = list(range(len(records)))
+    idx.sort(key=lambda i: dist[i], reverse=True)
+    return [records[i] for i in idx[:k]]
 def combine_two_fronts(
     frontA: List[Dict[str,Any]],
     frontB: List[Dict[str,Any]],
@@ -128,18 +173,17 @@ def combine_two_fronts(
     idB: str,
     tau: float = 1e-9,
     eps_rel: Optional[Tuple[float,float,float]] = None,
+    # NEU:
+    modes: Tuple[str,str,str]=('log','log','lin'),
+    scales: Tuple[float,float,float]=(1.0,1.0,10000.0),
     max_points: Optional[int] = None,
 ) -> List[Dict[str,Any]]:
-    """
-    Bildet alle Summen aus frontA × frontB, pruned danach Pareto (optional mit ε und Cap).
-    Jeder Record enthält 'selection': {building_id: chosen_record}.
-    """
-    # Kreuzprodukt erzeugen (ggf. vorher ε reduzieren, um Explosion zu vermeiden)
+    # Vorab ε-Reduktion auf A und B (falls gewünscht)
     A = frontA
     B = frontB
     if eps_rel is not None:
-        A = epsilon_reduce(A, eps_rel)
-        B = epsilon_reduce(B, eps_rel)
+        A = epsilon_reduce(A, eps_rel, modes, scales)
+        B = epsilon_reduce(B, eps_rel, modes, scales)
 
     merged: List[Dict[str,Any]] = []
     for a in A:
@@ -155,27 +199,18 @@ def combine_two_fronts(
             }
             merged.append(rec)
 
-    # Optional nochmal ε (stärker) vorm Pareto, um die Menge klein zu halten
+    # Nach dem Merge ggf. erneut ε-Reduktion
     if eps_rel is not None:
-        merged = epsilon_reduce(merged, eps_rel)
+        merged = epsilon_reduce(merged, eps_rel, modes, scales)
 
-    # Pareto-Pruning
+    # Pareto
     pts = [(m['co2'], m['peak'], m['totex']) for m in merged]
     keep = pareto_prune_points(pts, tau=tau)
     pruned = [merged[i] for i in keep]
 
-    # Optional: Obergrenze -> behalte die „gleichmäßig guten“ (nach einfacher Score oder Crowding)
+    # Cap via Crowding (deine neue Funktion)
     if max_points is not None and len(pruned) > max_points:
-        # simple Score (gewichtet gleich): normalisieren und sortieren
-        cmax = max(r['co2'] for r in pruned); cmin = min(r['co2'] for r in pruned)
-        pmax = max(r['peak'] for r in pruned); pmin = min(r['peak'] for r in pruned)
-        kmax = max(r['totex'] for r in pruned); kmin = min(r['totex'] for r in pruned)
-        def nz(x): return (x[0]-x[1]) if abs(x[0]-x[1])>1e-12 else 1.0
-        dc, dp, dk = nz((cmax,cmin)), nz((pmax,pmin)), nz((kmax,kmin))
-        def score(r):
-            return ((r['co2']-cmin)/dc + (r['peak']-pmin)/dp + (r['totex']-kmin)/dk) / 3.0
-        pruned.sort(key=score)
-        pruned = pruned[:max_points]
+        pruned = select_by_crowding(pruned, max_points, keys=('co2','peak','totex'))
 
     return pruned
 
@@ -183,32 +218,28 @@ def combine_all_buildings(
     building_dict: Dict[str, Dict[str, Dict[Any, Dict[str,Any]]]],
     refurbishment_strategies: Iterable[str],
     tau: float = 1e-9,
-    eps_rel_each: Optional[Tuple[float,float,float]] = None,  # ε beim Gebäude-Pruning
-    eps_rel_merge: Optional[Tuple[float,float,float]] = (0.01,0.01,0.01),  # ε beim Mergen
-    max_points_after_each_merge: Optional[int] = 5000,        # Cap nach jedem Merge
+    eps_rel_each: Optional[Tuple[float,float,float]] = None,
+    eps_rel_merge: Optional[Tuple[float,float,float]] = (0.01,0.01,0.01),
+    modes_each: Tuple[str,str,str]=('log','log','lin'),
+    modes_merge: Tuple[str,str,str]=('log','log','lin'),
+    scales_each: Tuple[float,float,float]=(1.0,1.0,10000.0),
+    scales_merge: Tuple[float,float,float]=(1.0,1.0,10000.0),
+    max_points_after_each_merge: Optional[int] = 5000,
 ) -> Tuple[Dict[str,List[Dict[str,Any]]], List[Dict[str,Any]]]:
-    """
-    1) Pareto pro Gebäude
-    2) Iterativ kombinieren (Gebäude 1+2 -> 12, dann +3 -> 123, …)
-    Rückgabe:
-      - per_building_fronts: Pareto-Listen je Gebäude
-      - combined_front: Pareto-Front über alle Gebäude
-    """
-    # 1) Per-Gebäude Pareto
+    # 1) Per-Gebäude Pareto -> ε-Reduktion mit anisotropen Einstellungen
     per_building_fronts: Dict[str,List[Dict[str,Any]]] = {}
     for bid, bdata in building_dict.items():
         front = pareto_prune_building(bdata, refurbishment_strategies, tau=tau)
         if eps_rel_each is not None and len(front) > 0:
-            front = epsilon_reduce(front, eps_rel_each)
-            # nochmal streng prunen
+            front = epsilon_reduce(front, eps_rel_each, modes_each, scales_each)
+            # streng prunen
             pts = [(r['co2'], r['peak'], r['totex']) for r in front]
             keep = pareto_prune_points(pts, tau=tau)
             front = [front[i] for i in keep]
-        # packe die Auswahl-Hülle rein (ein Gebäude → trivial)
         front = [{**r, 'selection': {bid: r}} for r in front]
         per_building_fronts[bid] = front
 
-    # 2) Iterativ mergen
+    # 2) Mergen mit denselben (oder eigenen) anisotropen Einstellungen
     bids = list(per_building_fronts.keys())
     if not bids:
         return per_building_fronts, []
@@ -219,13 +250,16 @@ def combine_all_buildings(
             current, nxt, bids[0] if i==1 else "merged", bids[i],
             tau=tau,
             eps_rel=eps_rel_merge,
+            modes=modes_merge,
+            scales=scales_merge,
             max_points=max_points_after_each_merge,
         )
 
-    # finaler, strenger Pareto-Schritt (ohne ε, damit wirklich exakt)
+    # 3) finaler strenger Pareto-Schritt
     if current:
         pts = [(r['co2'], r['peak'], r['totex']) for r in current]
         keep = pareto_prune_points(pts, tau=tau)
         current = [current[i] for i in keep]
 
     return per_building_fronts, current
+

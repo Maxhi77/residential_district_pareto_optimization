@@ -168,7 +168,7 @@ else:
         eps_rel_merge=(0.01, 0.01, 0.003),
         modes_merge=('log','log','log'),
         scales_merge=(1.0, 1.0, 1.0),
-        max_points_after_each_merge=1000
+        max_points_after_each_merge=7000
     )
     with open(f"dec_processed_08_26_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
         pickle.dump([building_dict,per_bldg,combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
