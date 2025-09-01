@@ -20,6 +20,49 @@ def remove_series(obj):
         return [remove_series(v) for v in obj if not isinstance(v, pd.Series)]
     else:
         return obj
+def scale_cleaned_data(cleaned_data):
+    """
+    Iterates over cleaned_data and scales co2, totex, and peak
+    if buildings_in_cluster != buildings_in_cluster_used.
+
+    Args:
+        cleaned_data (dict): nested results dictionary
+
+    Returns:
+        dict: cleaned_data with scaled values
+    """
+    for key, entry in cleaned_data.items():
+        if not isinstance(entry, dict):
+            continue
+
+        results = entry.get("results", {})
+        # iterate over all "buildings" inside results
+        for building, b_data in results.items():
+            if not isinstance(b_data, dict):
+                continue
+            if "buildings_in_cluster" in b_data and "buildings_in_cluster_used" in b_data:
+                n_cluster = b_data["buildings_in_cluster"]
+                n_used = b_data["buildings_in_cluster_used"]
+
+                if n_cluster != n_used and n_used > 0:
+                    scale_value = n_cluster / n_used
+
+                    # scale co2, totex, peak at the *outer level*
+                    if "co2" in entry:
+                        entry["co2"] = entry["co2"] * scale_value
+                    if "totex" in entry:
+                        entry["totex"] = entry["totex"] * scale_value
+                    if "peak" in entry:
+                        entry["peak"] = entry["peak"] * scale_value
+
+                    # optional: auch die oemof Unterwerte mitskalieren?
+                    if "co2_oemof_model" in results:
+                        results["co2_oemof_model"] = results["co2_oemof_model"] * scale_value
+                    if "totex_oemof_model" in results:
+                        results["totex_oemof_model"] = results["totex_oemof_model"] * scale_value
+                    if "totex" in results:
+                        results["totex"] = results["totex"] * scale_value
+    return cleaned_data
 
 
 import pickle
@@ -41,12 +84,14 @@ def load_data(refurbishment_strategies, buildings_in_ueu,base_dir=None):
     for building in buildings_in_ueu:
         building_dict[building] = {}
         for refurbishment in refurbishment_strategies:
-            file_name = f"1results_dec_processed_bds_in_{ueu}_{refurbishment}_no_EV_{building}.pkl"
+            file_name = f"results_dec_processed_bds_in_{ueu}_{refurbishment}_no_EV_{building}.pkl"
             full_path = base_dir / file_name
             try:
                 with open(full_path, "rb") as f:
                     data = pickle.load(f)
-                    cleaned_data = remove_series(data)  # nehme an, deine Funktion existiert
+
+                    cleaned_data = remove_series(data)
+                    scaled_up_data = scale_cleaned_data(data)# nehme an, deine Funktion existiert
                     building_dict[building][refurbishment] = cleaned_data
             except FileNotFoundError:
                 print(f"Datei fehlt: {full_path}")
