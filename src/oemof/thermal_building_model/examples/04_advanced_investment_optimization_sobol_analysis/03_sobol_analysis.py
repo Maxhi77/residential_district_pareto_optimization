@@ -279,13 +279,14 @@ def run_multiprocessing(gap_starter,
                         resident_ranges):
     # Beispiel-Durchlauf
     results_loop_to_save = {}
-    counter = 0
+    counter = 6000
     # Beispiel-Durchlauf
     for params in param_values:
-        if (gap_starter+1) * 9000<counter:
-            counter += 1
-            continue
-        if counter < gap_starter*9000:
+        if False:
+            if 5000+(gap_starter+1) * 1000<counter:
+                counter += 1
+                continue
+        if counter < 6000+gap_starter*1000:
             counter += 1
             continue
         heating_system=int(params[idx_heating_system])
@@ -393,7 +394,7 @@ def run_multiprocessing(gap_starter,
             results_loop_to_save = {}
         counter += 1
 if __name__ == "__main__":
-    gap_values = range(10)  # Gap von 0 bis 9
+    gap_values = range(4)  # Gap von 0 bis 9
     processes = []
     for gap_starter in gap_values:
         p = multiprocessing.Process(target=run_multiprocessing, args=(gap_starter,
