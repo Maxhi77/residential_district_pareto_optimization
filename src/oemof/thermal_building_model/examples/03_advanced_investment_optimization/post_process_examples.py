@@ -84,7 +84,7 @@ def load_data(refurbishment_strategies, buildings_in_ueu,base_dir=None):
     for building in buildings_in_ueu:
         building_dict[building] = {}
         for refurbishment in refurbishment_strategies:
-            file_name = f"rresults_dec_processed_bds_in_{ueu}_{refurbishment}_no_EV_{building}.pkl"
+            file_name = f"1results_dec_processed_bds_in_{ueu}_{refurbishment}_no_EV_{building}.pkl"
             full_path = base_dir / file_name
             try:
                 with open(full_path, "rb") as f:
