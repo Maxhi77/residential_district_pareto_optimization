@@ -364,16 +364,25 @@ def run_multiprocessing(gap_starter,
         demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
 
         final_results, co2  = main(target_residents,tabula_building_code, building_size,demand_path,heating_system,refurbishment_status_tabula)
-        totex = final_results["totex"]
-        peak = (final_results["Electricity"]["peak_into_grid"],
-        final_results["Electricity"]["peak_from_grid"])
-        results_loop_to_save[(counter,building_size, household_type,target_residents,year_of_construction)] = {
-                "results": final_results,
+        if final_results["totex"] is None:
+            results_loop_to_save[(counter, building_size, household_type, target_residents, year_of_construction)] = {
+                "results": None,
 
-                "co2": co2,
-                "totex": totex,
-                "peak": peak
-        }
+                "co2": None,
+                "totex": None,
+                "peak": None
+            }
+        else:
+            totex = final_results["totex"]
+            peak = (final_results["Electricity"]["peak_into_grid"],
+            final_results["Electricity"]["peak_from_grid"])
+            results_loop_to_save[(counter,building_size, household_type,target_residents,year_of_construction)] = {
+                    "results": final_results,
+
+                    "co2": co2,
+                    "totex": totex,
+                    "peak": peak
+            }
         if False:
             results_loop_to_save[(counter,building_size, household_type,target_residents,year_of_construction)] = {
                         "results": None,
