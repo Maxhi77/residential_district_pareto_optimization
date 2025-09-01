@@ -91,8 +91,8 @@ def load_data(refurbishment_strategies, buildings_in_ueu,base_dir=None):
                     data = pickle.load(f)
 
                     cleaned_data = remove_series(data)
-                    scaled_up_data = scale_cleaned_data(data)# nehme an, deine Funktion existiert
-                    building_dict[building][refurbishment] = cleaned_data
+                    scaled_up_data = scale_cleaned_data(cleaned_data)# nehme an, deine Funktion existiert
+                    building_dict[building][refurbishment] = scaled_up_data
             except FileNotFoundError:
                 print(f"Datei fehlt: {full_path}")
                 building_dict[building][refurbishment] = None
