@@ -41,7 +41,7 @@ def load_data(refurbishment_strategies, buildings_in_ueu,base_dir=None):
     for building in buildings_in_ueu:
         building_dict[building] = {}
         for refurbishment in refurbishment_strategies:
-            file_name = f"results_dec_processed_bds_in_{ueu}_{refurbishment}_no_EV_{building}.pkl"
+            file_name = f"1results_dec_processed_bds_in_{ueu}_{refurbishment}_no_EV_{building}.pkl"
             full_path = base_dir / file_name
             try:
                 with open(full_path, "rb") as f:
@@ -84,28 +84,97 @@ def load_heat_grid_data(numbers, ueu="DENI03403000SEC5658", base_dir=None):
 
     return heat_grid_dict
 
+
+def process_building_dict(building_dict_heat_grid):
+    """
+    Process building data from `building_dict_heat_grid` and store the results in the desired format.
+
+    Parameters:
+    building_dict_heat_grid (dict): Input dictionary containing building data.
+
+    Returns:
+    result_list (list): Processed list of building results in the required format.
+    """
+    result_list = []
+
+    # Iteriere über jedes Gebäude (Temperatur 50, 60, etc.)
+    for temperature in building_dict_heat_grid:
+        for key in building_dict_heat_grid[temperature]:
+            data = building_dict_heat_grid[temperature][key]
+
+            # Wenn co2 oder peak None sind, überspringe das aktuelle Gebäude
+            if data['co2'] is None or data['peak'] is None:
+                continue
+
+            # Erstelle die Auswahlstruktur für das Ergebnis
+            selection = {
+                'key': key,
+                'heat_grid_temperature': temperature
+            }
+
+            # Extrahiere das Resultat (mit entferntem Series)
+            results = data.get('results', {})
+
+            # Wenn 'results' ein dict ist, gehe mit .items() durch, ansonsten behandle es als Wert
+            # Hier werden die Ergebnisse in den "selection"-Schlüssel eingefügt
+            results_clean = {
+                key: {
+                    kk: (float(v) if isinstance(v, (np.float64, np.float32)) else v)
+                    for kk, v in vv.items() if isinstance(vv, dict)
+                } if isinstance(vv, dict) else float(vv)
+                for key, vv in results.items()
+            }
+
+            # Füge das Ergebnis zur Liste hinzu
+            result_list.append({
+                'co2': float(data['co2']),
+                'peak': float(data['peak']),
+                'totex': float(data['totex']),
+                'selection': {**selection, **results_clean}  # Die "results" werden unter "selection" eingefügt
+            })
+
+    return result_list
+centralized=True
 buildings_in_ueu = ["DENILD1100004s6k","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004qZL","DENILD1100004rSr"]
 refurbishment_strategies = ["no_refurbishment", "usual_refurbishment", "advanced_refurbishment", "GEG_standard"]
+heat_grid_supply_temperatures = [50,60,70,80]
 
-building_dict = load_data(refurbishment_strategies,buildings_in_ueu)
-print("finished loadding")
-with open(f"processed_08_26_results_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
-    pickle.dump(building_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+if centralized:
+    building_dict = load_heat_grid_data(heat_grid_supply_temperatures)
+    print("finished loadding")
+    with open(f"dec_processed_08_26_results_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
+        pickle.dump(building_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+    combined_front = process_building_dict(building_dict)
+    with open(f"cen_processed_08_26_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:  # "wb" = write binary
+        pickle.dump([building_dict, building_dict, combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
+else:
+    building_dict = load_data(refurbishment_strategies,buildings_in_ueu,base_dir=r"C:\Users\hill_mx\Desktop\Paper UEC UEU\Ergebnisse\2025_08_26")
+    print("finished loadding")
+    with open(f"cen_processed_08_26_results_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
+        pickle.dump(building_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+    variable_to_iterate = refurbishment_strategies
+    pareto_front_per_building = {}
 
-pareto_front_per_building = {}
+
+    per_bldg, combined_front = combine_all_buildings(
+        building_dict,
+        refurbishment_strategies=refurbishment_strategies,
+        tau=1e-9,
+        # pro Gebäude feiner in Totex
+        eps_rel_each=(0.003, 0.003, 0.001), # co2, peak, totex
+        modes_each=('log','log','log'),
+        scales_each=(1.0, 1.0, 1.0),
+        # beim Mergen etwas gröber, Totex weiterhin feiner
+        eps_rel_merge=(0.01, 0.01, 0.003),
+        modes_merge=('log','log','log'),
+        scales_merge=(1.0, 1.0, 1.0),
+        max_points_after_each_merge=1000
+    )
+    with open(f"dec_processed_08_26_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
+        pickle.dump([building_dict,per_bldg,combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-# 1) Pareto je Gebäude & 2) kombinierte Front (mit moderatem ε beim Mergen + Cap)
-per_bldg, combined_front = combine_all_buildings(
-    building_dict,
-    refurbishment_strategies=refurbishment_strategies,
-    tau=1e-9,  # numerisch streng
-    eps_rel_each=(0.0015, 0.0015, 0.0015),      # etwas feiner je Gebäude
-    eps_rel_merge=(0.004, 0.004, 0.004),        # enger beim Mergen
-    max_points_after_each_merge=13000           # mehr Punkte zulassen
-)
-with open(f"processed_08_26_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
-    pickle.dump([building_dict,per_bldg,combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
+
 
 def plot_combined_front(combined_front):
     co2   = [r['co2'] for r in combined_front]
