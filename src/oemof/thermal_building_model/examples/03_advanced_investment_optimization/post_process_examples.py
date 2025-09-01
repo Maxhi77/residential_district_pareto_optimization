@@ -134,7 +134,7 @@ def process_building_dict(building_dict_heat_grid):
             })
 
     return result_list
-centralized=True
+centralized=False
 buildings_in_ueu = ["DENILD1100004s6k","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004qZL","DENILD1100004rSr"]
 refurbishment_strategies = ["no_refurbishment", "usual_refurbishment", "advanced_refurbishment", "GEG_standard"]
 heat_grid_supply_temperatures = [50,60,70,80]
@@ -148,7 +148,7 @@ if centralized:
     with open(f"cen_processed_08_26_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:  # "wb" = write binary
         pickle.dump([building_dict, building_dict, combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
 else:
-    building_dict = load_data(refurbishment_strategies,buildings_in_ueu,base_dir=r"C:\Users\hill_mx\Desktop\Paper UEC UEU\Ergebnisse\2025_08_26")
+    building_dict = load_data(refurbishment_strategies,buildings_in_ueu)
     print("finished loadding")
     with open(f"cen_processed_08_26_results_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
         pickle.dump(building_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
