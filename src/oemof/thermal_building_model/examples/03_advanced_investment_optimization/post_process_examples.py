@@ -31,8 +31,21 @@ def scale_cleaned_data(cleaned_data):
     Returns:
         dict: cleaned_data with scaled values
     """
+    keys_to_delete = []
+
     for key, entry in cleaned_data.items():
+        # Skip non-dicts
         if not isinstance(entry, dict):
+            continue
+
+        # Mark entries with None results for deletion
+        if entry.get("results") is None:
+            keys_to_delete.append(key)
+            continue
+
+        # Also mark if co2, totex, and peak are None
+        if entry.get("co2") is None and entry.get("totex") is None and entry.get("peak") is None:
+            keys_to_delete.append(key)
             continue
 
         results = entry.get("results", {})
@@ -62,6 +75,9 @@ def scale_cleaned_data(cleaned_data):
                         results["totex_oemof_model"] = results["totex_oemof_model"] * scale_value
                     if "totex" in results:
                         results["totex"] = results["totex"] * scale_value
+    # Remove all None-entries
+    for k in keys_to_delete:
+        cleaned_data.pop(k, None)
     return cleaned_data
 
 
