@@ -205,7 +205,7 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
                 'house_kw_5': 11025,
                 'house_kw_50': 11668,
                 'house_kw_100': 12358,
-                'house_kw_100_plus': 14707  # Assuming you will calculate or extrapolate it
+                'house_kw_100_plus': 17221  # Assuming you will calculate or extrapolate it
             }
 
             # Function to calculate the interpolated value for a given house_kw range
