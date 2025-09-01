@@ -35,9 +35,41 @@ def plot_sobol_indices(sobol_result, title, param_names):
 # Initialize an empty dictionary to hold the data
 
 
-# Define the directory where the .pkl files are stored
-directory = r'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\a04_advanced_investment_optimization_sobol_analysis'  # Adjust the directory path if necessary
+import os
+import pickle
 
+# Aktuelles Verzeichnis nehmen
+directory = os.getcwd()
+print("Arbeitsverzeichnis:", directory)
+
+data = None
+
+for x in range(0, 14):
+    for y in range(0, 57001, 1000):
+        try:
+            file_path = os.path.join(directory, f"results_sobol_{x}_{y}.pkl")
+            with open(file_path, 'rb') as f:
+                if data is None:
+                    data = pickle.load(f)
+                else:
+                    data.update(pickle.load(f))
+        except FileNotFoundError:
+            continue
+
+# Letzte Datei laden
+file_path = os.path.join(directory, f"results_sobol_14_57343.pkl")
+with open(file_path, 'rb') as f:
+    data.update(pickle.load(f))
+
+# In data_dict packen
+data_dict = data
+
+# Ergebnis abspeichern
+output_file = os.path.join(directory, "merged_results.pkl")
+with open(output_file, "wb") as f:
+    pickle.dump(data_dict, f)
+
+print(f"Gespeichert unter: {output_file}")
 # Loop over the file numbers (2400, 2550, ..., 6143)
 if False:
     data_structure = {}
@@ -70,27 +102,33 @@ if False:
     with open("results_sobol_final", "wb") as f:
         pickle.dump(data_structure, f)
 
-with open("results_sobol_final", "rb") as f:
-    data_dict = pickle.load(f)
+if True:
 
-    print("results saved")
+    # 1. Problem definieren
     problem = {
-        'num_vars': 4,
-        'names': ['floor area', 'construction period', 'number of residents',
-                  'household type'],
+        'num_vars': 6,
+        'names': ['net_floor_area', 'tabula_year_class', 'number_of_residents',
+                  'household_type', "refurbishment_status", "heating_system"],
         'bounds': [
-            [80, 360],      # Wohnfläche in m²
-            [1, 11],        # tabula_year_class (1-11 Klassen)
-            [1, 3],         # Bewohner
-            [0, 2]  # Haushaltstyp: 0 = Senioren, 1 = Familie, 2 = Erwachsene
+            [80, 360],  # Wohnfläche in m²
+            [1, 11],  # tabula_year_class (1-11 Klassen)
+            [0, 1],  # Bewohner
+            [0, 2],  # household type
+            [0, 2],  # Sanierungsstand 0 = nicht, 1 = normal, 2 = advanced
+            [0, 1]  # Heizung: 0 = HP, 1 = Burning
         ]
     }
     # Sampling (kleine Anzahl für Test)
-    param_values = saltelli.sample(problem, int(128*8,), calc_second_order=False)
-    idx_size = problem['names'].index('floor area')
-    idx_year_class = problem['names'].index('construction period')
-    idx_residents = problem['names'].index('number of residents')
-    idx_household_type = problem['names'].index('household type')
+    calc_second_order=True
+    param_values = saltelli.sample(problem, int(128 *32), calc_second_order=calc_second_order)
+    # laut chat gpt bei 6 params sollte man n=	2048+ für gute Ergebnisse, das wären 16.000 Durchläufe
+    # Spaltenindex merken
+    idx_size = problem['names'].index('net_floor_area')
+    idx_year_class = problem['names'].index('tabula_year_class')
+    idx_residents = problem['names'].index('number_of_residents')
+    idx_household_type = problem['names'].index('household_type')
+    idx_refurbishment_status = problem['names'].index('refurbishment_status')
+    idx_heating_system = problem['names'].index('heating_system')
 
     peak_list = []
     co2_list = []
@@ -98,19 +136,26 @@ with open("results_sobol_final", "rb") as f:
 
     for key in data_dict:
         entry = data_dict[key]
-        if "peak" in entry and "co2" in entry and "totex" in entry:
-            peak_list.append(entry["peak"]/param_values[key][0])
-            co2_list.append(entry["co2"]/param_values[key][0])
-            totex_list.append(entry["totex"]/param_values[key][0])
+        if "peak_from_grid" in entry and "co2" in entry and "totex" in entry:
+            if False:
+                peak_list.append(entry["peak_from_grid"]/param_values[key[0]][0])
+                co2_list.append(entry["co2"]/param_values[key[0]][0])
+                totex_list.append(entry["totex"]/param_values[key[0]][0])
+            if True:
+                peak_list.append(entry["peak_from_grid"])
+                co2_list.append(entry["co2"])
+                totex_list.append(entry["totex"])
+        else:
+            print(f"Key {key} fehlt in param_values oder in einem der Einträge 'peak_from_grid', 'co2', 'totex'")
 
     # Convert lists to numpy arrays
     co2_array = np.array(co2_list)
     totex_array = np.array(totex_list)
     peak_array = np.array(peak_list)
 
-    sobol_co2 = sobol.analyze(problem, co2_array, calc_second_order=False)
-    sobol_totex = sobol.analyze(problem, totex_array, calc_second_order=False)
-    sobol_peak = sobol.analyze(problem, peak_array, calc_second_order=False)
+    sobol_co2 = sobol.analyze(problem, co2_array, calc_second_order=calc_second_order)
+    sobol_totex = sobol.analyze(problem, totex_array, calc_second_order=calc_second_order)
+    sobol_peak = sobol.analyze(problem, peak_array, calc_second_order=calc_second_order)
 
     def plot_sobol_indices(sobol_result, title, problem_names):
         # Extract the first-order and total indices
@@ -163,7 +208,7 @@ with open("results_sobol_final", "rb") as f:
                         'PEAK (First) \n/ floor area', 'PEAK (Total) \n/ floor area']
 
         # Create a new figure for the plot
-        fig, ax = plt.subplots(figsize=(12, 8))
+        fig, ax = plt.subplots(figsize=(16, 8))
 
         # Plotting the heatmap with color bar limits from 0 to 1
         sns.heatmap(combined_matrix, annot=True, cmap='coolwarm', xticklabels=problem_names, yticklabels=output_names,
@@ -185,7 +230,7 @@ with open("results_sobol_final", "rb") as f:
         total_order_conf = sobol_result['ST_conf']
 
         # Create a figure with 2 subplots (1 row, 2 columns)
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))  # Set the figure size and subplots
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 6))  # Set the figure size and subplots
 
         # Plot first-order Sobol indices with error bars in the first subplot
         ax1.bar(problem_names, first_order, yerr=first_order_conf, capsize=5, label='First-Order')
@@ -214,16 +259,16 @@ with open("results_sobol_final", "rb") as f:
 
     def save_plot_as_pdf(fig, plot_name, path_to_save):
         # Speichern des Plots im angegebenen Verzeichnis als PDF
-        plot_path = os.path.join(path_to_save, plot_name + "_relative.pdf")
+        plot_path = os.path.join(path_to_save, plot_name + "_non_relative.pdf")
         fig.savefig(plot_path, format='pdf', dpi=300)  # Speichern des Plots mit 300 DPI
         plt.close(fig)  # Schließt den Plot, um den nächsten zu erzeugen
 
 
-    path_to_save = r"C:\Users\hill_mx\Desktop\Präsentationen Berkeley\Ergebnisse Sobol"
+    path_to_save = r"C:\Users\hill_mx\Desktop\Paper UEC UEU\Ergebnisse\Sobol"
 
     # Plot Sobol indices for each output (CO2, TOTEX, PEAK)
     fig_co2 = plot_sobol_indices_with_error_bars(sobol_co2, 'Sobol Sensitivity for CO₂', problem['names'])
-    save_plot_as_pdf(fig_co2, "Sobol_Sensitivity_CO2", path_to_save)
+    save_plot_as_pdf(fig_co2, "Sobol_Sensitivity_CO2_non", path_to_save)
 
     fig_totex = plot_sobol_indices_with_error_bars(sobol_totex, 'Sobol Sensitivity for TOTEX', problem['names'])
     save_plot_as_pdf(fig_totex, "Sobol_Sensitivity_TOTEX", path_to_save)
