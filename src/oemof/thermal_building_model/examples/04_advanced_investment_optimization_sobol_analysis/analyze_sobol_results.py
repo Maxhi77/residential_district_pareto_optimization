@@ -34,7 +34,14 @@ def plot_sobol_indices(sobol_result, title, param_names):
 
 # Initialize an empty dictionary to hold the data
 
-
+def drop_results(data):
+    """
+    Remove the 'results' key from all entries in data, if present.
+    """
+    for key in list(data.keys()):
+        if isinstance(data[key], dict) and "results" in data[key]:
+            del data[key]["results"]
+    return data
 import os
 import pickle
 
@@ -50,9 +57,10 @@ for x in range(0, 14):
             file_path = os.path.join(directory, f"results_sobol_{x}_{y}.pkl")
             with open(file_path, 'rb') as f:
                 if data is None:
-                    data = pickle.load(f)
+
+                    data = drop_results(pickle.load(f))
                 else:
-                    data.update(pickle.load(f))
+                    data.update(drop_results(pickle.load(f)))
         except FileNotFoundError:
             continue
 
