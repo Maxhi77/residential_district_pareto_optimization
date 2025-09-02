@@ -5,7 +5,6 @@ from oemof.thermal_building_model.oemof_facades.base_component import  Investmen
 from dataclasses import dataclass, field
 from oemof.thermal_building_model.oemof_facades.base_component import GridComponents
 from oemof.thermal_building_model.input.economics.operation_grid_economics import natural_gas_grid_config,electricity_grid_config,heat_grid_config, hydrogen_grid_config
-from oemof.thermal_building_model.input.economics.investment_components import heat_grid_config as heat_grid_config_inv
 '''
 CO2 in kg/kWh
 prices in: Euro/kWh
@@ -191,11 +190,3 @@ class ElectricityGrid(Grid):
     primary_energy_factor: float = 3.8
     operation_grid: GridComponents = field(default_factory=lambda: copy.deepcopy(electricity_grid_config))
 
-@dataclass
-class HeatGrid(Grid):
-    name: str = "HeatGrid"
-    max_supply_temperature: float = 135.0
-    min_supply_temperature: float = 80.0
-    primary_energy_factor: float = 6.1
-    operation_grid: GridComponents = field(default_factory=lambda: copy.deepcopy(heat_grid_config))
-    investment_component: InvestmentComponents = field(default_factory=lambda: copy.deepcopy(heat_grid_config_inv))
