@@ -1,5 +1,5 @@
 
-from oemof.thermal_building_model.oemof_facades.infrastructure.grids import ElectricityGrid, HeatGrid, GasGrid
+from oemof.thermal_building_model.oemof_facades.infrastructure.grids import ElectricityGrid, GasGrid
 from oemof.thermal_building_model.oemof_facades.infrastructure.carriers import ElectricityCarrier, HeatCarrier, \
     GasCarrier
 from oemof.thermal_building_model.oemof_facades.helper_functions import connect_buses, flatten_components_list
@@ -279,14 +279,11 @@ def run_multiprocessing(gap_starter,
                         resident_ranges):
     # Beispiel-Durchlauf
     results_loop_to_save = {}
-    counter = 6000
+    counter = 5000
+
     # Beispiel-Durchlauf
     for params in param_values:
-        if False:
-            if 5000+(gap_starter+1) * 1000<counter:
-                counter += 1
-                continue
-        if counter < 6000+gap_starter*1000:
+        if counter > 6000:
             counter += 1
             continue
         heating_system=int(params[idx_heating_system])
@@ -391,7 +388,7 @@ def run_multiprocessing(gap_starter,
                         "peak": None
                     }
         if counter % 1000== 0 or counter %( len(param_values)-1)== 0:
-            file_path="results_sobol_"+str(gap_starter)+"_"+str(counter)+".pkl"
+            file_path="rresults_sobol_"+str(gap_starter)+"_"+str(counter)+".pkl"
             # If the file doesn't exist, create it and save the results
             existing_results = results_loop_to_save
             print(f"New results created for {file_path}")
@@ -403,21 +400,32 @@ def run_multiprocessing(gap_starter,
             results_loop_to_save = {}
         counter += 1
 if __name__ == "__main__":
-    gap_values = range(4)  # Gap von 0 bis 9
+    gap_values = range(0)  # Gap von 0 bis 9
     processes = []
-    for gap_starter in gap_values:
-        p = multiprocessing.Process(target=run_multiprocessing, args=(gap_starter,
-                        idx_size,
-                        idx_year_class,
-                        idx_residents,
-                        idx_household_type,
-                        idx_refurbishment_status,
-                        idx_heating_system,
-                        household_dicts,
-                        resident_ranges))
-        processes.append(p)
-        p.start()
+    run_multiprocessing(0,
+                            idx_size,
+                            idx_year_class,
+                            idx_residents,
+                            idx_household_type,
+                            idx_refurbishment_status,
+                            idx_heating_system,
+                            household_dicts,
+                            resident_ranges)
+    if False:
 
-    for p in processes:
-        p.join()
+        for gap_starter in gap_values:
+            p = multiprocessing.Process(target=run_multiprocessing, args=(gap_starter,
+                            idx_size,
+                            idx_year_class,
+                            idx_residents,
+                            idx_household_type,
+                            idx_refurbishment_status,
+                            idx_heating_system,
+                            household_dicts,
+                            resident_ranges))
+            processes.append(p)
+            p.start()
+
+        for p in processes:
+            p.join()
 
