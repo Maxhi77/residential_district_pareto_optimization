@@ -175,61 +175,58 @@ def main(target_residents,building_id, floor_area,demand_path,heating_system,ref
     # Show the graph
     # Show the graph
 
-    try:
-        print("__________")
-        print("start for:")
+    print("__________")
+    print("start for:")
 
 
-        model.solve(solver=solver, solve_kwargs={"tee": True})
-        meta_results = solph.processing.meta_results(model)
-        results = solph.processing.results(model)
-        final_results = {}
-        final_results[hot_water_tank_dataclass.name] = hot_water_tank_dataclass.post_process(results,hot_water_tank)
+    model.solve(solver=solver, solve_kwargs={"tee": True})
+    meta_results = solph.processing.meta_results(model)
+    results = solph.processing.results(model)
+    final_results = {}
+    final_results[hot_water_tank_dataclass.name] = hot_water_tank_dataclass.post_process(results,hot_water_tank)
 
-        final_results[battery_dataclass.name] = battery_dataclass.post_process(results,battery)
+    final_results[battery_dataclass.name] = battery_dataclass.post_process(results,battery)
 
-        final_results[electricity_grid_dataclass.name] = electricity_grid_dataclass.post_process(results,electricity_grid_source,electricity_grid_sink
-                                                )
-        final_results[gas_grid_dataclass.name] = gas_grid_dataclass.post_process(results,gas_grid_source,None
-                                                )
-        #final_results[heat_grid_dataclass.name] = heat_grid_dataclass.post_process(results,heat_grid_source,None)
-        if heating_system==1:
-            final_results[gas_heater_dataclass.name] = gas_heater_dataclass.post_process(results,gas_heater,gas_heater_converters,heat_carrier_bus,gas_bus)
-        if heating_system==0:
-            final_results[air_heat_pump_dataclass.name] = air_heat_pump_dataclass.post_process(results,air_heat_pump,air_heat_pump_converters,heat_carrier_bus,electricity_carrier_bus)
+    final_results[electricity_grid_dataclass.name] = electricity_grid_dataclass.post_process(results,electricity_grid_source,electricity_grid_sink
+                                            )
+    final_results[gas_grid_dataclass.name] = gas_grid_dataclass.post_process(results,gas_grid_source,None
+                                            )
+    #final_results[heat_grid_dataclass.name] = heat_grid_dataclass.post_process(results,heat_grid_source,None)
+    if heating_system==1:
+        final_results[gas_heater_dataclass.name] = gas_heater_dataclass.post_process(results,gas_heater,gas_heater_converters,heat_carrier_bus,gas_bus)
+    if heating_system==0:
+        final_results[air_heat_pump_dataclass.name] = air_heat_pump_dataclass.post_process(results,air_heat_pump,air_heat_pump_converters,heat_carrier_bus,electricity_carrier_bus)
 
-        final_results[pv_dataclass.name] = pv_dataclass.post_process(results,pv_system)
+    final_results[pv_dataclass.name] = pv_dataclass.post_process(results,pv_system)
 
-        final_results[building_dataclass.name] = building_dataclass.post_process(results,building_component)
+    final_results[building_dataclass.name] = building_dataclass.post_process(results,building_component)
 
-        final_results[electricity_demand_dataclass.name] = electricity_demand_dataclass.post_process(results,electricity_demand)
+    final_results[electricity_demand_dataclass.name] = electricity_demand_dataclass.post_process(results,electricity_demand)
 
-        final_results[heat_demand_dataclass.name] = heat_demand_dataclass.post_process(results,heat_demand)
+    final_results[heat_demand_dataclass.name] = heat_demand_dataclass.post_process(results,heat_demand)
 
 
-        final_results["co2_post_process"] = (final_results[battery_dataclass.name]["investment_co2"
-                                ]+final_results[hot_water_tank_dataclass.name]["investment_co2"
-                                ]+(final_results[gas_heater_dataclass.name]["investment_co2"
-                                ]if heating_system == 1 else 0)+(final_results[air_heat_pump_dataclass.name]["investment_co2"
-                                ]if heating_system == 0 else 0)+final_results[pv_dataclass.name]["investment_co2"
-                                ]+final_results[building_dataclass.name]["investment_co2"]
-                                #+final_results[heat_grid_dataclass.name]["investment_co2"]
-                                +final_results[electricity_grid_dataclass.name]["flow_from_grid_co2"
-                                ]-final_results[electricity_grid_dataclass.name]["flow_into_grid_co2"
-                                ]+final_results[gas_grid_dataclass.name]["flow_from_grid_co2"
-                                ])
-        co2 = model.total_limit_co2()
+    final_results["co2_post_process"] = (final_results[battery_dataclass.name]["investment_co2"
+                            ]+final_results[hot_water_tank_dataclass.name]["investment_co2"
+                            ]+(final_results[gas_heater_dataclass.name]["investment_co2"
+                            ]if heating_system == 1 else 0)+(final_results[air_heat_pump_dataclass.name]["investment_co2"
+                            ]if heating_system == 0 else 0)+final_results[pv_dataclass.name]["investment_co2"
+                            ]+final_results[building_dataclass.name]["investment_co2"]
+                            #+final_results[heat_grid_dataclass.name]["investment_co2"]
+                            +final_results[electricity_grid_dataclass.name]["flow_from_grid_co2"
+                            ]-final_results[electricity_grid_dataclass.name]["flow_into_grid_co2"
+                            ]+final_results[gas_grid_dataclass.name]["flow_from_grid_co2"
+                            ])
+    co2 = model.total_limit_co2()
 
-        print("co2_constraint: ", co2)
-        print("co2_manuel: ", final_results["co2_post_process"])
-        print("objective",str(meta_results["objective"]))
-        final_results["co2_oemof_model"] = co2
-        final_results["totex"] = meta_results["objective"]
+    print("co2_constraint: ", co2)
+    print("co2_manuel: ", final_results["co2_post_process"])
+    print("objective",str(meta_results["objective"]))
+    final_results["co2_oemof_model"] = co2
+    final_results["totex"] = meta_results["objective"]
 
-        return final_results, co2
-    except Exception as e:
-        print(e)
-        return None, None
+    return final_results, co2
+
 
 
 # 1. Problem definieren
