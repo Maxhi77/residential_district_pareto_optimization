@@ -48,69 +48,46 @@ import pickle
 # Aktuelles Verzeichnis nehmen
 directory = os.getcwd()
 print("Arbeitsverzeichnis:", directory)
+if True:
+    data = None
 
-data = None
+    for x in range(0, 14):
+        for y in range(0, 57001, 1000):
+            try:
+                file_path = os.path.join(directory, f"results_sobol_{x}_{y}.pkl")
+                with open(file_path, 'rb') as f:
+                    if data is None:
 
-for x in range(0, 14):
-    for y in range(0, 57001, 1000):
-        try:
-            file_path = os.path.join(directory, f"results_sobol_{x}_{y}.pkl")
-            with open(file_path, 'rb') as f:
-                if data is None:
+                        data = drop_results(pickle.load(f))
+                    else:
+                        data.update(drop_results(pickle.load(f)))
+            except FileNotFoundError:
+                continue
 
-                    data = drop_results(pickle.load(f))
-                else:
-                    data.update(drop_results(pickle.load(f)))
-        except FileNotFoundError:
-            continue
+    # Letzte Datei laden
+    file_path = os.path.join(directory, f"results_sobol_6_57343.pkl")
+    with open(file_path, 'rb') as f:
+        data.update(pickle.load(f))
 
-# Letzte Datei laden
-file_path = os.path.join(directory, f"results_sobol_14_57343.pkl")
+    # In data_dict packen
+    data_dict = data
+
+    # Ergebnis abspeichern
+    output_file = os.path.join(directory, "merged_results.pkl")
+    with open(output_file, "wb") as f:
+        pickle.dump(data_dict, f)
+file_path = os.path.join(directory, f"merged_results.pkl")
+data =None
 with open(file_path, 'rb') as f:
-    data.update(pickle.load(f))
-
-# In data_dict packen
-data_dict = data
-
-# Ergebnis abspeichern
-output_file = os.path.join(directory, "merged_results.pkl")
-with open(output_file, "wb") as f:
-    pickle.dump(data_dict, f)
-
+    if data is None:
+        data = drop_results(pickle.load(f))
 print(f"Gespeichert unter: {output_file}")
 # Loop over the file numbers (2400, 2550, ..., 6143)
-if False:
-    data_structure = {}
-    used_first_digits = set()
-    for i in range(0, 6144):  # (0, 6144) non-inclusive at start
-        file_name = f'results_sobol_{i}.pkl'
-        if i in [2100,2850, 4050,4000,4100, 4500, 4950, 5100, 5550, 6000, 6143]:
-            pass
-        else:
-            continue
-
-        # Construct the full file path
-        file_path = os.path.join(directory, file_name)
-
-        # Check if the file exists before attempting to load it
-        if os.path.exists(file_path):
-            # Open the .pkl file and load its contents
-            with open(file_path, 'rb') as f:
-                data = pickle.load(f)
-                print(i)
-                for x in range(0, 6144):
-                    for key in data:
-                        if key[0] == x:
-                            original = data[key]
-                            filtered = {k: original[k] for k in ("co2", "totex", "peak") if k in original}
-                            data_structure[x] = filtered
-                            data_structure[x]["peak"] = max(data[key]["results"]["Electricity"]["flow_from_grid"])
-                            break  # optional: nur den ersten passenden Key speichern
-                print("saved: "+str(i))
-    with open("results_sobol_final", "wb") as f:
-        pickle.dump(data_structure, f)
+data_dict =data
 
 if True:
+
+    # 1. Problem definieren
 
     # 1. Problem definieren
     problem = {
@@ -126,6 +103,8 @@ if True:
             [0, 1]  # Heizung: 0 = HP, 1 = Burning
         ]
     }
+    # Sampling (kleine Anzahl für Test)
+    param_values = saltelli.sample(problem, int(128 * 2 ** 5), calc_second_order=True)
     # Sampling (kleine Anzahl für Test)
     calc_second_order=True
     param_values = saltelli.sample(problem, int(128 *32), calc_second_order=calc_second_order)
@@ -144,13 +123,13 @@ if True:
 
     for key in data_dict:
         entry = data_dict[key]
-        if "peak_from_grid" in entry and "co2" in entry and "totex" in entry:
+        if "peak" in entry and "co2" in entry and "totex" in entry:
             if False:
                 peak_list.append(entry["peak_from_grid"]/param_values[key[0]][0])
                 co2_list.append(entry["co2"]/param_values[key[0]][0])
                 totex_list.append(entry["totex"]/param_values[key[0]][0])
             if True:
-                peak_list.append(entry["peak_from_grid"])
+                peak_list.append(entry["peak"][1])
                 co2_list.append(entry["co2"])
                 totex_list.append(entry["totex"])
         else:
