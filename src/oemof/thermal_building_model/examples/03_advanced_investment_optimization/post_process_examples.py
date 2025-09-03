@@ -85,7 +85,7 @@ import pickle
 from pathlib import Path
 
 
-def load_data(refurbishment_strategies, buildings_in_ueu,base_dir=None):
+def load_data(refurbishment_strategies, buildings_in_ueu,base_dir=None,scale_up_to_building_in_cluster=False):
     if base_dir is None:
         base_dir = Path.cwd()
     else:
@@ -107,7 +107,8 @@ def load_data(refurbishment_strategies, buildings_in_ueu,base_dir=None):
                     data = pickle.load(f)
 
                     cleaned_data = remove_series(data)
-                    scaled_up_data = scale_cleaned_data(cleaned_data)# nehme an, deine Funktion existiert
+                    if scale_up_to_building_in_cluster:
+                        scaled_up_data = scale_cleaned_data(cleaned_data)# nehme an, deine Funktion existiert
                     building_dict[building][refurbishment] = scaled_up_data
             except FileNotFoundError:
                 print(f"Datei fehlt: {full_path}")
@@ -203,15 +204,15 @@ heat_grid_supply_temperatures = [50,60,70,80]
 if centralized:
     building_dict = load_heat_grid_data(heat_grid_supply_temperatures)
     print("finished loadding")
-    with open(f"dec_processed_08_26_results_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
+    with open(f"cec_processed_09_03_results_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
         pickle.dump(building_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
     combined_front = process_building_dict(building_dict)
-    with open(f"cen_processed_08_26_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:  # "wb" = write binary
+    with open(f"cen_processed_09_03_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:  # "wb" = write binary
         pickle.dump([building_dict, building_dict, combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
 else:
     building_dict = load_data(refurbishment_strategies,buildings_in_ueu)
     print("finished loadding")
-    with open(f"cen_processed_08_26_results_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
+    with open(f"den_processed_09_03_results_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
         pickle.dump(building_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
     variable_to_iterate = refurbishment_strategies
     pareto_front_per_building = {}
