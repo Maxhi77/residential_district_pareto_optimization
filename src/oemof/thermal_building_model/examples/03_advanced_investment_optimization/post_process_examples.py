@@ -100,7 +100,7 @@ def load_data(refurbishment_strategies, buildings_in_ueu,base_dir=None):
     for building in buildings_in_ueu:
         building_dict[building] = {}
         for refurbishment in refurbishment_strategies:
-            file_name = f"1results_dec_processed_bds_in_{ueu}_{refurbishment}_no_EV_{building}.pkl"
+            file_name = f"2results_dec_processed_bds_in_{ueu}_{refurbishment}_no_EV_{building}.pkl"
             full_path = base_dir / file_name
             try:
                 with open(full_path, "rb") as f:
@@ -229,9 +229,9 @@ else:
         eps_rel_merge=(0.01, 0.01, 0.003),
         modes_merge=('log','log','log'),
         scales_merge=(1.0, 1.0, 1.0),
-        max_points_after_each_merge=7000
+        max_points_after_each_merge=9000
     )
-    with open(f"dec_processed_08_26_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
+    with open(f"dec_processed_09_03_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
         pickle.dump([building_dict,per_bldg,combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
