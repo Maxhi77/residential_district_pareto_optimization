@@ -210,7 +210,7 @@ if centralized:
     with open(f"cen_processed_09_03_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:  # "wb" = write binary
         pickle.dump([building_dict, building_dict, combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
 else:
-    building_dict = load_data(refurbishment_strategies,buildings_in_ueu)
+    building_dict = load_data(refurbishment_strategies,buildings_in_ueu,False)
     print("finished loadding")
     with open(f"den_processed_09_03_results_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
         pickle.dump(building_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
