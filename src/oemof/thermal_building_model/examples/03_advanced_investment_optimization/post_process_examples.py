@@ -133,7 +133,7 @@ def load_heat_grid_data(numbers, ueu="DENI03403000SEC5658", base_dir=None):
     heat_grid_dict = {}
 
     for num in numbers:
-        file_name = f"results_heat_grid_{num}_processed_bds_in_{ueu}_no_EV.pkl"
+        file_name = f"rresults_heat_grid_{num}_processed_bds_in_{ueu}_no_EV.pkl"
         full_path = base_dir / file_name
         try:
             with open(full_path, "rb") as f:
@@ -224,17 +224,17 @@ else:
         building_dict,
         refurbishment_strategies=refurbishment_strategies,
         tau=1e-9,
-        # pro Gebäude feiner in Totex
-        eps_rel_each=(0.003, 0.003, 0.001), # co2, peak, totex
+        # pro GebÃ¤ude feiner in Totex
+        eps_rel_each=(0.002, 0.002, 0.0008), # co2, peak, totex
         modes_each=('log','log','log'),
         scales_each=(1.0, 1.0, 1.0),
-        # beim Mergen etwas gröber, Totex weiterhin feiner
-        eps_rel_merge=(0.01, 0.01, 0.003),
+        # beim Mergen etwas grÃ¶ber, Totex weiterhin feiner
+        eps_rel_merge=(0.008, 0.008, 0.00025),
         modes_merge=('log','log','log'),
         scales_merge=(1.0, 1.0, 1.0),
-        max_points_after_each_merge=9000
+        max_points_after_each_merge=12000
     )
-    with open(f"dec_processed_09_03_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
+    with open(f"2dec_processed_09_03_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
         pickle.dump([building_dict,per_bldg,combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
