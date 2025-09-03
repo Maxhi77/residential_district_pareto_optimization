@@ -109,7 +109,9 @@ def load_data(refurbishment_strategies, buildings_in_ueu,base_dir=None,scale_up_
                     cleaned_data = remove_series(data)
                     if scale_up_to_building_in_cluster:
                         scaled_up_data = scale_cleaned_data(cleaned_data)# nehme an, deine Funktion existiert
-                    building_dict[building][refurbishment] = scaled_up_data
+                        building_dict[building][refurbishment] = scaled_up_data
+                    else:
+                        building_dict[building][refurbishment] = cleaned_data
             except FileNotFoundError:
                 print(f"Datei fehlt: {full_path}")
                 building_dict[building][refurbishment] = None
