@@ -198,7 +198,7 @@ def process_building_dict(building_dict_heat_grid):
             })
 
     return result_list
-centralized=False
+centralized=True
 buildings_in_ueu = ["DENILD1100004s6k","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004qZL","DENILD1100004rSr"]
 refurbishment_strategies = ["no_refurbishment", "usual_refurbishment", "advanced_refurbishment", "GEG_standard"]
 heat_grid_supply_temperatures = [50,60,70,80]
