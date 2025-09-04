@@ -595,8 +595,8 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
                     time_index=time_index,
                 )
             if building.level_heating_demand >40:
-                building.capex_annuity = building.capex_annuity * 1.15
-                building.co2_cost = building.capex_annuity * 1.15
+                building.capex_annuity = building.capex_annuity * 1.05
+                building.co2_cost = building.co2_cost * 1.05
                 building.level_heating_demand = 40
         else:
             for refurbishment in ["no_refurbishment","usual_refurbishment","advanced_refurbishment","GEG_standard"]:
@@ -875,7 +875,7 @@ def run_main(heat_grid_temperature):
         pickle.dump(existing_results, f)
 
 if __name__ == "__main__":
-    heat_grid_supply_temperatures =[50]  # Beispiel #"GEG_standard"
+    heat_grid_supply_temperatures =[40]  # Beispiel #"GEG_standard"
     import multiprocessing
     import os
     for heat_grid_temperature in heat_grid_supply_temperatures:
