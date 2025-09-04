@@ -875,7 +875,7 @@ def run_main(heat_grid_temperature):
         pickle.dump(existing_results, f)
 
 if __name__ == "__main__":
-    heat_grid_supply_temperatures =[40]  # Beispiel #"GEG_standard"
+    heat_grid_supply_temperatures =[50]  # Beispiel #"GEG_standard"
     import multiprocessing
     import os
     for heat_grid_temperature in heat_grid_supply_temperatures:
