@@ -94,7 +94,7 @@ class Storage(BaseComponent):
 
             share_sum=share_sum+share
             self.oemof_component_name = f"{self.name.lower()}_{str(temperature)}"
-            if False:
+            if True:
                 if temperature <= min(carrier_buses):
                     continue
             # Zielwert
@@ -105,7 +105,7 @@ class Storage(BaseComponent):
             # Index vom Zielwert finden
             index = sorted_keys.index(temperature)
 
-            if False:
+            if True:
                 if index > 0:
                     lower_key = sorted_keys[index - 1]
                     result = carrier_buses[lower_key]
@@ -119,14 +119,26 @@ class Storage(BaseComponent):
                     outputs=output_bus,
                     invest_relation_input_capacity=self.invest_relation_input_capacity,  # c-rate of 1/6
                     invest_relation_output_capacity=self.invest_relation_output_capacity,
-                    nominal_storage_capacity=solph.Investment(lifetime=self.investment_component.lifetime,
-                                                              maximum=self.investment_component.maximum_capacity,
+                    nominal_storage_capacity=solph.Investment(ep_costs=0,
                                                               nonconvex=True,
-                                                      ),
+                                                              maximum=self.investment_component.maximum_capacity,
+                                                              minimum=self.investment_component.minimum_capacity,
+                                                              lifetime=self.investment_component.lifetime,
+                                                              custom_attributes={
+                                                                  "co2": {
+                                                                      "offset": 0.00,
+                                                                      "cost": 0.00,
+                                                                  }
+                                                              }
+                                                              ),
                     loss_rate=self.loss_rate,
+                    min_storage_level=self.min_storage_level,
+                    initial_storage_level=self.initial_storage_level,
                     inflow_conversion_factor=self.charging_efficiency,
                     outflow_conversion_factor=self.discharging_efficiency,
-                    balanced = self.balanced,
+                    balanced=self.balanced,
+                    lifetime_inflow=self.investment_component.lifetime,
+                    lifetime_outflow=self.investment_component.lifetime,
 
                 )
         return storage_dict
@@ -170,10 +182,10 @@ class Storage(BaseComponent):
     def get_capacity(self, results, component):
         if self.investment:
             if self.investment_component.multiperiod:
-                return (results[component, self.output_bus]["period_scalars"]["invest"].sum(),1 if results[component, self.output_bus]["period_scalars"]["invest"].sum()>0 else 0)
+                return (results[component, None]["period_scalars"]["invest"].sum(),1 if results[component, None]["period_scalars"]["invest"].sum()>0 else 0)
             else:
-                return (solph.views.node(results, self.output_bus)["scalars"][((component, self.output_bus), "invest")]
-                        ,solph.views.node(results, self.output_bus)["scalars"].get(((component, self.output_bus), "invest_status"), 0))
+                return (solph.views.node(results, None)["scalars"][((component, None), "invest")]
+                        ,solph.views.node(results, None)["scalars"].get(((component, None), "invest_status"), 0))
         else:
             return component.nominal_storage_capacity, 0
 
