@@ -749,10 +749,11 @@ def run_main(refurbish,building_id_in_cluster):
             gas_heater_power += \
             final_results_ref[building_id_in_cluster]["gas_heater_" + building_id_in_cluster + "_" + str(i)]["capacity"]
         if hp_power>=gas_heater_power:
-            co2_reduction_factors = [1, 0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3,
-                                     0.25, 0.2, 0.15, 0.1, 0.05, 0.01, -0.01, -0.05, -0.1, -0.2]
+            step = 0.025
+            co2_reduction_factors = [round(x, 3) for x in [1 - i*step for i in range(int((1.0 - (-0.1)) / step) + 1)]]
+
         else:
-            co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3,
+            co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3,0.25,
                                      0.2, 0.15, 0.1, 0.05,0.025, 0.01, -0.01, -0.05, -0.1]
          #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
         for ref in ["co2","peak"]:
@@ -926,21 +927,36 @@ def run_main(refurbish,building_id_in_cluster):
     with open(file_path, "wb") as f:
         pickle.dump(existing_results, f)
 
-if __name__ == "__main__":
-    #building_in_cluster=["DENILD1100004s6k","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004qZL","DENILD1100004rSr"] #,["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"]
 
-    building_in_cluster=["DENILD1100004s6k","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004qZL","DENILD1100004rSr"] #,["DENILD1100004qZL","DENILD1100004rAk","DENILD1100004tAY","DENILD1100004s6k","DENILD1100004rSr"]
-    refurbishment =["no_refurbishment","usual_refurbishment","advanced_refurbishment"]  # Beispiel #"GEG_standard"
-    refurbishment =["advanced_refurbishment"]
-    import multiprocessing
-    import os
-    for refubish in refurbishment:
-        for building_id_in_cluster in building_in_cluster:
-            print("start: " + building_id_in_cluster)
-            try:
-                run_main(refubish,building_id_in_cluster)
-            except:
-                print("crashed: "+building_id_in_cluster)
-    if False:
-        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-            pool.map(run_main, refurbish)
+# Hilfsfunktion, damit pool.map zwei Argumente bekommt
+def wrapper(args):
+    refubish, building_id_in_cluster = args
+    try:
+        print(f"start: {building_id_in_cluster} | {refubish}")
+        run_main(refubish, building_id_in_cluster)
+    except Exception as e:
+        print(f"crashed: {building_id_in_cluster} | {refubish} | {e}")
+import multiprocessing
+import itertools
+
+building_in_cluster = [
+    "DENILD1100004s6k",
+    "DENILD1100004rAk",
+    "DENILD1100004tAY",
+    "DENILD1100004qZL",
+    "DENILD1100004rSr"
+]
+
+refurbishment = [
+    "no_refurbishment",
+    "usual_refurbishment",
+    "advanced_refurbishment",
+    "GEG_standard"
+]
+if __name__ == "__main__":
+
+    tasks = list(itertools.product(refurbishment, building_in_cluster))
+    # erzeugt alle Kombinationen [(refurbish1, building1), (refurbish1, building2), ...]
+
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        pool.map(wrapper, tasks)
