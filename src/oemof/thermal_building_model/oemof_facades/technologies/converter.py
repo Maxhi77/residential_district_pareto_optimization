@@ -39,7 +39,7 @@ class Converter(BaseComponent):
                                      custom_attributes={
                                          "co2": {
                                              "offset": self.investment_component.co2_offset if self.investment_component else 0.00,
-                                              "cost": self.investment_component.co2_per_capacity if self.investment_component else 0.00
+                                              "linear": self.investment_component.co2_per_capacity if self.investment_component else 0.00
                                               }
                                     }
                         ),
