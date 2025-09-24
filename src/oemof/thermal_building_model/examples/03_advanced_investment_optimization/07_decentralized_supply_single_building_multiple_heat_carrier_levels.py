@@ -954,7 +954,7 @@ refurbishment = [
     "GEG_standard"
 ]
 if __name__ == "__main__":
-
+    #add multiprocessing
     tasks = list(itertools.product(refurbishment, building_in_cluster))
     # erzeugt alle Kombinationen [(refurbish1, building1), (refurbish1, building2), ...]
 
