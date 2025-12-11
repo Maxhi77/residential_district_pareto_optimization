@@ -1,3 +1,4 @@
+
 from oemof.thermal_building_model.oemof_facades.base_component import  PhysicalBaseUnit
 from oemof.solph.components import Converter
 import copy
@@ -814,7 +815,7 @@ def run_main(refurbish,building_id_in_cluster):
                                 "time": time
                             }
                     print("FINISHED PEAK LOOP START SAVING")
-                    file_path="4results_dec_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(building_id_in_cluster)+".pkl"
+                    file_path="results_dec_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(building_id_in_cluster)+".pkl"
                     if os.path.exists(file_path):
                         # If the file exists, open it and load the data
                         with open(file_path, "rb") as f:
@@ -889,7 +890,7 @@ def run_main(refurbish,building_id_in_cluster):
                                 "time": time
                             }
                     print("FINISHED PEAK LOOP START SAVING")
-                    file_path="4results_dec_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(building_id_in_cluster)+".pkl"
+                    file_path="results_dec_"+str(ueu)+"_"+str(refurbish)+"_"+str(ev)+"_"+str(building_id_in_cluster)+".pkl"
                     if os.path.exists(file_path):
                         # If the file exists, open it and load the data
                         with open(file_path, "rb") as f:
@@ -907,7 +908,7 @@ def run_main(refurbish,building_id_in_cluster):
                     # Save the updated or new results back to the pickle file
                     with open(file_path, "wb") as f:
                         pickle.dump(existing_results, f)
-    file_path = "4results_dec_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) +"_" + str(
+    file_path = "results_dec_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) +"_" + str(
         building_id_in_cluster) + ".pkl"
     if os.path.exists(file_path):
         # If the file exists, open it and load the data
@@ -940,11 +941,15 @@ import multiprocessing
 import itertools
 
 building_in_cluster = [
-    "DENILD1100004s6k",
-    "DENILD1100004rAk",
+    "DENILD1100004rD3",
+    "DENILD1100004rNW",
     "DENILD1100004tAY",
+    "DENILD1100004vpn",
     "DENILD1100004qZL",
-    "DENILD1100004rSr"
+    "DENILD1100004s6k",#mfh
+    "DENILD1100004vNp",#mfh
+    "DENILD1100004rSr",#mfh
+    "DENILD1100004slM"#mfh
 ]
 
 refurbishment = [
@@ -954,9 +959,12 @@ refurbishment = [
     "GEG_standard"
 ]
 if __name__ == "__main__":
-    #add multiprocessing
-    tasks = list(itertools.product(refurbishment, building_in_cluster))
-    # erzeugt alle Kombinationen [(refurbish1, building1), (refurbish1, building2), ...]
+    if True:
+        #add multiprocessing
+        tasks = list(itertools.product(refurbishment, building_in_cluster))
+        # erzeugt alle Kombinationen [(refurbish1, building1), (refurbish1, building2), ...]
 
-    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-        pool.map(wrapper, tasks)
+        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+            pool.map(wrapper, tasks)
+    else:
+        run_main("no_refurbishment", "DENILD1100004s6k")

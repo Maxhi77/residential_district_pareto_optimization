@@ -5,13 +5,13 @@ from oemof.thermal_building_model.oemof_facades.base_component import Investment
 full_and_not_linearized = True
 
 if full_and_not_linearized:
-    if False:
+    if True:
         battery_config = {
             1: InvestmentComponents(
                 maximum_capacity=30 * 1000 / PhysicalBaseUnit.factor,
                 minimum_capacity=1 / PhysicalBaseUnit.factor,
                 cost_per_unit=750 / 1000 * PhysicalBaseUnit.factor,
-                cost_offset=1000,
+                cost_offset=200,
                 co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
                 lifetime=20,
             ),
@@ -19,11 +19,11 @@ if full_and_not_linearized:
                 maximum_capacity=100 * 1000/ PhysicalBaseUnit.factor,
                 minimum_capacity=30 * 1000 / PhysicalBaseUnit.factor,
                 cost_per_unit=625 / 1000 * PhysicalBaseUnit.factor,
-                cost_offset=1000,
+                cost_offset=200,
                 co2_per_capacity=0.1303 * PhysicalBaseUnit.factor,
                 lifetime=20,
             )}
-    if True:
+    if False:
         battery_config = {
             1: InvestmentComponents(
                 maximum_capacity=70 * 1000 / PhysicalBaseUnit.factor,
