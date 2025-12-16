@@ -735,26 +735,28 @@ def run_main(refurbish,building_id_in_cluster):
             "peak_reduction_factor" : peak_reduction_factor_ref,
             "refurbish": refurbish,
             "totex": final_results_ref["totex"],
-            "peak": final_results_ref["Electricity"]["peak_from_grid"],
+            "peak": max(final_results_ref["Electricity"]["peak_from_grid"], final_results_ref["Electricity"]["peak_into_grid"]),
+            "peak_from_grid": final_results_ref["Electricity"]["peak_from_grid"],
+            "peak_into_grid": final_results_ref["Electricity"]["peak_into_grid"],
             "time":time
 
         }
         co2_reference_save = co2_ref
-        peak_reference_save = final_results_ref["Electricity"]["peak_from_grid"]
+        peak_reference_save = max(final_results_ref["Electricity"]["peak_from_grid"], final_results_ref["Electricity"]["peak_into_grid"])
         hp_power = 0
         gas_heater_power = 0
-        for i in range(1, 2):
-            hp_power += final_results_ref[building_id_in_cluster]["hp_" + building_id_in_cluster + "_" + str(i)][
-                "capacity"]
-            gas_heater_power += \
-            final_results_ref[building_id_in_cluster]["gas_heater_" + building_id_in_cluster + "_" + str(i)]["capacity"]
-        if hp_power>=gas_heater_power:
-            step = 0.025
-            co2_reduction_factors = [round(x, 3) for x in [1 - i*step for i in range(int((1.0 - (-0.1)) / step) + 1)]]
-
-        else:
-            co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3,0.25,
-                                     0.2, 0.15, 0.1, 0.05,0.025, 0.01, -0.01, -0.05, -0.1]
+        if True:
+            for i in range(1, 2):
+                hp_power += final_results_ref[building_id_in_cluster]["hp_" + building_id_in_cluster + "_" + str(i)][
+                    "capacity"]
+                gas_heater_power += \
+                final_results_ref[building_id_in_cluster]["gas_heater_" + building_id_in_cluster + "_" + str(i)]["capacity"]
+            if hp_power>=gas_heater_power:
+                step = 0.05
+                co2_reduction_factors = [round(x, 3) for x in [1 - i*step for i in range(int((1.0 - (-0.1)) / step) + 1)]]
+            else:
+                co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3,0.2,
+                                         0.2, 0.1, 0.05, 0.01, -0.01, -0.05, -0.1]
          #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
         for ref in ["co2","peak"]:
             if ref=="co2":
@@ -799,7 +801,7 @@ def run_main(refurbish,building_id_in_cluster):
                         else:
                             peak_calculation_worked = True
                             totex = final_results["totex"]
-                            peak = final_results["Electricity"]["peak_from_grid"]
+                            peak = max(final_results["Electricity"]["peak_from_grid"],final_results["Electricity"]["peak_into_grid"])
                             if first_co2_run_in_peak_loop:
                                 first_co2_run_in_peak_loop = False
                                 peak_reference = peak
@@ -811,6 +813,8 @@ def run_main(refurbish,building_id_in_cluster):
                                 "refurbish": refurbish,
                                 "totex": totex,
                                 "peak": peak,
+                                "peak_from_grid": final_results["Electricity"]["peak_from_grid"],
+                                "peak_into_grid": final_results["Electricity"]["peak_into_grid"],
                                 "time": time
                             }
                     print("FINISHED PEAK LOOP START SAVING")
@@ -874,7 +878,7 @@ def run_main(refurbish,building_id_in_cluster):
                             break
                         else:
                             totex = final_results["totex"]
-                            peak = final_results["Electricity"]["peak_from_grid"]
+                            peak = max(final_results["Electricity"]["peak_from_grid"], final_results["Electricity"]["peak_into_grid"])
                             if first_peak_run_in_co2_loop:
                                 first_peak_run_in_co2_loop = False
                                 peak_reference = peak
@@ -886,6 +890,8 @@ def run_main(refurbish,building_id_in_cluster):
                                 "refurbish": refurbish,
                                 "totex": totex,
                                 "peak": peak,
+                                "peak_from_grid": final_results["Electricity"]["peak_from_grid"],
+                                "peak_into_grid": final_results["Electricity"]["peak_into_grid"],
                                 "time": time
                             }
                     print("FINISHED PEAK LOOP START SAVING")
@@ -943,12 +949,12 @@ building_in_cluster = [
     "DENILD1100004rD3",
     "DENILD1100004rNW",
     "DENILD1100004tAY",
-    "DENILD1100004vpn",
-    "DENILD1100004qZL",
-    "DENILD1100004s6k",#mfh
-    "DENILD1100004vNp",#mfh
-    "DENILD1100004rSr",#mfh
-    "DENILD1100004slM"#mfh
+    #"DENILD1100004vpn",
+    #"DENILD1100004qZL",
+    #"DENILD1100004s6k",#mfh
+    #"DENILD1100004vNp",#mfh
+    #"DENILD1100004rSr",#mfh
+    #"DENILD1100004slM"#mfh
 ]
 
 refurbishment = [
