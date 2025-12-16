@@ -444,7 +444,8 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
 
         model.solve(solver=solver, solve_kwargs={"tee": True},
-                                              cmdline_options={"mipgap": 0.005}
+                                              cmdline_options={"mipgap": 0.005,
+                                                               "threads": 1},
         )
         meta_results = solph.processing.meta_results(model)
         results = solph.processing.results(model)
@@ -968,8 +969,8 @@ if __name__ == "__main__":
         #add multiprocessing
         tasks = list(itertools.product(refurbishment, building_in_cluster))
         # erzeugt alle Kombinationen [(refurbish1, building1), (refurbish1, building2), ...]
-
-        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        print(tasks)
+        with multiprocessing.Pool(processes=max(1, multiprocessing.cpu_count() // 2) ) as pool:
             pool.map(wrapper, tasks)
     else:
         run_main("no_refurbishment", "DENILD1100004s6k")
