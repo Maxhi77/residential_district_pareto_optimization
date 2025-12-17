@@ -951,12 +951,12 @@ building_in_cluster = [
     "DENILD1100004rD3",
     "DENILD1100004rNW",
     "DENILD1100004tAY",
-    #"DENILD1100004vpn",
-    #"DENILD1100004qZL",
-    #"DENILD1100004s6k",#mfh
-    #"DENILD1100004vNp",#mfh
-    #"DENILD1100004rSr",#mfh
-    #"DENILD1100004slM"#mfh
+    "DENILD1100004vpn",
+    "DENILD1100004qZL",
+    "DENILD1100004s6k",#mfh
+    "DENILD1100004vNp",#mfh
+    "DENILD1100004rSr",#mfh
+    "DENILD1100004slM"#mfh
 ]
 
 refurbishment = [
