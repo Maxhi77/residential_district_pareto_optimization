@@ -53,7 +53,8 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
     if peak_new is False or None:
         electricity_grid_dataclass = ElectricityGrid()
     else:
-        electricity_grid_dataclass = ElectricityGrid(max_peak_from_grid=peak_new)
+        electricity_grid_dataclass = ElectricityGrid(max_peak_from_grid=peak_new,
+                                                     max_peak_into_grid=peak_new)
 
     electricity_grid_bus_from_grid = electricity_grid_dataclass.get_bus_from_grid()
     electricity_grid_bus_into_grid = electricity_grid_dataclass.get_bus_into_grid()
