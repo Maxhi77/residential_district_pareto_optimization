@@ -1048,22 +1048,20 @@ def run_main(heat_grid_temperature):
             # Save the updated or new results back to the pickle file
             with open(file_path, "wb") as f:
                 pickle.dump(existing_results, f)
-heat_grid_supply_temperatures =[40,50,60,70]  # Beispiel #"GEG_standard"
-def wrapper(args):
-    rheat_grid_supply_temp = args
-    try:
-        print(f"start: {rheat_grid_supply_temp}")
-        run_main(heat_grid_supply_temperatures)
-    except Exception as e:
-        print(f"crashed: {rheat_grid_supply_temp} | {e}")
-if __name__ == "__main__":
-    if True:
-        import multiprocessing
-        import itertools
+heat_grid_supply_temperatures = [40, 50, 60, 70]
 
-        tasks = heat_grid_supply_temperatures  # KEIN product, nur die Liste
-        print("tasks:", tasks)
-        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-            pool.map(wrapper, tasks)
-    else:
-        run_main(70)
+def wrapper(heat_grid_temperature):
+    try:
+        print(f"start: {heat_grid_temperature}")
+        run_main(heat_grid_temperature)   # <-- jetzt int, kein list
+    except Exception as e:
+        print(f"crashed: {heat_grid_temperature} | {e}")
+
+if __name__ == "__main__":
+    import multiprocessing
+
+    tasks = heat_grid_supply_temperatures  # [40, 50, 60, 70]
+    print("tasks:", tasks)
+
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        pool.map(wrapper, tasks)
