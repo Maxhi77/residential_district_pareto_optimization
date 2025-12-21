@@ -17,7 +17,7 @@ from oemof.thermal_building_model.helpers.calculate_pv_electricity_yield import 
 from oemof import solph
 from oemof.solph.constraints import storage_level_constraint,equate_variables
 from pyomo import environ as po
-
+from define_building_combinations_for_cen_optimization import remove_duplicate_scenarios, build_scenarios
 import matplotlib.pyplot as plt
 import networkx as nx
 from oemof.network.graph import create_nx_graph
@@ -61,7 +61,8 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
     if peak_new is False or None:
         electricity_grid_dataclass = ElectricityGrid()
     else:
-        electricity_grid_dataclass = ElectricityGrid(max_peak_from_grid=peak_new)
+        electricity_grid_dataclass = ElectricityGrid(max_peak_from_grid=peak_new,
+                                                     max_peak_into_grid=peak_new)
 
     electricity_grid_bus_from_grid = electricity_grid_dataclass.get_bus_from_grid()
     electricity_grid_bus_into_grid = electricity_grid_dataclass.get_bus_into_grid()
@@ -555,7 +556,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         return None, None, None
 
 
-def process_cluster(building_row, building_type, epw_path, directory_path, data, number_of_time_steps,data_classes_comp,ev,time_index,heat_grid_temperature):
+def check_possible_buildings_for_heat_grid_temp(building_row, building_type, epw_path, directory_path, data, number_of_time_steps,data_classes_comp,ev,time_index,heat_grid_temperature):
 
         building_id = building_row['building_id']
         tabula_year_class = building_row['tabula_year_class']
@@ -572,20 +573,26 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
         }
         year_of_construction = year_map.get(tabula_year_class, 2000)  # fallback
 
-        # Demands laden
-        with open(os.path.join(directory_path, f"{building_id}_demand_{ev}.pkl"), "rb") as f:
-            demand = pickle.load(f)
-
-        electricity_cols = [col for col in demand.columns if col.startswith("Electricity_")]
-        demand_electricity = (demand[electricity_cols].sum(axis=1) * 1000).tolist()
-        warm_water_cols = [col for col in demand.columns if col.startswith("Warm Water_")]
-        demand_warm_water = demand[warm_water_cols].sum(axis=1)
-
-        # Datenklassen
-        electricity_demand = ElectricityDemand(name=f"e_demand_{building_id}", value_list=demand_electricity)
-        heat_demand = WarmWater(name=f"ww_demand_{building_id}", value_list=demand_warm_water, level=40)
         buildung_dict={}
-        if heat_grid_temperature==40:
+
+        for refurbishment in ["no_refurbishment","usual_refurbishment","advanced_refurbishment","GEG_standard"]:
+            buildung_dict[refurbishment] = ThermalBuilding(
+                name=f"building_{building_id}",
+                floor_area=building_floor_area,
+                number_of_occupants=number_of_occupants,
+                number_of_household=number_of_households,
+                country="DE",
+                construction_year=year_of_construction,
+                class_building="average",
+                building_type=building_type,
+                refurbishment_status=refurbishment,
+                heat_level_calculation=True,
+                time_index=time_index,
+            )
+        matching_buildings = {key: value for key, value in buildung_dict.items() if
+                              value.level_heating_demand <= heat_grid_temperature}
+
+        if len(matching_buildings) == 0 and heat_grid_temperature ==40:
             building = ThermalBuilding(
                     name=f"building_{building_id}",
                     floor_area=building_floor_area,
@@ -599,66 +606,108 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
                     heat_level_calculation=True,
                     time_index=time_index,
                 )
-            if building.level_heating_demand >40:
-                building.capex_annuity = building.capex_annuity * 1.05
-                building.co2_cost = building.co2_cost * 1.05
+            if building.level_heating_demand ==50:
+                building.capex_annuity = building.capex_annuity * 1.25
+                building.co2_cost = building.co2_cost * 1.25
                 building.level_heating_demand = 40
-        else:
-            for refurbishment in ["no_refurbishment","usual_refurbishment","advanced_refurbishment","GEG_standard"]:
-                buildung_dict[refurbishment] = ThermalBuilding(
-                    name=f"building_{building_id}",
-                    floor_area=building_floor_area,
-                    number_of_occupants=number_of_occupants,
-                    number_of_household=number_of_households,
-                    country="DE",
-                    construction_year=year_of_construction,
-                    class_building="average",
-                    building_type=building_type,
-                    refurbishment_status=refurbishment,
-                    heat_level_calculation=True,
-                    time_index=time_index,
-                )
-            matching_buildings = {key: value for key, value in buildung_dict.items() if
-                                  value.level_heating_demand <= heat_grid_temperature}
-            print(building_id)
-            print(heat_grid_temperature)
-            assert matching_buildings, "Fehler: Es wurden keine Gebäudej gefunden, die den gewünschten Heizbedarf entsprechen."
+                buildung_dict["advanced_refurbishment"] = building
+                matching_buildings = buildung_dict
+            elif building.level_heating_demand ==60:
+                building.capex_annuity = building.capex_annuity * 1.5
+                building.co2_cost = building.co2_cost * 1.5
+                building.level_heating_demand = 40
+                buildung_dict["advanced_refurbishment"] = building
+                matching_buildings = buildung_dict
+            elif building.level_heating_demand ==70:
+                building.capex_annuity = building.capex_annuity * 1.8
+                building.co2_cost = building.co2_cost * 1.8
+                building.level_heating_demand = 40
+                buildung_dict["advanced_refurbishment"] = building
+                matching_buildings = buildung_dict
+        print(building_id)
+        print(heat_grid_temperature)
 
-            min_capex_building = min(matching_buildings, key=lambda x: matching_buildings[x].capex_annuity)
-            building = matching_buildings[min_capex_building]
+        assert matching_buildings, "Fehler: Es wurden keine Gebäudej gefunden, die den gewünschten Heizbedarf entsprechen."
 
-        # PV-Ertrag pro Watt
-        pv_yield_per_wp = simulate_pv_yield(
-            pv_nominal_power_in_watt=1,
-            tilt=building_row['avg_roof_pitch_angle'],
-            epw_path=epw_path
+        min_capex_building = min(matching_buildings, key=lambda x: matching_buildings[x].capex_annuity)
+
+
+        return matching_buildings
+
+
+def process_cluster(building_row, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,
+                    data_classes_comp, ev, time_index):
+    building_id = building_row['building_id']
+    tabula_year_class = building_row['tabula_year_class']
+    building_floor_area = building_row['net_floor_area']
+    number_of_occupants = building_row['number_of_residents']
+    number_of_households = building_row['number_of_apartments']
+    number_of_buildings_in_cluster = building_row['buildings_in_cluster']
+
+    # Zuordnung Baujahr
+    year_map = {
+        1: 1850, 2: 1910, 3: 1930, 4: 1950,
+        5: 1960, 6: 1970, 7: 1980, 8: 1990,
+        9: 2000, 10: 2005, 11: 2010, 12: 2020
+    }
+    year_of_construction = year_map.get(tabula_year_class, 2000)  # fallback
+
+    # Demands laden
+    with open(os.path.join(directory_path, f"{building_id}_demand_{ev}.pkl"), "rb") as f:
+        demand = pickle.load(f)
+
+    electricity_cols = [col for col in demand.columns if col.startswith("Electricity_")]
+    demand_electricity = (demand[electricity_cols].sum(axis=1) * 1000).tolist()
+    warm_water_cols = [col for col in demand.columns if col.startswith("Warm Water_")]
+    demand_warm_water = demand[warm_water_cols].sum(axis=1)
+
+    # Datenklassen
+    electricity_demand = ElectricityDemand(name=f"e_demand_{building_id}", value_list=demand_electricity)
+    heat_demand = WarmWater(name=f"ww_demand_{building_id}", value_list=demand_warm_water, level=40)
+    building = ThermalBuilding(
+        name=f"building_{building_id}",
+        floor_area=building_floor_area,
+        number_of_occupants=number_of_occupants,
+        number_of_household=number_of_households,
+        country="DE",
+        construction_year=year_of_construction,
+        class_building="average",
+        building_type=building_type,
+        refurbishment_status=refurbish,
+        heat_level_calculation=True,
+        time_index=time_index,
+    )
+
+    # PV-Ertrag pro Watt
+    pv_yield_per_wp = simulate_pv_yield(
+        pv_nominal_power_in_watt=1,
+        tilt=building_row['avg_roof_pitch_angle'],
+        epw_path=epw_path
+    )
+    dict_pv_systems = {}
+    for key, config in pv_system_config.items():
+        pv_system_config_building = copy.deepcopy(config)
+        pv = PVSystem(
+            investment=True,
+            name=f"pv_system_{building_id}_{key}",
+            value_list=pv_yield_per_wp.tolist(),
+            investment_component=pv_system_config_building
         )
-        dict_pv_systems = {}
-        for key, config in pv_system_config.items():
-            pv_system_config_building= copy.deepcopy(config)
-            pv = PVSystem(
-                investment=True,
-                name=f"pv_system_{building_id}_{key}",
-                value_list=pv_yield_per_wp.tolist(),
-                investment_component=pv_system_config_building
-            )
-            pv.update_maximum_investment_pv_capacity_based_on_area(building.get_roof_area_for_pv())
-            data[pv.name] = pv.value_list
-            dict_pv_systems[key] = pv
+        pv.update_maximum_investment_pv_capacity_based_on_area(building.get_roof_area_for_pv())
+        data[pv.name] = pv.value_list
+        dict_pv_systems[key] = pv
 
+    # Spalten hinzufügen
+    data[electricity_demand.name] = electricity_demand.value_list
+    data[heat_demand.name] = heat_demand.value_list
+    data[building.name] = building.value_list
 
-        # Spalten hinzufügen
-        data[electricity_demand.name] = electricity_demand.value_list
-        data[heat_demand.name] = heat_demand.value_list
-        data[building.name] = building.value_list
-
-        data_classes_comp[building_id] = {"electricity_demand":electricity_demand,
-                                          "pv_system":dict_pv_systems,
-                                          "building":building,
-                                          "heat_demand":heat_demand}
-        return data, data_classes_comp
-
-
+    data_classes_comp[building_id] = {"electricity_demand": electricity_demand,
+                                      "pv_system": dict_pv_systems,
+                                      "building": building,
+                                      "heat_demand": heat_demand,
+                                      "building_type": building_type}
+    return data, data_classes_comp
 
 def run_main(heat_grid_temperature):
     base_path = os.path.dirname(os.path.abspath(__file__))
@@ -699,261 +748,306 @@ def run_main(heat_grid_temperature):
         data["air_temperature"] = location.weather_data["drybulb_C"].to_list()
         date_time_index = solph.create_time_index(2025, number=number_of_time_steps - 1)
         data.index = date_time_index
-        if True:
-            for index, building_row in sfh_cluster.iterrows():
+        matching_buildings_sfh = {}
+        for index, building_row in sfh_cluster.iterrows():
+            matching_buildings_sfh[building_row.building_id] = check_possible_buildings_for_heat_grid_temp(
+                building_row=building_row,
+                building_type="SFH",
+                epw_path=epw_path,
+                directory_path=directory_path,
+                data=data,
+                number_of_time_steps=number_of_time_steps,
+                data_classes_comp = data_classes_comp,
+                ev=ev,
+                time_index=date_time_index,
+                heat_grid_temperature=heat_grid_temperature
+            )
+        matching_buildings_mfh = {}
+        for index, building_row in mfh_cluster.iterrows():
+            matching_buildings_mfh[building_row.building_id] = check_possible_buildings_for_heat_grid_temp(
+                building_row=building_row,
+                building_type="MFH",
+                epw_path=epw_path,
+                directory_path=directory_path,
+                data=data,
+                number_of_time_steps=number_of_time_steps,
+                data_classes_comp = data_classes_comp,
+                ev =ev,
+                time_index=date_time_index,
+                heat_grid_temperature=heat_grid_temperature
+            )
+        scenarios, buildings_all = build_scenarios(
+            matching_buildings_sfh=matching_buildings_sfh,
+            matching_buildings_mfh=matching_buildings_mfh,
+            refurbishments=["no_refurbishment", "usual_refurbishment", "advanced_refurbishment", "GEG_standard"],
+            n_random=6,
+            seed=42
+        )
 
+        print(f"Szenarien vor Dedup: {len(scenarios)}")
+
+        scenarios = remove_duplicate_scenarios(scenarios)
+
+        path = os.path.join("dec_optimizations_scenarios.pkl")
+
+        with open(path, "wb") as f:
+            pickle.dump(scenarios, f)
+
+        print("Gespeichert:", path)
+        print(f"Szenarien nach Dedup: {len(scenarios)}")
+        for scenario in scenarios:
+            name_of_scenario = scenario["name"]
+            for index, building_row in sfh_cluster.iterrows():
+                refurbish = scenario["choice"][building_row["building_id"]]
                 data,data_classes_comp = process_cluster(
                     building_row=building_row,
                     building_type="SFH",
                     epw_path=epw_path,
                     directory_path=directory_path,
                     data=data,
+                    refurbish=refurbish,
                     number_of_time_steps=number_of_time_steps,
                     data_classes_comp = data_classes_comp,
                     ev=ev,
-                    time_index=date_time_index,
-                    heat_grid_temperature=heat_grid_temperature
+                    time_index=date_time_index
                 )
-        if True:
             for index, building_row in mfh_cluster.iterrows():
-
+                refurbish = scenario["choice"][building_row["building_id"]]
                 data,data_classes_comp = process_cluster(
                     building_row=building_row,
                     building_type="MFH",
                     epw_path=epw_path,
                     directory_path=directory_path,
                     data=data,
+                    refurbish=refurbish,
                     number_of_time_steps=number_of_time_steps,
                     data_classes_comp = data_classes_comp,
                     ev =ev,
-                    time_index=date_time_index,
-                    heat_grid_temperature=heat_grid_temperature
+                    time_index=date_time_index
                 )
+            typical_periods = 30
+            hours_per_period = 24
 
+            aggregation1 = tsam.TimeSeriesAggregation(
+                timeSeries=data.iloc[:8760],
+                noTypicalPeriods=typical_periods,
+                hoursPerPeriod=hours_per_period,
+                clusterMethod="k_means",
 
-        typical_periods = 30
-        hours_per_period = 24
+            )
+            aggregation1.createTypicalPeriods()
+            cluster_occurence=aggregation1.clusterPeriodNoOccur
+            data = aggregation1.typicalPeriods
+            t1_agg = pd.date_range(
+                "2025-01-01", periods=typical_periods * hours_per_period, freq="H"
+            )
+            if False:
+                for index, row in combined_cluster.iterrows():
+                    try:
+                        building_id = row['building_id']
+                        buildings_in_cluster = row['buildings_in_cluster']
 
-        aggregation1 = tsam.TimeSeriesAggregation(
-            timeSeries=data.iloc[:8760],
-            noTypicalPeriods=typical_periods,
-            hoursPerPeriod=hours_per_period,
-            clusterMethod="k_means",
+                        # Identify the corresponding 'ww_demand' column for each building_id
+                        ww_demand_column = f"ww_demand_{building_id}"
+                        e_demand_column = f"e_demand_{building_id}"
+                        building_demand_column = f"building_{building_id}"
+                        # Multiply the ww_demand column by the number of buildings in the cluster
+                        data[ww_demand_column] = data[ww_demand_column] * buildings_in_cluster
+                        data[e_demand_column] = data[e_demand_column] * buildings_in_cluster
+                        data[building_demand_column] = data[building_demand_column] * buildings_in_cluster
+                    except:
+                        print(index)
+                all_ww_demand_columns = [col for col in data.columns if 'ww_demand' in col]
+                all_e_demand_columns = [col for col in data.columns if 'e_demand' in col]
+                all_building_demand_columns = [col for col in data.columns if 'building' in col]
 
-        )
-        aggregation1.createTypicalPeriods()
-        cluster_occurence=aggregation1.clusterPeriodNoOccur
-        data = aggregation1.typicalPeriods
-        t1_agg = pd.date_range(
-            "2025-01-01", periods=typical_periods * hours_per_period, freq="H"
-        )
-        if False:
-            for index, row in combined_cluster.iterrows():
-                try:
-                    building_id = row['building_id']
-                    buildings_in_cluster = row['buildings_in_cluster']
+                data['ww_demand_total'] = data[all_ww_demand_columns].sum(axis=1)
+                data['e_demand_total'] = data[all_e_demand_columns].sum(axis=1)
+                data['building_total'] = data[all_building_demand_columns].sum(axis=1)
 
-                    # Identify the corresponding 'ww_demand' column for each building_id
-                    ww_demand_column = f"ww_demand_{building_id}"
-                    e_demand_column = f"e_demand_{building_id}"
-                    building_demand_column = f"building_{building_id}"
-                    # Multiply the ww_demand column by the number of buildings in the cluster
-                    data[ww_demand_column] = data[ww_demand_column] * buildings_in_cluster
-                    data[e_demand_column] = data[e_demand_column] * buildings_in_cluster
-                    data[building_demand_column] = data[building_demand_column] * buildings_in_cluster
-                except:
-                    print(index)
-            all_ww_demand_columns = [col for col in data.columns if 'ww_demand' in col]
-            all_e_demand_columns = [col for col in data.columns if 'e_demand' in col]
-            all_building_demand_columns = [col for col in data.columns if 'building' in col]
+            final_results_ref, co2_ref, time = run_model(None, None,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence)
+            co2_reduction_factor_ref = 1
+            peak_reduction_factor_ref = 1
+            results_loop_to_save[(co2_reduction_factor_ref, peak_reduction_factor_ref)] = {
+                "results": final_results_ref,
+                "co2": co2_ref,
+                "peak_reduction_factor" : peak_reduction_factor_ref,
+                "totex": final_results_ref["totex"],
+                "peak": final_results_ref["Electricity"]["peak_from_grid"],
+                "time":time
 
-            data['ww_demand_total'] = data[all_ww_demand_columns].sum(axis=1)
-            data['e_demand_total'] = data[all_e_demand_columns].sum(axis=1)
-            data['building_total'] = data[all_building_demand_columns].sum(axis=1)
+            }
+            co2_reference_save = co2_ref
+            peak_reference_save = final_results_ref["Electricity"]["peak_from_grid"]
 
-        final_results_ref, co2_ref, time = run_model(None, None,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence)
-        co2_reduction_factor_ref = 1
-        peak_reduction_factor_ref = 1
-        results_loop_to_save[(co2_reduction_factor_ref, peak_reduction_factor_ref)] = {
-            "results": final_results_ref,
-            "co2": co2_ref,
-            "peak_reduction_factor" : peak_reduction_factor_ref,
-            "totex": final_results_ref["totex"],
-            "peak": final_results_ref["Electricity"]["peak_from_grid"],
-            "time":time
-
-        }
-        co2_reference_save = co2_ref
-        peak_reference_save = final_results_ref["Electricity"]["peak_from_grid"]
-
-        import numpy as np
-        co2_reduction_factors =  np.arange(1, 0.325, -0.08).tolist() # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
-         #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2]
-        for ref in ["co2","peak"]:
-            if ref=="co2":
-                peak_reference = peak_reference_save
-                co2_reference = co2_reference_save
-                for co2_reduction_factor in co2_reduction_factors:
-                    first_co2_run_in_peak_loop = True
-                    peak_reduction_factors = [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
-                    #peak_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
-
-                    if co2_reference > 0:
-                        co2_new = co2_reference * co2_reduction_factor
-                    else:
-                        co2_new = co2_reference * (1+1-co2_reduction_factor)
-                    print("START PEAK LOOP")
-                    for peak_reduction_factor in peak_reduction_factors:
-                        print("co2_reduction_factor: "+str(co2_reduction_factor))
-                        print("peak_reduction_factor: " + str(peak_reduction_factor))
-                        if first_co2_run_in_peak_loop:
-                            peak_new =False
-                        else:
-
-                            peak_new = peak_reference * peak_reduction_factor
-
-                        final_results, co2,time  = run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence)
-                        if final_results is None:
-                            results_loop_to_save[(co2_reduction_factor, peak_reduction_factor,ref)] = {
-                                "results": None,
-                                "co2": None,
-                                "peak_reduction_factor": None,
-                                "refurbish": None,
-                                "totex": None,
-                                "peak": None,
-                                "time":None
-                            }
-                            if first_co2_run_in_peak_loop:
-                                first_co2_run_in_peak_loop = False
-                                peak =False
-                                peak_reference = peak
-                            break
-                        else:
-                            peak_calculation_worked = True
-                            totex = final_results["totex"]
-                            peak = final_results["Electricity"]["peak_from_grid"]
-                            if first_co2_run_in_peak_loop:
-                                first_co2_run_in_peak_loop = False
-                                peak_reference = peak
-
-                            results_loop_to_save[(co2_reduction_factor, peak_reduction_factor)] = {
-                                "results": final_results,
-                                "co2": co2,
-                                "peak_reduction_factor": peak_reduction_factor,
-                                "totex": totex,
-                                "peak": peak,
-                                "time": time
-                            }
-                    print("FINISHED PEAK LOOP START SAVING")
-                    file_path = "4results_heat_grid_"+str(heat_grid_temperature)+"_"+str(ueu)+"_" + str(ev) +".pkl"
-                    if os.path.exists(file_path):
-                        # If the file exists, open it and load the data
-                        with open(file_path, "rb") as f:
-                            existing_results = pickle.load(f)
-                        print(f"Loaded existing results for {file_path}")
-
-                        # Now you can add more data to existing_results
-                        existing_results.update(results_loop_to_save)  # Example of adding new data
-
-                    else:
-                        # If the file doesn't exist, create it and save the results
-                        existing_results = results_loop_to_save
-                        print(f"New results created for {file_path}")
-
-                    # Save the updated or new results back to the pickle file
-                    with open(file_path, "wb") as f:
-                        pickle.dump(existing_results, f)
-            elif ref=="peak":
-                peak_reference = peak_reference_save
-                co2_reference = co2_reference_save
-                co2_reduction_factors_saver=co2_reduction_factors
-                peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
-                for peak_reduction_factor in peak_reduction_factors:
-                    first_peak_run_in_co2_loop = True
-                    co2_reduction_factors = co2_reduction_factors_saver
-
-                    peak_new = peak_reference * peak_reduction_factor
-
-                    print("START PEAK LOOP")
+            import numpy as np
+            co2_reduction_factors =  np.arange(1, 0.075, -0.08).tolist() # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+             #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2]
+            for ref in ["co2","peak"]:
+                if ref=="co2":
+                    peak_reference = peak_reference_save
+                    co2_reference = co2_reference_save
                     for co2_reduction_factor in co2_reduction_factors:
-                        print("co2_reduction_factor: "+str(co2_reduction_factor))
-                        print("peak_reduction_factor: " + str(peak_reduction_factor))
-                        if first_peak_run_in_co2_loop:
-                            co2_new =None
+                        first_co2_run_in_peak_loop = True
+                        peak_reduction_factors = [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+                        #peak_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
+
+                        if co2_reference > 0:
+                            co2_new = co2_reference * co2_reduction_factor
                         else:
-                            if co2_reference > 0:
-                                co2_new = co2_reference * co2_reduction_factor
+                            co2_new = co2_reference * (1+1-co2_reduction_factor)
+                        print("START PEAK LOOP")
+                        for peak_reduction_factor in peak_reduction_factors:
+                            print("co2_reduction_factor: "+str(co2_reduction_factor))
+                            print("peak_reduction_factor: " + str(peak_reduction_factor))
+                            if first_co2_run_in_peak_loop:
+                                peak_new =False
                             else:
-                                co2_new = co2_reference * (1 + 1 - co2_reduction_factor)
-                        final_results, co2,time  = run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence)
-                        if final_results is None:
-                            results_loop_to_save[(co2_reduction_factor, peak_reduction_factor,ref)] = {
-                                "results": None,
-                                "co2": None,
-                                "peak_reduction_factor": None,
-                                "refurbish": None,
-                                "totex": None,
-                                "peak": None,
-                                "time":None
-                            }
-                            if first_peak_run_in_co2_loop:
-                                first_peak_run_in_co2_loop = False
-                                co2_new =False
-                                co2_reference = co2_new
-                            break
+
+                                peak_new = peak_reference * peak_reduction_factor
+
+                            final_results, co2,time  = run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence)
+                            if final_results is None:
+                                results_loop_to_save[(co2_reduction_factor, peak_reduction_factor,ref)] = {
+                                    "results": None,
+                                    "co2": None,
+                                    "peak_reduction_factor": None,
+                                    "refurbish": None,
+                                    "totex": None,
+                                    "peak": None,
+                                    "time":None
+                                }
+                                if first_co2_run_in_peak_loop:
+                                    first_co2_run_in_peak_loop = False
+                                    peak =False
+                                    peak_reference = peak
+                                break
+                            else:
+                                peak_calculation_worked = True
+                                totex = final_results["totex"]
+                                peak = final_results["Electricity"]["peak_from_grid"]
+                                if first_co2_run_in_peak_loop:
+                                    first_co2_run_in_peak_loop = False
+                                    peak_reference = peak
+
+                                results_loop_to_save[(co2_reduction_factor, peak_reduction_factor)] = {
+                                    "results": final_results,
+                                    "co2": co2,
+                                    "peak_reduction_factor": peak_reduction_factor,
+                                    "totex": totex,
+                                    "peak": peak,
+                                    "time": time
+                                }
+                        print("FINISHED PEAK LOOP START SAVING")
+                        file_path = "results_heat_grid_"+str(heat_grid_temperature)+"_"+str(ueu)+"_" + str(ev) +"_"+str(name_of_scenario)+".pkl"
+                        if os.path.exists(file_path):
+                            # If the file exists, open it and load the data
+                            with open(file_path, "rb") as f:
+                                existing_results = pickle.load(f)
+                            print(f"Loaded existing results for {file_path}")
+
+                            # Now you can add more data to existing_results
+                            existing_results.update(results_loop_to_save)  # Example of adding new data
+
                         else:
-                            totex = final_results["totex"]
-                            peak = final_results["Electricity"]["peak_from_grid"]
+                            # If the file doesn't exist, create it and save the results
+                            existing_results = results_loop_to_save
+                            print(f"New results created for {file_path}")
+
+                        # Save the updated or new results back to the pickle file
+                        with open(file_path, "wb") as f:
+                            pickle.dump(existing_results, f)
+                elif ref=="peak":
+                    peak_reference = peak_reference_save
+                    co2_reference = co2_reference_save
+                    co2_reduction_factors_saver=co2_reduction_factors
+                    peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+                    for peak_reduction_factor in peak_reduction_factors:
+                        first_peak_run_in_co2_loop = True
+                        co2_reduction_factors = co2_reduction_factors_saver
+
+                        peak_new = peak_reference * peak_reduction_factor
+
+                        print("START PEAK LOOP")
+                        for co2_reduction_factor in co2_reduction_factors:
+                            print("co2_reduction_factor: "+str(co2_reduction_factor))
+                            print("peak_reduction_factor: " + str(peak_reduction_factor))
                             if first_peak_run_in_co2_loop:
-                                first_peak_run_in_co2_loop = False
-                                peak_reference = peak
+                                co2_new =None
+                            else:
+                                if co2_reference > 0:
+                                    co2_new = co2_reference * co2_reduction_factor
+                                else:
+                                    co2_new = co2_reference * (1 + 1 - co2_reduction_factor)
+                            final_results, co2,time  = run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence)
+                            if final_results is None:
+                                results_loop_to_save[(co2_reduction_factor, peak_reduction_factor,ref)] = {
+                                    "results": None,
+                                    "co2": None,
+                                    "peak_reduction_factor": None,
+                                    "refurbish": None,
+                                    "totex": None,
+                                    "peak": None,
+                                    "time":None
+                                }
+                                if first_peak_run_in_co2_loop:
+                                    first_peak_run_in_co2_loop = False
+                                    co2_new =False
+                                    co2_reference = co2_new
+                                break
+                            else:
+                                totex = final_results["totex"]
+                                peak = final_results["Electricity"]["peak_from_grid"]
+                                if first_peak_run_in_co2_loop:
+                                    first_peak_run_in_co2_loop = False
+                                    peak_reference = peak
 
-                            results_loop_to_save[(co2_reduction_factor, peak_reduction_factor,ref)] = {
-                                "results": final_results,
-                                "co2": co2,
-                                "peak_reduction_factor": peak_reduction_factor,
-                                "totex": totex,
-                                "peak": peak,
-                                "time": time
-                            }
-                    print("FINISHED PEAK LOOP START SAVING")
-                    file_path = "4results_heat_grid_" + str(heat_grid_temperature) + "_" + str(ueu) + "_" + str(
-                        ev) + ".pkl"
-                    if os.path.exists(file_path):
-                        # If the file exists, open it and load the data
-                        with open(file_path, "rb") as f:
-                            existing_results = pickle.load(f)
-                        print(f"Loaded existing results for {file_path}")
+                                results_loop_to_save[(co2_reduction_factor, peak_reduction_factor,ref)] = {
+                                    "results": final_results,
+                                    "co2": co2,
+                                    "peak_reduction_factor": peak_reduction_factor,
+                                    "totex": totex,
+                                    "peak": peak,
+                                    "time": time
+                                }
+                        print("FINISHED PEAK LOOP START SAVING")
+                        file_path = "results_heat_grid_" + str(heat_grid_temperature) + "_" + str(ueu) + "_" + str(
+                            ev) +"_"+str(name_of_scenario)+".pkl"
+                        if os.path.exists(file_path):
+                            # If the file exists, open it and load the data
+                            with open(file_path, "rb") as f:
+                                existing_results = pickle.load(f)
+                            print(f"Loaded existing results for {file_path}")
 
-                        # Now you can add more data to existing_results
-                        existing_results.update(results_loop_to_save)  # Example of adding new data
+                            # Now you can add more data to existing_results
+                            existing_results.update(results_loop_to_save)  # Example of adding new data
 
-                    else:
-                        # If the file doesn't exist, create it and save the results
-                        existing_results = results_loop_to_save
-                        print(f"New results created for {file_path}")
+                        else:
+                            # If the file doesn't exist, create it and save the results
+                            existing_results = results_loop_to_save
+                            print(f"New results created for {file_path}")
 
-                    # Save the updated or new results back to the pickle file
-                    with open(file_path, "wb") as f:
-                        pickle.dump(existing_results, f)
-    file_path = "4results_heat_grid_"+str(heat_grid_temperature)+"_"+str(ueu)+"_" + str(ev) +".pkl"
-    if os.path.exists(file_path):
-        # If the file exists, open it and load the data
-        with open(file_path, "rb") as f:
-            existing_results = pickle.load(f)
-        print(f"Loaded existing results for {file_path}")
+                        # Save the updated or new results back to the pickle file
+                        with open(file_path, "wb") as f:
+                            pickle.dump(existing_results, f)
+            file_path = "results_heat_grid_"+str(heat_grid_temperature)+"_"+str(ueu)+"_" + str(ev) +"_"+str(name_of_scenario)+".pkl"
+            if os.path.exists(file_path):
+                # If the file exists, open it and load the data
+                with open(file_path, "rb") as f:
+                    existing_results = pickle.load(f)
+                print(f"Loaded existing results for {file_path}")
 
-        # Now you can add more data to existing_results
-        existing_results.update(results_loop_to_save)  # Example of adding new data
+                # Now you can add more data to existing_results
+                existing_results.update(results_loop_to_save)  # Example of adding new data
 
-    else:
-        # If the file doesn't exist, create it and save the results
-        existing_results = results_loop_to_save
-        print(f"New results created for {file_path}")
+            else:
+                # If the file doesn't exist, create it and save the results
+                existing_results = results_loop_to_save
+                print(f"New results created for {file_path}")
 
-    # Save the updated or new results back to the pickle file
-    with open(file_path, "wb") as f:
-        pickle.dump(existing_results, f)
+            # Save the updated or new results back to the pickle file
+            with open(file_path, "wb") as f:
+                pickle.dump(existing_results, f)
 heat_grid_supply_temperatures =[40,50,60,70]  # Beispiel #"GEG_standard"
 def wrapper(args):
     rheat_grid_supply_temp = args
@@ -963,10 +1057,13 @@ def wrapper(args):
     except Exception as e:
         print(f"crashed: {rheat_grid_supply_temp} | {e}")
 if __name__ == "__main__":
-    import multiprocessing
-    import itertools
-    tasks = list(itertools.product(heat_grid_supply_temperatures))
-    # erzeugt alle Kombinationen [(refurbish1, building1), (refurbish1, building2), ...]
+    if False:
+        import multiprocessing
+        import itertools
+        tasks = list(itertools.product(heat_grid_supply_temperatures))
+        # erzeugt alle Kombinationen [(refurbish1, building1), (refurbish1, building2), ...]
 
-    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-        pool.map(wrapper, tasks)
+        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+            pool.map(wrapper, tasks)
+    else:
+        run_main(70)
