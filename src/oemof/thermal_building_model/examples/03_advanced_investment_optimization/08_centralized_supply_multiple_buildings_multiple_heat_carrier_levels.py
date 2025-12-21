@@ -1060,9 +1060,9 @@ if __name__ == "__main__":
     if True:
         import multiprocessing
         import itertools
-        tasks = list(itertools.product(heat_grid_supply_temperatures))
-        # erzeugt alle Kombinationen [(refurbish1, building1), (refurbish1, building2), ...]
 
+        tasks = heat_grid_supply_temperatures  # KEIN product, nur die Liste
+        print("tasks:", tasks)
         with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
             pool.map(wrapper, tasks)
     else:
