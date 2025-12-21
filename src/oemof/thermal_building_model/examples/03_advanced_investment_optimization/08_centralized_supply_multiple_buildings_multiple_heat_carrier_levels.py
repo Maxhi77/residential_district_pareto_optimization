@@ -1057,7 +1057,7 @@ def wrapper(args):
     except Exception as e:
         print(f"crashed: {rheat_grid_supply_temp} | {e}")
 if __name__ == "__main__":
-    if False:
+    if True:
         import multiprocessing
         import itertools
         tasks = list(itertools.product(heat_grid_supply_temperatures))
