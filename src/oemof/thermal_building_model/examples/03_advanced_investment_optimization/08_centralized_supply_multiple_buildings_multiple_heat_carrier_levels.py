@@ -455,7 +455,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
 
         model.solve(solver=solver, solve_kwargs={"tee": True},
-                                              cmdline_options={"mipgap": 0.005}
+                                              cmdline_options={"mipgap": 0.005,"threads":3}
         )
         meta_results = solph.processing.meta_results(model)
         results = solph.processing.results(model)
@@ -780,7 +780,7 @@ def run_main(heat_grid_temperature):
             matching_buildings_sfh=matching_buildings_sfh,
             matching_buildings_mfh=matching_buildings_mfh,
             refurbishments=["no_refurbishment", "usual_refurbishment", "advanced_refurbishment", "GEG_standard"],
-            n_random=6,
+            n_random=4,
             seed=42
         )
 
@@ -795,7 +795,11 @@ def run_main(heat_grid_temperature):
 
         print("Gespeichert:", path)
         print(f"Szenarien nach Dedup: {len(scenarios)}")
+        counter=True
         for scenario in scenarios:
+            if counter:
+                counter= False
+                continue
             name_of_scenario = scenario["name"]
             for index, building_row in sfh_cluster.iterrows():
                 refurbish = scenario["choice"][building_row["building_id"]]
@@ -1063,5 +1067,5 @@ if __name__ == "__main__":
     tasks = heat_grid_supply_temperatures  # [40, 50, 60, 70]
     print("tasks:", tasks)
 
-    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+    with multiprocessing.Pool()  as pool:
         pool.map(wrapper, tasks)
