@@ -972,14 +972,17 @@ if __name__ == "__main__":
     if True:
         import pickle
         building_in_cluster = []
+        base_path = os.path.dirname(os.path.abspath(__file__))
 
-        path_mfh = rf"C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\03_advanced_investment_optimization\{ueu}\mfh_cluster.pkl"
+        directory_path = os.path.join(base_path, ueu)
+        number_of_time_steps = 8760
+        path_mfh = os.path.join(base_path, ueu, 'mfh_cluster.pkl')
         with open(path_mfh, "rb") as f:
             data = pickle.load(f)
         for _, row in data.iterrows():
             building_in_cluster.append(row["building_id"])
 
-        path_sfh = rf"C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\03_advanced_investment_optimization\{ueu}\sfh_cluster.pkl"
+        path_sfh = os.path.join(base_path, ueu, 'sfh_cluster.pkl')
         with open(path_sfh, "rb") as f:
             data = pickle.load(f)
         for _, row in data.iterrows():
