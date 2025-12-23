@@ -641,9 +641,9 @@ def compute_co2_target(co2_ref, factor):
 def compute_peak_target(peak_ref, factor):
     return peak_ref * factor
 
-def run_main(refurbish,building_id_in_cluster):
+def run_main(refurbish,building_id_in_cluster,ueu):
     base_path = os.path.dirname(os.path.abspath(__file__))
-    ueu = "processed_bds_in_DENI03403000SEC5658"
+
     directory_path =os.path.join(base_path, ueu)
     number_of_time_steps = 8760
     sfh_cluster_path = os.path.join(base_path, ueu, 'sfh_cluster.pkl')
@@ -941,12 +941,14 @@ def wrapper(args):
     refubish, building_id_in_cluster = args
     try:
         print(f"start: {building_id_in_cluster} | {refubish}")
-        run_main(refubish, building_id_in_cluster)
+        run_main(refubish, building_id_in_cluster, ueu)
     except Exception as e:
         print(f"crashed: {building_id_in_cluster} | {refubish} | {e}")
 import multiprocessing
 import itertools
-
+'''
+first_cluster
+ueu = "processed_bds_in_DENI03403000SEC5658"
 building_in_cluster = [
     "DENILD1100004rD3",
     "DENILD1100004rNW",
@@ -958,15 +960,31 @@ building_in_cluster = [
     "DENILD1100004rSr",#mfh
     "DENILD1100004slM"#mfh
 ]
-
+'''
 refurbishment = [
     "no_refurbishment",
     "usual_refurbishment",
     "advanced_refurbishment",
     "GEG_standard"
 ]
+ueu = "processed_bds_in_DENI03403000SEC4580"
 if __name__ == "__main__":
     if True:
+        import pickle
+        building_in_cluster = []
+
+        path_mfh = rf"C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\03_advanced_investment_optimization\{ueu}\mfh_cluster.pkl"
+        with open(path_mfh, "rb") as f:
+            data = pickle.load(f)
+        for _, row in data.iterrows():
+            building_in_cluster.append(row["building_id"])
+
+        path_sfh = rf"C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\03_advanced_investment_optimization\{ueu}\sfh_cluster.pkl"
+        with open(path_sfh, "rb") as f:
+            data = pickle.load(f)
+        for _, row in data.iterrows():
+            building_in_cluster.append(row["building_id"])
+
         #add multiprocessing
         tasks = list(itertools.product(refurbishment, building_in_cluster))
         # erzeugt alle Kombinationen [(refurbish1, building1), (refurbish1, building2), ...]
