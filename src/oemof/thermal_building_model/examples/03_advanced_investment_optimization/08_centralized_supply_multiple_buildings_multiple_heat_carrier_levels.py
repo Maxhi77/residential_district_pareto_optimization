@@ -877,15 +877,32 @@ def run_main(heat_grid_temperature):
                 "co2": co2_ref,
                 "peak_reduction_factor" : peak_reduction_factor_ref,
                 "totex": final_results_ref["totex"],
-                "peak": final_results_ref["Electricity"]["peak_from_grid"],
+                "peak": max(final_results_ref["Electricity"]["peak_from_grid"],
+                                      final_results_ref["Electricity"]["peak_into_grid"]),
                 "time":time
 
             }
             co2_reference_save = co2_ref
-            peak_reference_save = final_results_ref["Electricity"]["peak_from_grid"]
-
-            import numpy as np
-            co2_reduction_factors =  np.arange(1, 0.075, -0.08).tolist() # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+            peak_reference_save = max(final_results_ref["Electricity"]["peak_from_grid"],
+                                      final_results_ref["Electricity"]["peak_into_grid"])
+            hp_power = 0
+            gas_heater_power = 0
+            if True:
+                building_id_in_cluster = "heat_grid"
+                for i in range(1, 2):
+                    hp_power += \
+                    final_results_ref[building_id_in_cluster]["hp_" + building_id_in_cluster + "_" + str(i)][
+                        "capacity"]
+                    gas_heater_power += \
+                        final_results_ref[building_id_in_cluster][
+                            "gas_heater_" + building_id_in_cluster + "_" + str(i)]["capacity"]
+                if hp_power >= gas_heater_power:
+                    step = 0.05
+                    co2_reduction_factors = [round(x, 3) for x in
+                                             [1 - i * step for i in range(int((1.0 - (-0.1)) / step) + 1)]]
+                else:
+                    co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2,
+                                             0.2, 0.1, 0.05, 0.01, -0.01, -0.05, -0.1] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
              #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2]
             for ref in ["co2","peak"]:
                 if ref=="co2":
@@ -893,7 +910,7 @@ def run_main(heat_grid_temperature):
                     co2_reference = co2_reference_save
                     for co2_reduction_factor in co2_reduction_factors:
                         first_co2_run_in_peak_loop = True
-                        peak_reduction_factors = [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+                        peak_reduction_factors = [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.01]
                         #peak_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
                         if co2_reference > 0:
@@ -929,7 +946,8 @@ def run_main(heat_grid_temperature):
                             else:
                                 peak_calculation_worked = True
                                 totex = final_results["totex"]
-                                peak = final_results["Electricity"]["peak_from_grid"]
+                                peak = max(final_results_ref["Electricity"]["peak_from_grid"],
+                                      final_results_ref["Electricity"]["peak_into_grid"])
                                 if first_co2_run_in_peak_loop:
                                     first_co2_run_in_peak_loop = False
                                     peak_reference = peak
@@ -965,7 +983,7 @@ def run_main(heat_grid_temperature):
                     peak_reference = peak_reference_save
                     co2_reference = co2_reference_save
                     co2_reduction_factors_saver=co2_reduction_factors
-                    peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+                    peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1,0.01]
                     for peak_reduction_factor in peak_reduction_factors:
                         first_peak_run_in_co2_loop = True
                         co2_reduction_factors = co2_reduction_factors_saver
@@ -1001,7 +1019,8 @@ def run_main(heat_grid_temperature):
                                 break
                             else:
                                 totex = final_results["totex"]
-                                peak = final_results["Electricity"]["peak_from_grid"]
+                                peak = max(final_results_ref["Electricity"]["peak_from_grid"],
+                                      final_results_ref["Electricity"]["peak_into_grid"])
                                 if first_peak_run_in_co2_loop:
                                     first_peak_run_in_co2_loop = False
                                     peak_reference = peak
