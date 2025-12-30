@@ -455,7 +455,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
 
         model.solve(solver=solver, solve_kwargs={"tee": True},
-                                              cmdline_options={"mipgap": 0.005,"threads":3}
+                                              cmdline_options={"mipgap": 0.005,"threads":SOLVER_THREADS}
         )
         meta_results = solph.processing.meta_results(model)
         results = solph.processing.results(model)
@@ -946,13 +946,13 @@ def run_main(heat_grid_temperature):
                             else:
                                 peak_calculation_worked = True
                                 totex = final_results["totex"]
-                                peak = max(final_results_ref["Electricity"]["peak_from_grid"],
-                                      final_results_ref["Electricity"]["peak_into_grid"])
+                                peak = max(final_results["Electricity"]["peak_from_grid"],
+                                      final_results["Electricity"]["peak_into_grid"])
                                 if first_co2_run_in_peak_loop:
                                     first_co2_run_in_peak_loop = False
                                     peak_reference = peak
 
-                                results_loop_to_save[(co2_reduction_factor, peak_reduction_factor)] = {
+                                results_loop_to_save[(co2_reduction_factor, peak_reduction_factor,ref)] = {
                                     "results": final_results,
                                     "co2": co2,
                                     "peak_reduction_factor": peak_reduction_factor,
@@ -1019,8 +1019,8 @@ def run_main(heat_grid_temperature):
                                 break
                             else:
                                 totex = final_results["totex"]
-                                peak = max(final_results_ref["Electricity"]["peak_from_grid"],
-                                      final_results_ref["Electricity"]["peak_into_grid"])
+                                peak = max(final_results["Electricity"]["peak_from_grid"],
+                                      final_results["Electricity"]["peak_into_grid"])
                                 if first_peak_run_in_co2_loop:
                                     first_peak_run_in_co2_loop = False
                                     peak_reference = peak
@@ -1073,18 +1073,20 @@ def run_main(heat_grid_temperature):
                 pickle.dump(existing_results, f)
 heat_grid_supply_temperatures = [40, 50, 60, 70]
 
+
+SOLVER_THREADS = 3
+import multiprocessing as mp
+
 def wrapper(heat_grid_temperature):
-    try:
-        print(f"start: {heat_grid_temperature}")
-        run_main(heat_grid_temperature)   # <-- jetzt int, kein list
-    except Exception as e:
-        print(f"crashed: {heat_grid_temperature} | {e}")
+    print(f"start: {heat_grid_temperature}")
+    run_main(heat_grid_temperature)
 
 if __name__ == "__main__":
-    import multiprocessing
+    n_cores = os.cpu_count() or 1
+    # so viele Prozesse, dass processes * threads <= cores
+    n_proc = max(1, n_cores // SOLVER_THREADS)
 
-    tasks = heat_grid_supply_temperatures  # [40, 50, 60, 70]
-    print("tasks:", tasks)
+    print("cores:", n_cores, "| processes:", n_proc, "| solver threads:", SOLVER_THREADS)
 
-    with multiprocessing.Pool()  as pool:
-        pool.map(wrapper, tasks)
+    with mp.Pool(processes=n_proc) as pool:
+        pool.map(wrapper, heat_grid_supply_temperatures)
