@@ -593,6 +593,7 @@ def check_possible_buildings_for_heat_grid_temp(building_row, building_type, epw
                               value.level_heating_demand <= heat_grid_temperature}
 
         if len(matching_buildings) == 0 and heat_grid_temperature ==40:
+            buildung_dict = {}
             building = ThermalBuilding(
                     name=f"building_{building_id}",
                     floor_area=building_floor_area,
@@ -627,7 +628,7 @@ def check_possible_buildings_for_heat_grid_temp(building_row, building_type, epw
         print(building_id)
         print(heat_grid_temperature)
 
-        assert matching_buildings, "Fehler: Es wurden keine Gebäudej gefunden, die den gewünschten Heizbedarf entsprechen."
+        #assert matching_buildings, "Fehler: Es wurden keine Gebäudej gefunden, die den gewünschten Heizbedarf entsprechen."
 
         min_capex_building = min(matching_buildings, key=lambda x: matching_buildings[x].capex_annuity)
 
@@ -635,14 +636,8 @@ def check_possible_buildings_for_heat_grid_temp(building_row, building_type, epw
         return matching_buildings
 
 
-def process_cluster(building_row, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,
+def process_cluster(building,building_id,building_row, epw_path,building_type, directory_path, data, number_of_time_steps,
                     data_classes_comp, ev, time_index):
-    building_id = building_row['building_id']
-    tabula_year_class = building_row['tabula_year_class']
-    building_floor_area = building_row['net_floor_area']
-    number_of_occupants = building_row['number_of_residents']
-    number_of_households = building_row['number_of_apartments']
-    number_of_buildings_in_cluster = building_row['buildings_in_cluster']
 
     # Zuordnung Baujahr
     year_map = {
@@ -650,7 +645,6 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
         5: 1960, 6: 1970, 7: 1980, 8: 1990,
         9: 2000, 10: 2005, 11: 2010, 12: 2020
     }
-    year_of_construction = year_map.get(tabula_year_class, 2000)  # fallback
 
     # Demands laden
     with open(os.path.join(directory_path, f"{building_id}_demand_{ev}.pkl"), "rb") as f:
@@ -664,19 +658,6 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
     # Datenklassen
     electricity_demand = ElectricityDemand(name=f"e_demand_{building_id}", value_list=demand_electricity)
     heat_demand = WarmWater(name=f"ww_demand_{building_id}", value_list=demand_warm_water, level=40)
-    building = ThermalBuilding(
-        name=f"building_{building_id}",
-        floor_area=building_floor_area,
-        number_of_occupants=number_of_occupants,
-        number_of_household=number_of_households,
-        country="DE",
-        construction_year=year_of_construction,
-        class_building="average",
-        building_type=building_type,
-        refurbishment_status=refurbish,
-        heat_level_calculation=True,
-        time_index=time_index,
-    )
 
     # PV-Ertrag pro Watt
     pv_yield_per_wp = simulate_pv_yield(
@@ -776,40 +757,38 @@ def run_main(heat_grid_temperature):
                 time_index=date_time_index,
                 heat_grid_temperature=heat_grid_temperature
             )
-        scenarios, buildings_all = build_scenarios(
+        scenarios, buildings_all, available_by_building = build_scenarios(
             matching_buildings_sfh=matching_buildings_sfh,
             matching_buildings_mfh=matching_buildings_mfh,
-            refurbishments=["no_refurbishment", "usual_refurbishment", "advanced_refurbishment", "GEG_standard"],
-            n_random=4,
-            seed=42
+            n_random=400,
+            seed=1,
         )
+        print(len(scenarios), scenarios[0]["name"], list(scenarios[0]["choice"].items())[:3])
 
         print(f"Szenarien vor Dedup: {len(scenarios)}")
 
         scenarios = remove_duplicate_scenarios(scenarios)
 
-        path = os.path.join("dec_optimizations_scenarios.pkl")
+        path = os.path.join("cen_optimizations_scenarios_"+str(heat_grid_temperature)+".pkl")
 
         with open(path, "wb") as f:
             pickle.dump(scenarios, f)
 
         print("Gespeichert:", path)
         print(f"Szenarien nach Dedup: {len(scenarios)}")
-        counter=True
         for scenario in scenarios:
-            if counter:
-                counter= False
-                continue
             name_of_scenario = scenario["name"]
             for index, building_row in sfh_cluster.iterrows():
                 refurbish = scenario["choice"][building_row["building_id"]]
+                building = buildings_all[building_row["building_id"]][refurbish]
                 data,data_classes_comp = process_cluster(
-                    building_row=building_row,
-                    building_type="SFH",
+                    building = building,
+                    building_id = building_row["building_id"],
+                    building_row = building_row,
+                    building_type = "SFH",
                     epw_path=epw_path,
                     directory_path=directory_path,
                     data=data,
-                    refurbish=refurbish,
                     number_of_time_steps=number_of_time_steps,
                     data_classes_comp = data_classes_comp,
                     ev=ev,
@@ -817,13 +796,15 @@ def run_main(heat_grid_temperature):
                 )
             for index, building_row in mfh_cluster.iterrows():
                 refurbish = scenario["choice"][building_row["building_id"]]
+                building = buildings_all[building_row["building_id"]][refurbish]
                 data,data_classes_comp = process_cluster(
+                    building=building,
+                    building_id=building_row["building_id"],
                     building_row=building_row,
                     building_type="MFH",
                     epw_path=epw_path,
                     directory_path=directory_path,
                     data=data,
-                    refurbish=refurbish,
                     number_of_time_steps=number_of_time_steps,
                     data_classes_comp = data_classes_comp,
                     ev =ev,
@@ -903,14 +884,15 @@ def run_main(heat_grid_temperature):
                 else:
                     co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2,
                                              0.2, 0.1, 0.05, 0.01, -0.01, -0.05, -0.1] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+            co2_reduction_factors=[1] #change
              #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2]
-            for ref in ["co2","peak"]:
+            for ref in ["co2"]: #change ["co2","peak"]
                 if ref=="co2":
                     peak_reference = peak_reference_save
                     co2_reference = co2_reference_save
                     for co2_reduction_factor in co2_reduction_factors:
                         first_co2_run_in_peak_loop = True
-                        peak_reduction_factors = [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.01]
+                        peak_reduction_factors = [1] #change [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.01]
                         #peak_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
                         if co2_reference > 0:
@@ -1071,7 +1053,7 @@ def run_main(heat_grid_temperature):
             # Save the updated or new results back to the pickle file
             with open(file_path, "wb") as f:
                 pickle.dump(existing_results, f)
-heat_grid_supply_temperatures = [40, 50, 60, 70]
+heat_grid_supply_temperatures = [40] #change
 
 
 SOLVER_THREADS = 3
