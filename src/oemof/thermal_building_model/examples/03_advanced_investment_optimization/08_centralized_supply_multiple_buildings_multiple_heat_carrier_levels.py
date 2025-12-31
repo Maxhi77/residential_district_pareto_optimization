@@ -1053,7 +1053,7 @@ def run_main(heat_grid_temperature):
             # Save the updated or new results back to the pickle file
             with open(file_path, "wb") as f:
                 pickle.dump(existing_results, f)
-heat_grid_supply_temperatures = [40] #change
+heat_grid_supply_temperatures = [40,50,60,70] #change
 
 
 SOLVER_THREADS = 3
