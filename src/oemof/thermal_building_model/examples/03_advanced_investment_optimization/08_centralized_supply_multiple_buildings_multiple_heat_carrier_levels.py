@@ -760,7 +760,7 @@ def run_main(heat_grid_temperature):
         scenarios, buildings_all, available_by_building = build_scenarios(
             matching_buildings_sfh=matching_buildings_sfh,
             matching_buildings_mfh=matching_buildings_mfh,
-            n_random=400,
+            n_random=4,
             seed=1,
         )
         print(len(scenarios), scenarios[0]["name"], list(scenarios[0]["choice"].items())[:3])
@@ -884,15 +884,14 @@ def run_main(heat_grid_temperature):
                 else:
                     co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2,
                                              0.2, 0.1, 0.05, 0.01, -0.01, -0.05, -0.1] # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
-            co2_reduction_factors=[1] #change
              #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2]
-            for ref in ["co2"]: #change ["co2","peak"]
+            for ref in ["co2","peak"]:
                 if ref=="co2":
                     peak_reference = peak_reference_save
                     co2_reference = co2_reference_save
                     for co2_reduction_factor in co2_reduction_factors:
                         first_co2_run_in_peak_loop = True
-                        peak_reduction_factors = [1] #change [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.01]
+                        peak_reduction_factors =  [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.01]
                         #peak_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
 
                         if co2_reference > 0:
@@ -1053,7 +1052,7 @@ def run_main(heat_grid_temperature):
             # Save the updated or new results back to the pickle file
             with open(file_path, "wb") as f:
                 pickle.dump(existing_results, f)
-heat_grid_supply_temperatures = [40,50,60,70] #change
+heat_grid_supply_temperatures = [40,50,60,70]
 
 
 SOLVER_THREADS = 3
