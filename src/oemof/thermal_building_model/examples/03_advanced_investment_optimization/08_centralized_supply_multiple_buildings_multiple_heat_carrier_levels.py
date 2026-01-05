@@ -576,7 +576,7 @@ def check_possible_buildings_for_heat_grid_temp(building_row, building_type, epw
         buildung_dict={}
 
         for refurbishment in ["no_refurbishment","usual_refurbishment","advanced_refurbishment","GEG_standard"]:
-            buildung_dict[refurbishment] = ThermalBuilding(
+            building_in_loop = ThermalBuilding(
                 name=f"building_{building_id}",
                 floor_area=building_floor_area,
                 number_of_occupants=number_of_occupants,
@@ -589,6 +589,9 @@ def check_possible_buildings_for_heat_grid_temp(building_row, building_type, epw
                 heat_level_calculation=True,
                 time_index=time_index,
             )
+            if building_in_loop.level_heating_demand < heat_grid_temperature:
+                building_in_loop.level_heating_demand = heat_grid_temperature
+            buildung_dict[refurbishment] = building_in_loop
         matching_buildings = {key: value for key, value in buildung_dict.items() if
                               value.level_heating_demand <= heat_grid_temperature}
 
