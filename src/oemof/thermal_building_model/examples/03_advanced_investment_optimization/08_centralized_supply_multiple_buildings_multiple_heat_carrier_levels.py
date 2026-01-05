@@ -789,6 +789,15 @@ def run_main(heat_grid_temperature):
             if counter:
                 counter=False
                 continue
+            location = calculate_gain_by_sun.Location(
+                epwfile_path=os.path.join(
+                    main_path,
+                    "thermal_building_model",
+                    "input",
+                    "weather_files",
+                    "03_HH_Hamburg-Fuhlsbuttel_TRY2035.csv",
+                ),
+            )
             data = pd.DataFrame()
             data["air_temperature"] = location.weather_data["drybulb_C"].to_list()
             date_time_index = solph.create_time_index(2025, number=number_of_time_steps - 1)
@@ -1073,10 +1082,30 @@ heat_grid_supply_temperatures = [40,50,60,70]
 
 SOLVER_THREADS = 3
 import multiprocessing as mp
+import os
+import traceback
+from datetime import datetime
+
+ERROR_DIR = "error_logs"
+os.makedirs(ERROR_DIR, exist_ok=True)
 
 def wrapper(heat_grid_temperature):
-    print(f"start: {heat_grid_temperature}")
-    run_main(heat_grid_temperature)
+    try:
+        print(f"start: {heat_grid_temperature}")
+        run_main(heat_grid_temperature)
+
+    except Exception as e:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"error_{heat_grid_temperature}_{timestamp}.txt"
+        path = os.path.join(ERROR_DIR, filename)
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(f"heat_grid_temperature: {heat_grid_temperature}\n")
+            f.write(f"exception: {repr(e)}\n\n")
+            f.write("traceback:\n")
+            f.write(traceback.format_exc())
+
+        print(f"[ERROR] Logged to {path}")
 
 if __name__ == "__main__":
     if True:
