@@ -707,7 +707,6 @@ def run_main(heat_grid_temperature):
     if True:
 
         main_path = get_project_root()
-        data = pd.DataFrame()
         data_classes_comp = pd.DataFrame()
         epw_path = os.path.join(
                 main_path,
@@ -725,7 +724,7 @@ def run_main(heat_grid_temperature):
                 "03_HH_Hamburg-Fuhlsbuttel_TRY2035.csv",
             ),
         )
-
+        data = pd.DataFrame()
         data["air_temperature"] = location.weather_data["drybulb_C"].to_list()
         date_time_index = solph.create_time_index(2025, number=number_of_time_steps - 1)
         data.index = date_time_index
@@ -743,6 +742,7 @@ def run_main(heat_grid_temperature):
                 time_index=date_time_index,
                 heat_grid_temperature=heat_grid_temperature
             )
+            break
         matching_buildings_mfh = {}
         for index, building_row in mfh_cluster.iterrows():
             matching_buildings_mfh[building_row.building_id] = check_possible_buildings_for_heat_grid_temp(
@@ -757,12 +757,22 @@ def run_main(heat_grid_temperature):
                 time_index=date_time_index,
                 heat_grid_temperature=heat_grid_temperature
             )
+            break
         scenarios, buildings_all, available_by_building = build_scenarios(
             matching_buildings_sfh=matching_buildings_sfh,
             matching_buildings_mfh=matching_buildings_mfh,
             n_random=4,
             seed=1,
         )
+        seen = set()
+        unique_scenarios = []
+        for scenario in scenarios:
+            # Convert choice dict to a hashable, order-independent representation
+            choice_signature = frozenset(scenario["choice"].items())
+            if choice_signature not in seen:
+                seen.add(choice_signature)
+                unique_scenarios.append(scenario)
+        scenarios = unique_scenarios
         print(len(scenarios), scenarios[0]["name"], list(scenarios[0]["choice"].items())[:3])
 
         print(f"Szenarien vor Dedup: {len(scenarios)}")
@@ -776,7 +786,15 @@ def run_main(heat_grid_temperature):
 
         print("Gespeichert:", path)
         print(f"Szenarien nach Dedup: {len(scenarios)}")
+        counter= True
         for scenario in scenarios:
+            if counter:
+                counter=False
+                continue
+            data = pd.DataFrame()
+            data["air_temperature"] = location.weather_data["drybulb_C"].to_list()
+            date_time_index = solph.create_time_index(2025, number=number_of_time_steps - 1)
+            data.index = date_time_index
             name_of_scenario = scenario["name"]
             for index, building_row in sfh_cluster.iterrows():
                 refurbish = scenario["choice"][building_row["building_id"]]
@@ -1063,11 +1081,13 @@ def wrapper(heat_grid_temperature):
     run_main(heat_grid_temperature)
 
 if __name__ == "__main__":
-    n_cores = os.cpu_count() or 1
-    # so viele Prozesse, dass processes * threads <= cores
-    n_proc = max(1, n_cores // SOLVER_THREADS)
+    run_main(50)
+    if False:
+        n_cores = os.cpu_count() or 1
+        # so viele Prozesse, dass processes * threads <= cores
+        n_proc = max(1, n_cores // SOLVER_THREADS)
 
-    print("cores:", n_cores, "| processes:", n_proc, "| solver threads:", SOLVER_THREADS)
+        print("cores:", n_cores, "| processes:", n_proc, "| solver threads:", SOLVER_THREADS)
 
-    with mp.Pool(processes=n_proc) as pool:
-        pool.map(wrapper, heat_grid_supply_temperatures)
+        with mp.Pool(processes=n_proc) as pool:
+            pool.map(wrapper, heat_grid_supply_temperatures)
