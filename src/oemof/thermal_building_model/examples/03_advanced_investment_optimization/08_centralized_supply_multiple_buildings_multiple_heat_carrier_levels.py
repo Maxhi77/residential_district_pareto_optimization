@@ -742,7 +742,6 @@ def run_main(heat_grid_temperature):
                 time_index=date_time_index,
                 heat_grid_temperature=heat_grid_temperature
             )
-            break
         matching_buildings_mfh = {}
         for index, building_row in mfh_cluster.iterrows():
             matching_buildings_mfh[building_row.building_id] = check_possible_buildings_for_heat_grid_temp(
@@ -757,7 +756,6 @@ def run_main(heat_grid_temperature):
                 time_index=date_time_index,
                 heat_grid_temperature=heat_grid_temperature
             )
-            break
         scenarios, buildings_all, available_by_building = build_scenarios(
             matching_buildings_sfh=matching_buildings_sfh,
             matching_buildings_mfh=matching_buildings_mfh,
@@ -1081,8 +1079,7 @@ def wrapper(heat_grid_temperature):
     run_main(heat_grid_temperature)
 
 if __name__ == "__main__":
-    run_main(50)
-    if False:
+    if True:
         n_cores = os.cpu_count() or 1
         # so viele Prozesse, dass processes * threads <= cores
         n_proc = max(1, n_cores // SOLVER_THREADS)
