@@ -453,10 +453,14 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         print("boundary peak:" + str(peak_new))
     try:
 
-
-        model.solve(solver=solver, solve_kwargs={"tee": True},
-                                              cmdline_options={"mipgap": 0.005,"threads":SOLVER_THREADS}
-        )
+        if False:
+            model.solve(solver=solver, solve_kwargs={"tee": True},
+                                                  cmdline_options={"mipgap": 0.005,"threads":SOLVER_THREADS}
+            )
+        else:
+            model.solve(solver=solver, solve_kwargs={"tee": True},
+                                                  cmdline_options={"mipgap": 0.005}
+            )
         meta_results = solph.processing.meta_results(model)
         results = solph.processing.results(model)
         final_results = {}
@@ -705,7 +709,6 @@ def run_main(heat_grid_temperature):
     with open(mfh_cluster_path, 'rb') as f:
         mfh_cluster = pickle.load(f)
     combined_cluster = pd.concat([sfh_cluster,mfh_cluster])
-    results_loop_to_save = {}
     ev = "no_EV"
     if True:
 
@@ -881,6 +884,8 @@ def run_main(heat_grid_temperature):
             final_results_ref, co2_ref, time = run_model(None, None,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence)
             co2_reduction_factor_ref = 1
             peak_reduction_factor_ref = 1
+            results_loop_to_save = {}
+
             results_loop_to_save[(co2_reduction_factor_ref, peak_reduction_factor_ref)] = {
                 "results": final_results_ref,
                 "co2": co2_ref,
@@ -919,8 +924,8 @@ def run_main(heat_grid_temperature):
                     co2_reference = co2_reference_save
                     for co2_reduction_factor in co2_reduction_factors:
                         first_co2_run_in_peak_loop = True
-                        peak_reduction_factors =  [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.01]
-                        #peak_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
+                        peak_reduction_factors =  [1,0.9]
+                        #peak_reduction_factors = [1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.01]
 
                         if co2_reference > 0:
                             co2_new = co2_reference * co2_reduction_factor
@@ -1084,6 +1089,7 @@ heat_grid_supply_temperatures = [40,50,60,70]
 
 
 SOLVER_THREADS = 3
+
 import multiprocessing as mp
 import os
 import traceback
