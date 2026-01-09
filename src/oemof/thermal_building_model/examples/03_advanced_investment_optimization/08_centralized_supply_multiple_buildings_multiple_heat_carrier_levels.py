@@ -271,7 +271,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         total_heat_demand_year_sum  += total_heat_demand_year[cluster].sum() * count
     heat_grid_investment = HeatGridInvestment(name="heat_grid_investment",
                                     heat_transfer_station_max_kW =heat_transfer_station_max_kW,
-                                    pipe_length_in_meter = 937.00,
+                                    pipe_length_in_meter = 2723,
                                     peak_load_in_kw = max(total_heat_demand_year),
                                     flow_temperature = heat_grid_temperature,
                                     total_heat_demand = total_heat_demand_year_sum,
@@ -699,7 +699,7 @@ def process_cluster(building,building_id,building_row, epw_path,building_type, d
 
 def run_main(heat_grid_temperature):
     base_path = os.path.dirname(os.path.abspath(__file__))
-    ueu = "processed_bds_in_DENI03403000SEC5658"
+    ueu = "processed_bds_in_DENI03403000SEC4580"
     directory_path =os.path.join(base_path, ueu)
     number_of_time_steps = 8760
     sfh_cluster_path = os.path.join(base_path, ueu, 'sfh_cluster.pkl')
@@ -916,6 +916,10 @@ def run_main(heat_grid_temperature):
                 if len(scenarios)>2:
                     co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2,
                                              0.2, 0.1, 0.05, 0.01, -0.01, -0.05, -0.1]
+                if heat_grid_temperature == 40:
+                    step = 0.025
+                    co2_reduction_factors = [round(x, 3) for x in
+                                             [1 - i * step for i in range(int((1.0 - (-0.1)) / step) + 1)]]
                 # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
              #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2]
             for ref in ["co2","peak"]:
