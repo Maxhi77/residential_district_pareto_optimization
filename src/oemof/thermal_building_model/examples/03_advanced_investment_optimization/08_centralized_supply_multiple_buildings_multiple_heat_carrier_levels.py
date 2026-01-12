@@ -271,7 +271,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         total_heat_demand_year_sum  += total_heat_demand_year[cluster].sum() * count
     heat_grid_investment = HeatGridInvestment(name="heat_grid_investment",
                                     heat_transfer_station_max_kW =heat_transfer_station_max_kW,
-                                    pipe_length_in_meter = 2723,
+                                    pipe_length_in_meter = 890.3,
                                     peak_load_in_kw = max(total_heat_demand_year),
                                     flow_temperature = heat_grid_temperature,
                                     total_heat_demand = total_heat_demand_year_sum,
@@ -699,7 +699,7 @@ def process_cluster(building,building_id,building_row, epw_path,building_type, d
 
 def run_main(heat_grid_temperature):
     base_path = os.path.dirname(os.path.abspath(__file__))
-    ueu = "processed_bds_in_DENI03403000SEC4580"
+    ueu = "processed_bds_in_DENI03403000SEC5101"
     directory_path =os.path.join(base_path, ueu)
     number_of_time_steps = 8760
     sfh_cluster_path = os.path.join(base_path, ueu, 'sfh_cluster.pkl')
