@@ -86,7 +86,7 @@ import pickle
 from pathlib import Path
 
 
-def load_data(refurbishment_strategies, buildings_in_ueu,ueu,base_dir=None,scale_up_to_building_in_cluster=False):
+def load_data(refurbishment_strategies, building_in_cluster,ueu,base_dir=None,scale_up_to_building_in_cluster=False):
     if base_dir is None:
         base_dir = Path.cwd()
     else:
@@ -97,7 +97,7 @@ def load_data(refurbishment_strategies, buildings_in_ueu,ueu,base_dir=None,scale
     building_dict = {}
 
 
-    for building in buildings_in_ueu:
+    for building in building_in_cluster:
         building_dict[building] = {}
         for refurbishment in refurbishment_strategies:
             file_name = f"results_dec_processed_bds_in_{ueu}_{refurbishment}_no_EV_{building}.pkl"
@@ -231,8 +231,8 @@ for ueu in ueus :
         with open(f"cen_processed_"+str(today_date)+"_combined_front_of_"+str(ueu.removeprefix("processed_bds_in_"))+".pkl", "wb") as f:  # "wb" = write binary
             pickle.dump([building_dict, building_dict, combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
     else:
-        for building in buildings_in_ueu:
-            building_dict = load_data(refurbishment_strategies,buildings_in_ueu,ueu.removeprefix("processed_bds_in_"),None,False)
+        for building in building_in_cluster:
+            building_dict = load_data(refurbishment_strategies,building_in_cluster,ueu.removeprefix("processed_bds_in_"),None,False)
             print("finished loadding")
             with open(f"dec_processed_"+str(today_date)+"_results_of_"+str(ueu.removeprefix("processed_bds_in_"))+".pkl", "wb") as f:   # "wb" = write binary
                 pickle.dump(building_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
