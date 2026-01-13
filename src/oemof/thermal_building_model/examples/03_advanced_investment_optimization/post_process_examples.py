@@ -8,9 +8,9 @@ from typing import Dict, Any, Iterable, List, Tuple, Optional
 import math
 import pickle
 from pathlib import Path
-Number = float
 from datetime import date
 import pandas as pd
+import os
 from pareto_optimal_help_functions import combine_all_buildings
 def remove_series(obj):
     if isinstance(obj, dict):
@@ -204,7 +204,7 @@ refurbishment_strategies = ["no_refurbishment", "usual_refurbishment", "advanced
 optimization_variables = ["co2","peak"]
 today_date = date.today().strftime("%Y_%m_%d")
 heat_grid_supply_temperatures = [50,60,70,80]
-for ueu in ueues :
+for ueu in ueus :
     building_in_cluster = []
     base_path = os.path.dirname(os.path.abspath(__file__))
 
