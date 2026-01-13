@@ -254,7 +254,7 @@ for ueu in ueues :
                 scales_merge=(1.0, 1.0, 1.0),
                 max_points_after_each_merge=12000
             )
-            with open(f"dec_processed_"+str(today_date)+"_combined_front_of_DENI03403000SEC5658.pkl", "wb") as f:   # "wb" = write binary
+            with open(f"dec_processed_"+str(today_date)+"_combined_front_of_"+str(ueu.removeprefix("processed_bds_in_"))+".pkl", "wb") as f:   # "wb" = write binary
                 pickle.dump([building_dict,per_bldg,combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
