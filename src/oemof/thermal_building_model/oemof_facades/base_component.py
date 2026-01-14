@@ -2,6 +2,9 @@ from dataclasses import dataclass
 from oemof.tools import economics
 from typing import Optional
 
+OBSERVATION_PERIOD = 20
+INTEREST_RATE =0.03
+
 @dataclass(kw_only=True)
 class PhysicalBaseUnit:
     Watts: float=1
@@ -20,7 +23,7 @@ class BaseComponent:
 @dataclass(kw_only=True)
 class TimeConfiguration:
     lifetime: float
-    observation_period: float = 20
+    observation_period: float = OBSERVATION_PERIOD
     multiperiod: bool = True
 @dataclass
 class InvestmentComponents(TimeConfiguration):
@@ -31,7 +34,7 @@ class InvestmentComponents(TimeConfiguration):
     co2_offset: float = 0
     operational_cost_relative_to_capacity: float = 0
     minimum_capacity: float = 0
-    wacc: float = 0.03
+    wacc: float = INTEREST_RATE
     reference_unit_quantity: int = 1
     def __post_init__(self):
         self.cost_offset =self.calculate_epc(capex=self.cost_offset)
@@ -72,12 +75,40 @@ class EconomicsInvestmentRefurbishment(TimeConfiguration):
         return economics.annuity(capex=capex, n=self.observation_period, u=self.lifetime, wacc=self.wacc)
 
 @dataclass(kw_only=True)
-@dataclass
 class GridComponents:
     working_rate: float
     revenue: float
     price_change_factor: float
     co2_per_flow: float
+    interest: float = INTEREST_RATE
+    observation_period: float = OBSERVATION_PERIOD
+    def discounted_average(
+        self,
+    ) -> "GridComponents":
+        """
+        Returns a new GridComponents instance where the working_rate
+        is replaced by a discounted-equivalent constant average price.
+
+        The undiscounted sum over `years` equals the discounted sum
+        of the original working_rate.
+        """
+        r = self.interest
+        if self.observation_period <= 0:
+            return self
+
+        discount_sum = sum(
+            1.0 / (1.0 + r) ** t
+            for t in range(1, self.observation_period + 1)
+        )
+
+        p_eq = self.working_rate * discount_sum / self.observation_period
+
+        return GridComponents(
+            working_rate=p_eq,
+            revenue=self.revenue,
+            price_change_factor=0.0,  # growth absorbed
+            co2_per_flow=self.co2_per_flow,
+        )
 
 
 
