@@ -153,7 +153,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
     for key, config in hot_water_tank_config.items():
         hot_water_tank_config_building = copy.deepcopy(config)
-        hot_water_tank_config_building.maximum_capacity =max(1 * annual_heat_demand_peak,31)
+        hot_water_tank_config_building.maximum_capacity =max(0.9 * annual_heat_demand_peak,31)
         hot_water_tank_input_bus = solph.buses.Bus(label=f"tank_input_bus_{building_id}_{key}")
         hot_water_tank_output_bus = solph.buses.Bus(label=f"tank_output_bus_{building_id}_{key}")
         if False:
