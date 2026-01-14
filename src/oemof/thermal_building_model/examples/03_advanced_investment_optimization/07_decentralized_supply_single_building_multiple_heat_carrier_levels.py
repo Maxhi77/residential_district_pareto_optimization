@@ -196,12 +196,13 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
                 print(building_id)
                 hot_water_tank_config_building = copy.deepcopy(config)
                 if True:
+                    liter_storage_per_heating_demand = 0.5 * dataclasses[building_id]["max_required_heating"]
                     if data_classes_comp[building_id]["building_type"] == "SFH":
-                        if hot_water_tank_config_building.maximum_capacity >30:
-                            hot_water_tank_config_building.maximum_capacity = 30
+                        if hot_water_tank_config_building.maximum_capacity >1:
+                            hot_water_tank_config_building.maximum_capacity = 0.25 * dataclasses[building_id]["max_required_heating"]
                     elif data_classes_comp[building_id]["building_type"] == "MFH":
-                        if hot_water_tank_config_building.maximum_capacity > 80:
-                            hot_water_tank_config_building.maximum_capacity = 80
+                        if hot_water_tank_config_building.maximum_capacity > 1:
+                            hot_water_tank_config_building.maximum_capacity = 0.4 * dataclasses[building_id]["max_required_heating"]
 
                 hot_water_tank_config_building.set_reference_unit_quantity(reference_unit_quantity=building_in_cluster)
                 hot_water_tank_input_bus = solph.buses.Bus(label=f"tank_input_bus_{building_id}_{key}")
@@ -643,8 +644,8 @@ def compute_peak_target(peak_ref, factor):
 
 def run_main(refurbish,building_id_in_cluster,ueu):
     base_path = os.path.dirname(os.path.abspath(__file__))
-
     directory_path =os.path.join(base_path, ueu)
+
     number_of_time_steps = 8760
     sfh_cluster_path = os.path.join(base_path, ueu, 'sfh_cluster.pkl')
     with open(sfh_cluster_path, 'rb') as f:
@@ -967,13 +968,12 @@ refurbishment = [
     "advanced_refurbishment",
     "GEG_standard"
 ]
-ueu = "processed_bds_in_DENI03403000SEC5101"
+ueu = "processed_bds_in_DENI03403000SEC5658"
 if __name__ == "__main__":
-    if True:
+    if False:
         import pickle
         building_in_cluster = []
         base_path = os.path.dirname(os.path.abspath(__file__))
-
         directory_path = os.path.join(base_path, ueu)
         number_of_time_steps = 8760
         path_mfh = os.path.join(base_path, ueu, 'mfh_cluster.pkl')
@@ -995,4 +995,4 @@ if __name__ == "__main__":
         with multiprocessing.Pool(processes=max(1, multiprocessing.cpu_count() // 2) ) as pool:
             pool.map(wrapper, tasks)
     else:
-        run_main("no_refurbishment", "DENILD1100004s6k")
+        run_main("no_refurbishment", "DENILD1100004s6k",ueu)

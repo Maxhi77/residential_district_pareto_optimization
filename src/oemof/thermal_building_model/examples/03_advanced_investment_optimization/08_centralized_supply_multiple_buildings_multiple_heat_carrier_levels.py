@@ -56,7 +56,30 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
     dataclasses[building_id]={}
     components[building_id]={}
 
+    total_heat_demand_year=None
+    heat_transfer_station_max_kW = []
+    for index, row in combined_cluster.iterrows():
 
+        building_id = row['building_id']
+        buildings_in_cluster = row['buildings_in_cluster']
+        total_heat_demand_year_per_building = (data["ww_demand_" + str(building_id)]+ data["building_" + str(building_id)]) * buildings_in_cluster
+        heat_transfer_station_max_kW.append((max(total_heat_demand_year_per_building),buildings_in_cluster))
+
+        if total_heat_demand_year is None:
+            total_heat_demand_year =  total_heat_demand_year_per_building
+        else:
+            total_heat_demand_year = total_heat_demand_year + total_heat_demand_year_per_building
+
+    demand = 0
+
+    fictional_heat_grid_demand= data["ww_demand_" + str(building_id)]
+    fictional_heat_grid_demand[:]= 1
+    total_heat_demand_year_sum=0
+    annual_heat_demand_peak = max(total_heat_demand_year_per_building)
+    for cluster, count in cluster_occurence.items():
+        # Hole den entsprechenden WW-Demand aus 'data' für das Cluster (erste Zahl in cluster_order entspricht dem Cluster)
+        demand = demand + fictional_heat_grid_demand[cluster].sum() * count
+        total_heat_demand_year_sum  += total_heat_demand_year[cluster].sum() * count
 
     if peak_new is False or None:
         electricity_grid_dataclass = ElectricityGrid()
@@ -130,7 +153,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
     for key, config in hot_water_tank_config.items():
         hot_water_tank_config_building = copy.deepcopy(config)
-
+        hot_water_tank_config_building.maximum_capacity =max(1 * annual_heat_demand_peak,31)
         hot_water_tank_input_bus = solph.buses.Bus(label=f"tank_input_bus_{building_id}_{key}")
         hot_water_tank_output_bus = solph.buses.Bus(label=f"tank_output_bus_{building_id}_{key}")
         if False:
@@ -247,28 +270,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         dataclasses[building_id]["battery_dataclass_"+str(key)] = battery_dataclass
         components[building_id]["battery_"+str(key)] = battery
 
-    total_heat_demand_year=None
-    heat_transfer_station_max_kW = []
-    for index, row in combined_cluster.iterrows():
 
-        building_id = row['building_id']
-        buildings_in_cluster = row['buildings_in_cluster']
-        total_heat_demand_year_per_building = (data["ww_demand_" + str(building_id)]+ data["building_" + str(building_id)]) * buildings_in_cluster
-        heat_transfer_station_max_kW.append((max(total_heat_demand_year_per_building),buildings_in_cluster))
-
-        if total_heat_demand_year is None:
-            total_heat_demand_year =  total_heat_demand_year_per_building
-        else:
-            total_heat_demand_year = total_heat_demand_year + total_heat_demand_year_per_building
-    demand = 0
-
-    fictional_heat_grid_demand= data["ww_demand_" + str(building_id)]
-    fictional_heat_grid_demand[:]= 1
-    total_heat_demand_year_sum=0
-    for cluster, count in cluster_occurence.items():
-        # Hole den entsprechenden WW-Demand aus 'data' für das Cluster (erste Zahl in cluster_order entspricht dem Cluster)
-        demand = demand + fictional_heat_grid_demand[cluster].sum() * count
-        total_heat_demand_year_sum  += total_heat_demand_year[cluster].sum() * count
     heat_grid_investment = HeatGridInvestment(name="heat_grid_investment",
                                     heat_transfer_station_max_kW =heat_transfer_station_max_kW,
                                     pipe_length_in_meter = 890.3,
