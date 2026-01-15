@@ -33,7 +33,7 @@ import tsam.timeseriesaggregation as tsam
 
 import pandas as pd
 #  create solver
-def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster, building_id_in_cluster,cluster_occurence):
+def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster, building_id_in_cluster,cluster_occurence,heat_demand_worst_case):
 
     solver = "gurobi"
     es = solph.EnergySystem(
@@ -196,13 +196,12 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
                 print(building_id)
                 hot_water_tank_config_building = copy.deepcopy(config)
                 if True:
-                    liter_storage_per_heating_demand = 0.5 * dataclasses[building_id]["max_required_heating"]
                     if data_classes_comp[building_id]["building_type"] == "SFH":
                         if hot_water_tank_config_building.maximum_capacity >1:
-                            hot_water_tank_config_building.maximum_capacity = 0.2 * dataclasses[building_id]["max_required_heating"]
+                            hot_water_tank_config_building.maximum_capacity = 0.17 * heat_demand_worst_case
                     elif data_classes_comp[building_id]["building_type"] == "MFH":
                         if hot_water_tank_config_building.maximum_capacity > 1:
-                            hot_water_tank_config_building.maximum_capacity = 0.35 * dataclasses[building_id]["max_required_heating"]
+                            hot_water_tank_config_building.maximum_capacity = 0.2 * heat_demand_worst_case
 
                 hot_water_tank_config_building.set_reference_unit_quantity(reference_unit_quantity=building_in_cluster)
                 hot_water_tank_input_bus = solph.buses.Bus(label=f"tank_input_bus_{building_id}_{key}")
@@ -368,11 +367,15 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
                 pv_dataclass.value_list = data["pv_system_" + str(building_id)+"_"+str(key)]
 
                 pv_dataclass.update_maximum_investment_pv_capacity_based_on_area(area = building_dataclass.get_roof_area_for_pv())
-                pv_system = pv_dataclass.create_source(output_bus = electricity_carrier_bus_building)
+                pv_bus = pv_dataclass.get_bus()
+                pv_system = pv_dataclass.create_source()
+                pv_system_curtailment_capable = pv_dataclass.create_sink()
+                connect_buses(input = pv_bus, target = electricity_carrier_bus_building)
 
                 dataclasses[building_id]["pv_dataclass_"+str(key)] = pv_dataclass
                 components[building_id]["pv_system_"+str(key)] = pv_system
-
+                components[building_id]["pv_system_curtailment_capable_" + str(key)] = pv_system_curtailment_capable
+                components[building_id]["pv_bus_" + str(key)] = pv_bus
     for building_id, building_data in components.items():
         # Ensure we're processing the components for the current building
         for oemof_comp, comp_value in building_data.items():
@@ -465,7 +468,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
             final_results[building_id] = {}
             if True:
                 for key,_ in pv_system_config.items():
-                    final_results[building_id][dataclasses[building_id]["pv_dataclass_"+str(key)].name] = dataclasses[building_id]["pv_dataclass_"+str(key)].post_process(results,components[building_id]["pv_system_"+str(key)])
+                    final_results[building_id][dataclasses[building_id]["pv_dataclass_"+str(key)].name] = dataclasses[building_id]["pv_dataclass_"+str(key)].post_process(results,components[building_id]["pv_system_"+str(key)],components[building_id]["pv_system_curtailment_capable_"+str(key)])
             if True:
                 for key,_ in hot_water_tank_config.items():
                     final_results[building_id][dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)].name] = dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)].post_process(results,components[building_id]["hot_water_tank_"+str(key)])
@@ -600,6 +603,20 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
             time_index=time_index,
         )
 
+        heat_demand_worst_case_building = ThermalBuilding(
+            name=f"building_{building_id}",
+            floor_area=building_floor_area,
+            number_of_occupants=number_of_occupants,
+            number_of_household=number_of_households,
+            country="DE",
+            construction_year=year_of_construction,
+            class_building="average",
+            building_type=building_type,
+            refurbishment_status="no_refurbishment",
+            heat_level_calculation=True,
+            time_index=time_index,
+        )
+        heat_demand_worst_case = max(heat_demand_worst_case_building.value_list) + max(heat_demand.value_list)
         # PV-Ertrag pro Watt
         pv_yield_per_wp = simulate_pv_yield(
             pv_nominal_power_in_watt=1,
@@ -630,7 +647,7 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
                                           "building":building,
                                           "heat_demand":heat_demand,
                                           "building_type":building_type}
-        return data, data_classes_comp
+        return data, data_classes_comp, heat_demand_worst_case
 
 def compute_co2_target(co2_ref, factor):
     # preserves your original handling of negative references
@@ -683,7 +700,7 @@ def run_main(refurbish,building_id_in_cluster,ueu):
         data.index = date_time_index
         for index, building_row in sfh_cluster.iterrows():
             if building_id_in_cluster == building_row["building_id"]:
-                data,data_classes_comp = process_cluster(
+                data,data_classes_comp,heat_demand_worst_case = process_cluster(
                     building_row=building_row,
                     building_type="SFH",
                     epw_path=epw_path,
@@ -697,7 +714,7 @@ def run_main(refurbish,building_id_in_cluster,ueu):
                 )
         for index, building_row in mfh_cluster.iterrows():
             if building_id_in_cluster == building_row["building_id"]:
-                data,data_classes_comp = process_cluster(
+                data,data_classes_comp,heat_demand_worst_case = process_cluster(
                     building_row=building_row,
                     building_type="MFH",
                     epw_path=epw_path,
@@ -729,7 +746,7 @@ def run_main(refurbish,building_id_in_cluster,ueu):
         )
 
 
-        final_results_ref, co2_ref, time = run_model(None, None,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,building_id_in_cluster,cluster_occurence)
+        final_results_ref, co2_ref, time = run_model(None, None,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,building_id_in_cluster,cluster_occurence,heat_demand_worst_case)
         co2_reduction_factor_ref = 1
         peak_reduction_factor_ref = 1
         results_loop_to_save[(co2_reduction_factor_ref, peak_reduction_factor_ref,refurbish)] = {
@@ -761,7 +778,8 @@ def run_main(refurbish,building_id_in_cluster,ueu):
                 co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3,0.2,
                                          0.2, 0.1, 0.05, 0.01, -0.01, -0.05, -0.1]
          #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05]
-        for ref in ["co2","peak"]:
+        ref_list = ["co2"] #ref_list
+        for ref in ref_list:
             if ref=="co2":
                 peak_reference = peak_reference_save
                 co2_reference = co2_reference_save
@@ -785,7 +803,7 @@ def run_main(refurbish,building_id_in_cluster,ueu):
 
                             peak_new = peak_reference * peak_reduction_factor
 
-                        final_results, co2, time  = run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,building_id_in_cluster,cluster_occurence)
+                        final_results, co2, time  = run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,building_id_in_cluster,cluster_occurence,heat_demand_worst_case)
                         if final_results is None:
                             results_loop_to_save[(co2_reduction_factor, peak_reduction_factor, refurbish,ref)] = {
                                 "results": None,
@@ -863,7 +881,7 @@ def run_main(refurbish,building_id_in_cluster,ueu):
                             else:
                                 co2_new = co2_reference * (1 + 1 - co2_reduction_factor)
 
-                        final_results, co2, time  = run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,building_id_in_cluster,cluster_occurence)
+                        final_results, co2, time  = run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,building_id_in_cluster,cluster_occurence,heat_demand_worst_case)
                         if final_results is None:
                             results_loop_to_save[(co2_reduction_factor, peak_reduction_factor, refurbish,ref)] = {
                                 "results": None,
@@ -971,7 +989,7 @@ refurbishment = [
 ueus = ["processed_bds_in_DENI03403000SEC5658","processed_bds_in_DENI03403000SEC4580","processed_bds_in_DENI03403000SEC5101"]
 if __name__ == "__main__":
     for ueu in ueus:
-        if True:
+        if False:
             import pickle
             building_in_cluster = []
             base_path = os.path.dirname(os.path.abspath(__file__))

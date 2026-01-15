@@ -1,4 +1,6 @@
 from oemof.thermal_building_model.oemof_facades.base_component import BaseComponent, InvestmentComponents, PhysicalBaseUnit
+from oemof.thermal_building_model.oemof_facades.helper_functions import connect_buses
+
 from typing import Optional, List
 from oemof import solph
 from oemof.network import Bus
@@ -15,16 +17,18 @@ class RenewableEnergySource(BaseComponent):
     investment_component: Optional[InvestmentComponents] = None
     value_list : Optional[List[float]] = None
 
+    def get_bus(self):
+        self.bus = solph.buses.Bus(label=f"b_{self.name.lower()}")
+        return self.bus
     def create_source(self, output_bus: Optional[Bus] = None):
         """Creates a solph source with working_rate as variable cost and demand_rate added."""
         self.oemof_component_name = f"{self.name.lower()}_source"
-        self.output_bus = output_bus
         if self.investment:
             epc = self.investment_component.cost_per_unit   # Get EPC from economics model
             print("pv_system:"+str(epc))
             return solph.components.Source(
                 label=self.oemof_component_name ,
-                outputs={output_bus: solph.Flow(
+                outputs={self.bus: solph.Flow(
                     fix = self.value_list,
                     nominal_value= solph.Investment(ep_costs=epc,
                                                     maximum=self.investment_component.maximum_capacity,
@@ -49,34 +53,46 @@ class RenewableEnergySource(BaseComponent):
             return solph.components.Source(
                 label=self.oemof_component_name ,
                 outputs={
-                    output_bus: solph.Flow(
+                    self.bus: solph.Flow(
                         fix=self.value_list,
                         nominal_value=self.nominal_power,
                     )
                 }
             )
 
-    def post_process(self,results,component):
+    def create_sink(self) -> solph.components.Sink:
+        """Creates a solph sink with revenue as variable cost."""
+        self.name_sink = f"{self.name.lower()}_curtailment_capable"
+        return solph.components.Sink(
+            label=self.name_sink,
+            inputs={self.bus: solph.Flow()},
+        )
+
+    def post_process(self,results,component,sink):
         capacity, invest_status = self.get_capacity(results,component)
         investment_cost = self.get_investment_cost(capacity,invest_status)
         investment_co2 = self.get_investment_co2(capacity,invest_status)
-        flow_from_grid = self.get_flow_from_grid(results,component)
+        flow_from_grid_produced = self.get_flow_from_grid(results,component)
+        flow_from_grid_curtailment = self.get_flow_from_grid_curtailment(results, sink)
+        flow_from_grid_used = flow_from_grid_produced - flow_from_grid_curtailment
         return {"capacity":capacity,
                 "investment_cost":investment_cost,
                 "investment_co2":investment_co2,
-                "flow_from_grid":flow_from_grid,
-                "sum":flow_from_grid.sum()}
+                "flow_from_grid_produced":flow_from_grid_produced,
+                "flow_from_grid_curtailment": flow_from_grid_curtailment,
+                "flow_from_grid_used": flow_from_grid_used,
+                "sum":flow_from_grid_used.sum()}
 
     def get_capacity(self,results, component):
         if self.investment:
             if self.investment_component.multiperiod:
-                return (results[component, self.output_bus]["period_scalars"]["invest"].sum(),1 if results[component, self.output_bus]["period_scalars"]["invest"].sum()>0 else 0)
+                return (results[component, self.bus]["period_scalars"]["invest"].sum(),1 if results[component, self.bus]["period_scalars"]["invest"].sum()>0 else 0)
             else:
-                return (solph.views.node(results, self.output_bus)[
-                    "scalars"][ ((component, self.output_bus), "invest")],
-                        solph.views.node(results, self.output_bus)["scalars"].get(((component, self.output_bus), "invest_status"), 0))
+                return (solph.views.node(results, self.bus)[
+                    "scalars"][ ((component, self.bus), "invest")],
+                        solph.views.node(results, self.bus)["scalars"].get(((component, self.bus), "invest_status"), 0))
         else:
-            return component.outputs[self.output_bus].nominal_capacity,0
+            return component.outputs[self.bus].nominal_capacity,0
 
     def get_investment_cost(self,capacity,invest_status):
         if self.investment:
@@ -93,8 +109,9 @@ class RenewableEnergySource(BaseComponent):
         else:
             return 0
     def get_flow_from_grid(self,results,component):
-        return results[component, self.output_bus]["sequences"]["flow"]
-
+        return results[component, self.bus]["sequences"]["flow"]
+    def get_flow_from_grid_curtailment(self,results,component):
+        return results[self.bus, component]["sequences"]["flow"]
 @dataclass
 class PVSystem(RenewableEnergySource):
     name: str = "PVSystem"
