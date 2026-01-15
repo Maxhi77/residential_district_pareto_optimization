@@ -989,7 +989,7 @@ refurbishment = [
 ueus = ["processed_bds_in_DENI03403000SEC5658","processed_bds_in_DENI03403000SEC4580","processed_bds_in_DENI03403000SEC5101"]
 if __name__ == "__main__":
     for ueu in ueus:
-        if False:
+        if True:
             import pickle
             building_in_cluster = []
             base_path = os.path.dirname(os.path.abspath(__file__))
