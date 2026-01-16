@@ -87,8 +87,7 @@ from pathlib import Path
 
 
 def load_data(result_path,refurbishment_strategies, building_in_cluster,ueu,base_dir=None,scale_up_to_building_in_cluster=False,optimization_strategies =["co2","peak"]):
-
-    base_dir = result_path
+    base_dir = Path(result_path)
 
     print("Arbeitsverzeichnis:", base_dir)
     connection_setup = ["uncon"]
