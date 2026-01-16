@@ -242,28 +242,27 @@ for ueu in ueus :
         with open(f"cen_processed_"+str(today_date)+"_combined_front_of_"+str(ueu.removeprefix("processed_bds_in_"))+".pkl", "wb") as f:  # "wb" = write binary
             pickle.dump([building_dict, building_dict, combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
     else:
-        for building in building_in_cluster:
-            building_dict = load_data(result_path,refurbishment_strategies,building_in_cluster,ueu.removeprefix("processed_bds_in_"),None,False,optimization_strategies)
-            print("finished loadding")
-            with open(f"dec_processed_"+str(today_date)+"_results_of_"+str(ueu.removeprefix("processed_bds_in_"))+".pkl", "wb") as f:   # "wb" = write binary
-                pickle.dump(building_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
-            variable_to_iterate = refurbishment_strategies
-            pareto_front_per_building = {}
+        building_dict = load_data(result_path,refurbishment_strategies,building_in_cluster,ueu.removeprefix("processed_bds_in_"),None,False,optimization_strategies)
+        print("finished loadding")
+        with open(f"dec_processed_"+str(today_date)+"_results_of_"+str(ueu.removeprefix("processed_bds_in_"))+".pkl", "wb") as f:   # "wb" = write binary
+            pickle.dump(building_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+        variable_to_iterate = refurbishment_strategies
+        pareto_front_per_building = {}
 
-            per_bldg, combined_front = combine_all_buildings(
-                building_dict,
-                refurbishment_strategies=refurbishment_strategies,
-                tau=1e-9, #12000
-                eps_rel_each=(0.002, 0.002, 0.002),
-                modes_each=('log', 'log', 'log'),
-                eps_rel_merge=(0.008, 0.008, 0.008),
-                modes_merge=('log', 'log', 'log'),
-                max_points_after_each_merge=4000 #12000
-            )
-            print("per building avg front size:", sum(len(v) for v in per_bldg.values()) / max(len(per_bldg), 1))
-            print("combined_front size:", len(combined_front))
-            with open(f"dec_processed_"+str(today_date)+"_combined_front_of_"+str(ueu.removeprefix("processed_bds_in_"))+".pkl", "wb") as f:   # "wb" = write binary
-                pickle.dump([building_dict,per_bldg,combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
+        per_bldg, combined_front = combine_all_buildings(
+            building_dict,
+            refurbishment_strategies=refurbishment_strategies,
+            tau=1e-9, #12000
+            eps_rel_each=(0.002, 0.002, 0.002),
+            modes_each=('log', 'log', 'log'),
+            eps_rel_merge=(0.008, 0.008, 0.008),
+            modes_merge=('log', 'log', 'log'),
+            max_points_after_each_merge=4000 #12000
+        )
+        print("per building avg front size:", sum(len(v) for v in per_bldg.values()) / max(len(per_bldg), 1))
+        print("combined_front size:", len(combined_front))
+        with open(f"dec_processed_"+str(today_date)+"_combined_front_of_"+str(ueu.removeprefix("processed_bds_in_"))+".pkl", "wb") as f:   # "wb" = write binary
+            pickle.dump([building_dict,per_bldg,combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 
