@@ -257,7 +257,7 @@ for ueu in ueus :
             modes_each=('log', 'log', 'log'),
             eps_rel_merge=(0.008, 0.008, 0.008),
             modes_merge=('log', 'log', 'log'),
-            max_points_after_each_merge=4000 #12000
+            max_points_after_each_merge=8000 #12000
         )
         print("per building avg front size:", sum(len(v) for v in per_bldg.values()) / max(len(per_bldg), 1))
         print("combined_front size:", len(combined_front))
