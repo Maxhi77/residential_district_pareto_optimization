@@ -86,11 +86,9 @@ import pickle
 from pathlib import Path
 
 
-def load_data(refurbishment_strategies, building_in_cluster,ueu,base_dir=None,scale_up_to_building_in_cluster=False):
-    if base_dir is None:
-        base_dir = Path.cwd()
-    else:
-        base_dir = Path(base_dir)
+def load_data(result_path,refurbishment_strategies, building_in_cluster,ueu,base_dir=None,scale_up_to_building_in_cluster=False,optimization_strategies =["co2","peak"]):
+
+    base_dir = result_path
 
     print("Arbeitsverzeichnis:", base_dir)
     connection_setup = ["uncon"]
@@ -105,7 +103,13 @@ def load_data(refurbishment_strategies, building_in_cluster,ueu,base_dir=None,sc
             try:
                 with open(full_path, "rb") as f:
                     data = pickle.load(f)
+                    filtered_data = {}
 
+                    data = {
+                        k: v
+                        for k, v in data.items()
+                        if k[3] in optimization_strategies
+                    }
                     cleaned_data = remove_series(data)
                     if scale_up_to_building_in_cluster:
                         scaled_up_data = scale_cleaned_data(cleaned_data)# nehme an, deine Funktion existiert
@@ -201,7 +205,7 @@ def process_building_dict(building_dict_heat_grid):
 centralized=False
 ueus = ["processed_bds_in_DENI03403000SEC4580","processed_bds_in_DENI03403000SEC5101","processed_bds_in_DENI03403000SEC5658"]
 refurbishment_strategies = ["no_refurbishment", "usual_refurbishment", "advanced_refurbishment", "GEG_standard"]
-optimization_variables = ["co2","peak"]
+optimization_strategies = ["co2"] #["co2","peak"]
 today_date = date.today().strftime("%Y_%m_%d")
 heat_grid_supply_temperatures = [50,60,70,80]
 for ueu in ueus :
@@ -209,6 +213,12 @@ for ueu in ueus :
     base_path = os.path.dirname(os.path.abspath(__file__))
 
     directory_path = os.path.join(base_path, ueu)
+
+    result_path = os.path.join(
+    directory_path,
+    "01_results_2026_01_14 gut aber annuity offset falsch"
+)
+
     number_of_time_steps = 8760
     path_mfh = os.path.join(base_path, ueu, 'mfh_cluster.pkl')
     with open(path_mfh, "rb") as f:
@@ -232,28 +242,25 @@ for ueu in ueus :
             pickle.dump([building_dict, building_dict, combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
     else:
         for building in building_in_cluster:
-            building_dict = load_data(refurbishment_strategies,building_in_cluster,ueu.removeprefix("processed_bds_in_"),None,False)
+            building_dict = load_data(result_path,refurbishment_strategies,building_in_cluster,ueu.removeprefix("processed_bds_in_"),None,False,optimization_strategies)
             print("finished loadding")
             with open(f"dec_processed_"+str(today_date)+"_results_of_"+str(ueu.removeprefix("processed_bds_in_"))+".pkl", "wb") as f:   # "wb" = write binary
                 pickle.dump(building_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
             variable_to_iterate = refurbishment_strategies
             pareto_front_per_building = {}
 
-
             per_bldg, combined_front = combine_all_buildings(
                 building_dict,
                 refurbishment_strategies=refurbishment_strategies,
-                tau=1e-9,
-                # pro GebÃ¤ude feiner in Totex
-                eps_rel_each=(0.002, 0.002, 0.0008), # co2, peak, totex
-                modes_each=('log','log','log'),
-                scales_each=(1.0, 1.0, 1.0),
-                # beim Mergen etwas grÃ¶ber, Totex weiterhin feiner
-                eps_rel_merge=(0.008, 0.008, 0.00025),
-                modes_merge=('log','log','log'),
-                scales_merge=(1.0, 1.0, 1.0),
-                max_points_after_each_merge=12000
+                tau=1e-9, #12000
+                eps_rel_each=(0.002, 0.002, 0.002),
+                modes_each=('log', 'log', 'log'),
+                eps_rel_merge=(0.008, 0.008, 0.008),
+                modes_merge=('log', 'log', 'log'),
+                max_points_after_each_merge=4000 #12000
             )
+            print("per building avg front size:", sum(len(v) for v in per_bldg.values()) / max(len(per_bldg), 1))
+            print("combined_front size:", len(combined_front))
             with open(f"dec_processed_"+str(today_date)+"_combined_front_of_"+str(ueu.removeprefix("processed_bds_in_"))+".pkl", "wb") as f:   # "wb" = write binary
                 pickle.dump([building_dict,per_bldg,combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
 

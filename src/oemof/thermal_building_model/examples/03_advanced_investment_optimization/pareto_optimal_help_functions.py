@@ -4,7 +4,56 @@ import math
 Number = float
 
 # ---------- Utilities ----------
+def _quantile(xs: List[float], q: float) -> float:
+    if not xs:
+        return 1.0
+    xs = sorted(xs)
+    pos = (len(xs) - 1) * q
+    lo = int(math.floor(pos))
+    hi = int(math.ceil(pos))
+    if lo == hi:
+        return float(xs[lo])
+    w = pos - lo
+    return float(xs[lo] * (1 - w) + xs[hi] * w)
 
+def _robust_scale(values: List[float], fallback: float = 1.0) -> float:
+    """
+    Robust: nutzt Median; fällt zurück auf P75 oder max wenn nötig.
+    """
+    vals = [float(v) for v in values if v is not None and math.isfinite(v) and v >= 0]
+    if not vals:
+        return fallback
+    med = _quantile(vals, 0.5)
+    if med > 0:
+        return med
+    p75 = _quantile(vals, 0.75)
+    if p75 > 0:
+        return p75
+    mx = max(vals)
+    return mx if mx > 0 else fallback
+
+def compute_global_scales_from_fronts(
+    building_dict: Dict[str, Dict[str, Dict[Any, Dict[str,Any]]]],
+    refurbishment_strategies: Iterable[str],
+    tau: float = 1e-9,
+) -> Tuple[float,float,float]:
+    """
+    Best-Practice: Skalen aus Pareto-geprunten Optionen (pro Gebäude) aggregieren,
+    damit Outlier/Schrott nicht dominiert.
+    """
+    all_co2, all_peak, all_totex = [], [], []
+
+    for bid, bdata in building_dict.items():
+        front = pareto_prune_building(bdata, refurbishment_strategies, tau=tau)
+        for r in front:
+            all_co2.append(float(r['co2']))
+            all_peak.append(float(r['peak']))
+            all_totex.append(float(r['totex']))
+
+    s_co2   = _robust_scale(all_co2,  fallback=1.0)
+    s_peak  = _robust_scale(all_peak, fallback=1.0)
+    s_totex = _robust_scale(all_totex, fallback=1.0)
+    return (s_co2, s_peak, s_totex)
 def _as_float(x) -> Optional[Number]:
     if x is None:
         return None
@@ -220,29 +269,46 @@ def combine_all_buildings(
     tau: float = 1e-9,
     eps_rel_each: Optional[Tuple[float,float,float]] = None,
     eps_rel_merge: Optional[Tuple[float,float,float]] = (0.01,0.01,0.01),
-    modes_each: Tuple[str,str,str]=('log','log','lin'),
-    modes_merge: Tuple[str,str,str]=('log','log','lin'),
-    scales_each: Tuple[float,float,float]=(1.0,1.0,10000.0),
-    scales_merge: Tuple[float,float,float]=(1.0,1.0,10000.0),
+    modes_each: Tuple[str,str,str]=('log','log','log'),
+    modes_merge: Tuple[str,str,str]=('log','log','log'),
+
+    # NEU: None => automatisch global bestimmen
+    scales_each: Optional[Tuple[float,float,float]] = None,
+    scales_merge: Optional[Tuple[float,float,float]] = None,
+
     max_points_after_each_merge: Optional[int] = 5000,
 ) -> Tuple[Dict[str,List[Dict[str,Any]]], List[Dict[str,Any]]]:
-    # 1) Per-Gebäude Pareto -> ε-Reduktion mit anisotropen Einstellungen
+
+    # --- NEU: globale Skalen einmal bestimmen, wenn nicht gesetzt
+    global_scales = compute_global_scales_from_fronts(
+        building_dict,
+        refurbishment_strategies=refurbishment_strategies,
+        tau=tau
+    )
+    if scales_each is None:
+        scales_each = global_scales
+    if scales_merge is None:
+        scales_merge = global_scales
+
+    # 1) Per-Gebäude Pareto -> ε-Reduktion
     per_building_fronts: Dict[str,List[Dict[str,Any]]] = {}
     for bid, bdata in building_dict.items():
         front = pareto_prune_building(bdata, refurbishment_strategies, tau=tau)
+
         if eps_rel_each is not None and len(front) > 0:
             front = epsilon_reduce(front, eps_rel_each, modes_each, scales_each)
-            # streng prunen
             pts = [(r['co2'], r['peak'], r['totex']) for r in front]
             keep = pareto_prune_points(pts, tau=tau)
             front = [front[i] for i in keep]
+
         front = [{**r, 'selection': {bid: r}} for r in front]
         per_building_fronts[bid] = front
 
-    # 2) Mergen mit denselben (oder eigenen) anisotropen Einstellungen
+    # 2) Mergen
     bids = list(per_building_fronts.keys())
     if not bids:
         return per_building_fronts, []
+
     current = per_building_fronts[bids[0]]
     for i in range(1, len(bids)):
         nxt = per_building_fronts[bids[i]]
@@ -260,6 +326,6 @@ def combine_all_buildings(
         pts = [(r['co2'], r['peak'], r['totex']) for r in current]
         keep = pareto_prune_points(pts, tau=tau)
         current = [current[i] for i in keep]
+    print("auto scales:", global_scales)  # falls du sie zurückgibst/printest
 
     return per_building_fronts, current
-
