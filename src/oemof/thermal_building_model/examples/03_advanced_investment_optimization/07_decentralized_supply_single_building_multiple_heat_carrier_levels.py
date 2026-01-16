@@ -660,6 +660,7 @@ def compute_peak_target(peak_ref, factor):
     return peak_ref * factor
 
 def run_main(refurbish,building_id_in_cluster,ueu):
+
     base_path = os.path.dirname(os.path.abspath(__file__))
     directory_path =os.path.join(base_path, ueu)
 
@@ -673,6 +674,10 @@ def run_main(refurbish,building_id_in_cluster,ueu):
     combined_cluster = pd.concat([sfh_cluster,mfh_cluster])
     results_loop_to_save = {}
     ev = "no_EV"
+    file_path = "results_dec_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) + "_" + str(
+        building_id_in_cluster) + ".pkl"
+    if os.path.exists(file_path):
+        return
     if True:
 
         main_path = get_project_root()
