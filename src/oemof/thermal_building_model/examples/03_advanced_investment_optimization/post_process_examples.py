@@ -102,12 +102,14 @@ def load_data(result_path,refurbishment_strategies, building_in_cluster,ueu,base
             try:
                 with open(full_path, "rb") as f:
                     data = pickle.load(f)
-                    filtered_data = {}
+
+                    def key_has_allowed_strategy(k, optimization_strategies):
+                        return isinstance(k, tuple) and len(k) >= 4 and k[3] in optimization_strategies
 
                     data = {
                         k: v
                         for k, v in data.items()
-                        if k[3] in optimization_strategies
+                        if key_has_allowed_strategy(k, optimization_strategies)
                     }
                     cleaned_data = remove_series(data)
                     if scale_up_to_building_in_cluster:
