@@ -257,6 +257,8 @@ for ueu in ueus :
         building_in_cluster.append(row["building_id"])
 
     if centralized:
+        result_path = os.path.join(base_path, "01_results_2026_01_14 gut aber annuity offset falsch", ueu)
+
         building_dict = load_heat_grid_data(heat_grid_supply_temperatures,ueu,result_path)
         print("finished loadding")
         with open(f"cec_processed_"+str(today_date)+"_results_of_"+str(ueu.removeprefix("processed_bds_in_"))+".pkl", "wb") as f:   # "wb" = write binary
