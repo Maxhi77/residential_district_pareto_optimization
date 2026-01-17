@@ -226,7 +226,7 @@ def process_building_dict(building_dict_heat_grid):
 
     return result_list
 
-centralized=False
+centralized=True
 ueus = ["processed_bds_in_DENI03403000SEC4580","processed_bds_in_DENI03403000SEC5101","processed_bds_in_DENI03403000SEC5658"]
 refurbishment_strategies = ["no_refurbishment", "usual_refurbishment", "advanced_refurbishment", "GEG_standard"]
 optimization_strategies = ["co2"] #["co2","peak"]
