@@ -129,17 +129,24 @@ def load_heat_grid_data(numbers, ueu="DENI03403000SEC5658", base_dir=None):
     import pickle
     from pathlib import Path
 
-    # IMPORTANT: make sure base_dir is a Path (glob needs Path)
+    # base_dir must be a Path
     base_dir = Path(base_dir) if base_dir is not None else Path.cwd()
 
+    # normalize ueu (avoid "processed_bds_in_processed_bds_in_...")
+    ueu = str(ueu)
+    if ueu.startswith("processed_bds_in_"):
+        ueu = ueu.replace("processed_bds_in_", "", 1)
+
     print("Arbeitsverzeichnis:", base_dir)
+    print("UEU (normalized):", ueu)
 
     heat_grid_dict = {}
 
     for num in numbers:
+        # this matches your real filenames, e.g.
+        # results_heat_grid_60_processed_bds_in_DENI..._no_EV_capex_max_per_building.pkl
         base_prefix = f"results_heat_grid_{num}_processed_bds_in_{ueu}_no_EV"
 
-        # find all matching files
         matching_files = sorted(base_dir.glob(f"{base_prefix}*.pkl"))
 
         if not matching_files:
@@ -150,7 +157,6 @@ def load_heat_grid_data(numbers, ueu="DENI03403000SEC5658", base_dir=None):
         heat_grid_dict[num] = {}
 
         for path in matching_files:
-            # suffix safe even if loading fails
             suffix = path.stem.replace(base_prefix, "")
             if suffix.startswith("_"):
                 suffix = suffix[1:]
@@ -158,9 +164,7 @@ def load_heat_grid_data(numbers, ueu="DENI03403000SEC5658", base_dir=None):
 
             try:
                 with open(path, "rb") as f:
-                    data = pickle.load(f)
-                heat_grid_dict[num][suffix] = data
-
+                    heat_grid_dict[num][suffix] = pickle.load(f)
             except Exception as e:
                 print(f"⚠️ Fehler bei {path.name}: {e}")
                 heat_grid_dict[num][suffix] = None
@@ -256,7 +260,6 @@ for ueu in ueus :
         building_in_cluster.append(row["building_id"])
 
     if centralized:
-        result_path = os.path.join(base_path, "01_results_2026_01_14 gut aber annuity offset falsch", ueu)
 
         building_dict = load_heat_grid_data(heat_grid_supply_temperatures,ueu,result_path)
         print("finished loadding")
