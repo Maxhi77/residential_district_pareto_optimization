@@ -51,10 +51,10 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
     )
     dataclasses = {}
     components = {}
-    building_id="heat_grid"
+    heat_grid_id="heat_grid"
 
-    dataclasses[building_id]={}
-    components[building_id]={}
+    dataclasses[heat_grid_id]={}
+    components[heat_grid_id]={}
 
     total_heat_demand_year=None
     heat_transfer_station_max_kW = []
@@ -143,23 +143,23 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
             heat_carrier_temperature_levels.extend([80])
         else:
             heat_carrier_temperature_levels.extend([heat_grid_temperature, 80])
-    heat_carrier_dataclass = HeatCarrier(name="h_carrier_" + str(building_id),
+    heat_carrier_dataclass = HeatCarrier(name="h_carrier_" + str(heat_grid_id),
                                          levels=heat_carrier_temperature_levels)
     heat_carrier_dataclass.connect_buses_decreasing_levels()
     heat_carrier_bus = heat_carrier_dataclass.get_bus()
 
-    dataclasses[building_id]["heat_carrier_dataclass"] = heat_carrier_dataclass
+    dataclasses[heat_grid_id]["heat_carrier_dataclass"] = heat_carrier_dataclass
 
-    components[building_id]["heat_carrier_bus"] = heat_carrier_bus
+    components[heat_grid_id]["heat_carrier_bus"] = heat_carrier_bus
 
     for key, config in hot_water_tank_config.items():
         hot_water_tank_config_building = copy.deepcopy(config)
         hot_water_tank_config_building.maximum_capacity =max(0.25 * heat_demand_worst_case,31)
-        hot_water_tank_input_bus = solph.buses.Bus(label=f"tank_input_bus_{building_id}_{key}")
-        hot_water_tank_output_bus = solph.buses.Bus(label=f"tank_output_bus_{building_id}_{key}")
+        hot_water_tank_input_bus = solph.buses.Bus(label=f"tank_input_bus_{heat_grid_id}_{key}")
+        hot_water_tank_output_bus = solph.buses.Bus(label=f"tank_output_bus_{heat_grid_id}_{key}")
         if False:
             hot_water_tank_dataclass = HotWaterTank(
-                name=f"heat_storage_{building_id}_{key}",
+                name=f"heat_storage_{heat_grid_id}_{key}",
                 investment=True,
                 temperature_buses=heat_carrier_dataclass.get_bus(),
                 max_temperature=80,
@@ -170,7 +170,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
             )
         else:
             hot_water_tank_dataclass = HotWaterTank(
-                name=f"heat_storage_{building_id}_{key}",
+                name=f"heat_storage_{heat_grid_id}_{key}",
                 investment=True,
                 temperature_buses=heat_carrier_dataclass.get_bus(),
                 max_temperature=80,
@@ -181,26 +181,26 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
             )
         hot_water_tank = hot_water_tank_dataclass.create_storage()
 
-        dataclasses[building_id]["hot_water_tank_dataclass_" + str(key)] = hot_water_tank_dataclass
-        components[building_id]["hot_water_tank_" + str(key)] = hot_water_tank
+        dataclasses[heat_grid_id]["hot_water_tank_dataclass_" + str(key)] = hot_water_tank_dataclass
+        components[heat_grid_id]["hot_water_tank_" + str(key)] = hot_water_tank
 
         if True:
             hot_water_tank_stratisfied_temp_levels_dict = hot_water_tank_dataclass.get_stratified_storage_temperature_levels()
             hot_water_tank_stratisfied = hot_water_tank_dataclass.create_stratified_storage(
                 hot_water_tank_stratisfied_temp_levels_dict, heat_carrier_bus)
 
-            dataclasses[building_id][
+            dataclasses[heat_grid_id][
                 "hot_water_tank_stratisfied_temp_levels_" + str(key)] = hot_water_tank_stratisfied_temp_levels_dict
-            components[building_id]["hot_water_tank_stratisfied_" + str(key)] = hot_water_tank_stratisfied
-            components[building_id]["hot_water_tank_input_bus_" + str(key)] = hot_water_tank_input_bus
-            components[building_id]["hot_water_tank_output_bus_" + str(key)] = hot_water_tank_output_bus
+            components[heat_grid_id]["hot_water_tank_stratisfied_" + str(key)] = hot_water_tank_stratisfied
+            components[heat_grid_id]["hot_water_tank_input_bus_" + str(key)] = hot_water_tank_input_bus
+            components[heat_grid_id]["hot_water_tank_output_bus_" + str(key)] = hot_water_tank_output_bus
 
     for key, config in air_heat_pump_config.items():
         air_heat_pump_config_building =  copy.deepcopy(config)
 
         air_heat_pump_dataclass = AirHeatPump(heat_carrier_bus= heat_carrier_dataclass.get_bus(),
                                               investment=True,
-                                              name="hp_"+str(building_id)+"_"+str(key),
+                                              name="hp_"+str(heat_grid_id)+"_"+str(key),
                                               air_temperature=data["air_temperature"],
                                               investment_component=air_heat_pump_config_building)
 
@@ -214,10 +214,10 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
 
 
-        dataclasses[building_id]["air_heat_pump_dataclass_"+str(key)] = air_heat_pump_dataclass
-        components[building_id]["air_heat_pump_converters_"+str(key)] = air_heat_pump_converters
-        components[building_id]["air_heat_pump_"+str(key)] = air_heat_pump
-        components[building_id]["air_heat_pump_bus_"+str(key)] = air_heat_pump_bus
+        dataclasses[heat_grid_id]["air_heat_pump_dataclass_"+str(key)] = air_heat_pump_dataclass
+        components[heat_grid_id]["air_heat_pump_converters_"+str(key)] = air_heat_pump_converters
+        components[heat_grid_id]["air_heat_pump_"+str(key)] = air_heat_pump
+        components[heat_grid_id]["air_heat_pump_bus_"+str(key)] = air_heat_pump_bus
 
     if True:
         for key, config in gas_heater_config.items():
@@ -225,7 +225,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
 
             gas_heater_dataclass = GasHeater(investment=True,
-                                             name="gas_heater_"+str(building_id)+"_"+str(key),
+                                             name="gas_heater_"+str(heat_grid_id)+"_"+str(key),
                                              investment_component=gas_heater_config_building)
             gas_heater_bus = gas_heater_dataclass.get_bus()
             gas_heater= gas_heater_dataclass.create_source()
@@ -233,16 +233,16 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                                                                           gas_bus = gas_bus,
                                                                           heat_carrier_bus=heat_carrier_bus)
 
-            dataclasses[building_id]["gas_heater_dataclass_"+str(key)] = gas_heater_dataclass
-            components[building_id]["gas_heater_converters_"+str(key)] = gas_heater_converters
-            components[building_id]["gas_heater_bus_"+str(key)] = gas_heater_bus
-            components[building_id]["gas_heater_"+str(key)] = gas_heater
+            dataclasses[heat_grid_id]["gas_heater_dataclass_"+str(key)] = gas_heater_dataclass
+            components[heat_grid_id]["gas_heater_converters_"+str(key)] = gas_heater_converters
+            components[heat_grid_id]["gas_heater_bus_"+str(key)] = gas_heater_bus
+            components[heat_grid_id]["gas_heater_"+str(key)] = gas_heater
     if True:
         for key, config in chp_config.items():
             chp_config_building = copy.deepcopy(config)
 
             chp_dataclass = CHP(investment=True,
-                                name="chp_"+str(building_id)+"_"+str(key),
+                                name="chp_"+str(heat_grid_id)+"_"+str(key),
                                 investment_component=chp_config_building,
                                 )
             chp_bus = chp_dataclass.get_bus()
@@ -254,25 +254,25 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                                                             electricity_bus = electricity_carrier_bus
                                                             )
 
-            dataclasses[building_id]["chp_dataclass_"+str(key)] = chp_dataclass
-            components[building_id]["chp_converters_"+str(key)] = chp_converters
-            components[building_id]["chp_bus_"+str(key)] = chp_bus
-            components[building_id]["chp_"+str(key)] = chp
+            dataclasses[heat_grid_id]["chp_dataclass_"+str(key)] = chp_dataclass
+            components[heat_grid_id]["chp_converters_"+str(key)] = chp_converters
+            components[heat_grid_id]["chp_bus_"+str(key)] = chp_bus
+            components[heat_grid_id]["chp_"+str(key)] = chp
 
     for key, config in battery_config.items():
         battery_config_building =  copy.deepcopy(config)
 
         battery_config_building.maximum_capacity = min(number_of_buildings * 100, battery_config_building.maximum_capacity)
         battery_dataclass = Battery(investment=True,
-                                    name="battery_"+str(building_id)+"_"+str(key),
+                                    name="battery_"+str(heat_grid_id)+"_"+str(key),
                                     input_bus = electricity_carrier_bus,
                                     output_bus = electricity_carrier_bus,
                                     investment_component=battery_config_building)
 
         battery = battery_dataclass.create_storage()
 
-        dataclasses[building_id]["battery_dataclass_"+str(key)] = battery_dataclass
-        components[building_id]["battery_"+str(key)] = battery
+        dataclasses[heat_grid_id]["battery_dataclass_"+str(key)] = battery_dataclass
+        components[heat_grid_id]["battery_"+str(key)] = battery
 
 
     heat_grid_investment = HeatGridInvestment(name="heat_grid_investment",
