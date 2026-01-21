@@ -83,7 +83,7 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
     lifetime: int = 40
     fictional_demand: float = 0
     flow_temperature: float = 80
-    total_heat_demand: float = 0
+    total_heat_demand: Optional[float] = None
     def __post_init__(self):
         #lifetime 30 years
         main_line_costs = self.calculate_pipe_costs(self.pipe_length_in_meter,self.flow_temperature)
@@ -112,7 +112,7 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
             list_kW_demand_transfer_station=self.heat_transfer_station_max_kW)
         self.house_station = InvestmentComponents(
             cost_offset=house_station_costs,  # 2568
-            lifetime=30,
+            lifetime=25,
             maximum_capacity=1,
             co2_offset=house_station_co2,
         )
@@ -127,7 +127,7 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
         pump_station_costs= self.calculate_pump_station_costs(self.peak_load_in_kw)
         self.pump_station = InvestmentComponents(
             cost_offset=pump_station_costs,  # 2568
-            lifetime=20,
+            lifetime=40,
             maximum_capacity=1,
         )
 
@@ -169,23 +169,23 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
         distribution_network_costs = distribution_network_costs_euro_per_mwh * total_heat_demand/1000
         return distribution_network_costs
     def calculate_house_station(self,heat_transfer_station_max_kW,flow_temperature):
-        # A Technologieatlas
+        # From Technologieatlas 2025
         house_station_costs = 0
-
+        #
         for house in heat_transfer_station_max_kW:
             house_kw=house[0]
-            if house_kw < 5:
-                transfer_station_costs = 4300
-            elif house_kw < 10:
-                transfer_station_costs = (4300+6900) / 2
+            if house_kw < 15:
+                transfer_station_costs = (6570+10950) / 2
+            elif house_kw < 30:
+                transfer_station_costs = (6390 + 10650)/2
             elif house_kw < 50:
-                transfer_station_costs = (6900 + 17200)/2
+                transfer_station_costs = (8925 + 14875) / 2
             elif house_kw < 200:
-                transfer_station_costs = (17200+30800)/2
+                transfer_station_costs = (17400+29000)/2
             elif house_kw < 500:
-                transfer_station_costs = (54200+30800)/2
+                transfer_station_costs = (31125+51875)/2
             else:
-                transfer_station_costs = (54200)
+                transfer_station_costs = (41250+68750)/2
             house_station_costs += transfer_station_costs
         return house_station_costs
     def calculate_service_line_costs(self,heat_transfer_station_max_kW,flow_temperature):
@@ -231,10 +231,13 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
         central_transfer_station_in_euro_per_kW = 277926 / 1000
         costs_central_transfer_station = central_transfer_station_in_euro_per_kW * peak_load_in_kw
         return costs_central_transfer_station
-    def calculate_pump_station_costs(self,peak_load_in_kw):
-        # A Technologieatlas
-        cost_pump_station_in_euro_per_kW=251136 /1000
-        costs_transfer_station = cost_pump_station_in_euro_per_kW * peak_load_in_kw
+    def calculate_pump_station_costs(self,total_heat_demand):
+        # From Technologieatlas 2025
+        if total_heat_demand < 1000:
+            cost_pump_station_in_euro_per_kWh = (184+276)/2
+        else:
+            cost_pump_station_in_euro_per_kWh = (69 + 104) / 2
+        costs_transfer_station = cost_pump_station_in_euro_per_kWh * total_heat_demand
         return costs_transfer_station
     def calculate_co2_cost_per_kW_transfer_station(self,list_kW_demand_transfer_station):
         # A Technologieatlas
