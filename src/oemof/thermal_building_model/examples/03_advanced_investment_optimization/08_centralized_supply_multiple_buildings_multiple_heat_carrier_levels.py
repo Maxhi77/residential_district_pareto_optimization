@@ -34,7 +34,7 @@ import tsam.timeseriesaggregation as tsam
 
 import pandas as pd
 #  create solver
-def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence):
+def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence,heat_demand_worst_case,heat_grid_length):
     solver = "gurobi"
     es = solph.EnergySystem(
         timeindex=t1_agg,
@@ -58,10 +58,11 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
     total_heat_demand_year=None
     heat_transfer_station_max_kW = []
+    number_of_buildings = 0
     for index, row in combined_cluster.iterrows():
-
         building_id = row['building_id']
         buildings_in_cluster = row['buildings_in_cluster']
+        number_of_buildings = number_of_buildings + buildings_in_cluster
         total_heat_demand_year_per_building = (data["ww_demand_" + str(building_id)]+ data["building_" + str(building_id)]) * buildings_in_cluster
         heat_transfer_station_max_kW.append((max(total_heat_demand_year_per_building),buildings_in_cluster))
 
@@ -153,7 +154,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
     for key, config in hot_water_tank_config.items():
         hot_water_tank_config_building = copy.deepcopy(config)
-        hot_water_tank_config_building.maximum_capacity =max(0.9 * annual_heat_demand_peak,31)
+        hot_water_tank_config_building.maximum_capacity =max(0.25 * heat_demand_worst_case,31)
         hot_water_tank_input_bus = solph.buses.Bus(label=f"tank_input_bus_{building_id}_{key}")
         hot_water_tank_output_bus = solph.buses.Bus(label=f"tank_output_bus_{building_id}_{key}")
         if False:
@@ -260,11 +261,14 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
     for key, config in battery_config.items():
         battery_config_building =  copy.deepcopy(config)
+
+        battery_config_building.maximum_capacity = min(number_of_buildings * 100, battery_config_building.maximum_capacity)
         battery_dataclass = Battery(investment=True,
                                     name="battery_"+str(building_id)+"_"+str(key),
                                     input_bus = electricity_carrier_bus,
                                     output_bus = electricity_carrier_bus,
                                     investment_component=battery_config_building)
+
         battery = battery_dataclass.create_storage()
 
         dataclasses[building_id]["battery_dataclass_"+str(key)] = battery_dataclass
@@ -273,7 +277,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
     heat_grid_investment = HeatGridInvestment(name="heat_grid_investment",
                                     heat_transfer_station_max_kW =heat_transfer_station_max_kW,
-                                    pipe_length_in_meter = 890.3,
+                                    pipe_length_in_meter = heat_grid_length,
                                     peak_load_in_kw = max(total_heat_demand_year),
                                     flow_temperature = heat_grid_temperature,
                                     total_heat_demand = total_heat_demand_year_sum,
@@ -379,10 +383,15 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
             pv_dataclass.value_list = data["pv_system_" + str(building_id)+"_"+str(key)]
 
             pv_dataclass.update_maximum_investment_pv_capacity_based_on_area(area = building_dataclass.get_roof_area_for_pv())
-            pv_system = pv_dataclass.create_source(output_bus = electricity_carrier_bus_building)
+            pv_bus = pv_dataclass.get_bus()
+            pv_system = pv_dataclass.create_source()
+            pv_system_curtailment_capable = pv_dataclass.create_sink()
+            connect_buses(input=pv_bus, target=electricity_carrier_bus_building)
 
-            dataclasses[building_id]["pv_dataclass_"+str(key)] = pv_dataclass
-            components[building_id]["pv_system_"+str(key)] = pv_system
+            dataclasses[building_id]["pv_dataclass_" + str(key)] = pv_dataclass
+            components[building_id]["pv_system_" + str(key)] = pv_system
+            components[building_id]["pv_system_curtailment_capable_" + str(key)] = pv_system_curtailment_capable
+            components[building_id]["pv_bus_" + str(key)] = pv_bus
 
     for building_id, building_data in components.items():
         # Ensure we're processing the components for the current building
@@ -516,7 +525,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                 final_results[building_id][dataclasses[building_id]["heat_demand_dataclass"].name] = dataclasses[building_id]["heat_demand_dataclass"].post_process(results,components[building_id]["heat_demand"])
                 final_results[building_id]["buildings_in_cluster"] = dataclasses[building_id]["building_dataclass"].buildings_in_cluster
                 for key,_ in pv_system_config.items():
-                    final_results[building_id][dataclasses[building_id]["pv_dataclass_"+str(key)].name] = dataclasses[building_id]["pv_dataclass_"+str(key)].post_process(results,components[building_id]["pv_system_"+str(key)])
+                    final_results[building_id][dataclasses[building_id]["pv_dataclass_"+str(key)].name] = dataclasses[building_id]["pv_dataclass_"+str(key)].post_process(results,components[building_id]["pv_system_"+str(key)],components[building_id]["pv_system_curtailment_capable_"+str(key)])
 
         co2_investment = 0
         for building_id in components:
@@ -654,6 +663,20 @@ def process_cluster(building,building_id,building_row, epw_path,building_type, d
         5: 1960, 6: 1970, 7: 1980, 8: 1990,
         9: 2000, 10: 2005, 11: 2010, 12: 2020
     }
+    building_id = building_row['building_id']
+    tabula_year_class = building_row['tabula_year_class']
+    building_floor_area = building_row['net_floor_area']
+    number_of_occupants = building_row['number_of_residents']
+    number_of_households = building_row['number_of_apartments']
+    number_of_buildings_in_cluster = building_row['buildings_in_cluster']
+
+    # Zuordnung Baujahr
+    year_map = {
+        1: 1850, 2: 1910, 3: 1930, 4: 1950,
+        5: 1960, 6: 1970, 7: 1980, 8: 1990,
+        9: 2000, 10: 2005, 11: 2010, 12: 2020
+    }
+    year_of_construction = year_map.get(tabula_year_class, 2000)  # fallback
 
     # Demands laden
     with open(os.path.join(directory_path, f"{building_id}_demand_{ev}.pkl"), "rb") as f:
@@ -667,6 +690,21 @@ def process_cluster(building,building_id,building_row, epw_path,building_type, d
     # Datenklassen
     electricity_demand = ElectricityDemand(name=f"e_demand_{building_id}", value_list=demand_electricity)
     heat_demand = WarmWater(name=f"ww_demand_{building_id}", value_list=demand_warm_water, level=40)
+
+    heat_demand_worst_case_building = ThermalBuilding(
+        name=f"building_{building_id}",
+        floor_area=building_floor_area,
+        number_of_occupants=number_of_occupants,
+        number_of_household=number_of_households,
+        country="DE",
+        construction_year=year_of_construction,
+        class_building="average",
+        building_type=building_type,
+        refurbishment_status="no_refurbishment",
+        heat_level_calculation=True,
+        time_index=time_index,
+    )
+    heat_demand_worst_case = (max(heat_demand_worst_case_building.value_list) + max(heat_demand.value_list) ) * number_of_buildings_in_cluster
 
     # PV-Ertrag pro Watt
     pv_yield_per_wp = simulate_pv_yield(
@@ -697,11 +735,10 @@ def process_cluster(building,building_id,building_row, epw_path,building_type, d
                                       "building": building,
                                       "heat_demand": heat_demand,
                                       "building_type": building_type}
-    return data, data_classes_comp
+    return data, data_classes_comp ,heat_demand_worst_case
 
-def run_main(heat_grid_temperature):
+def run_main(heat_grid_temperature,ueu,heat_grid_length):
     base_path = os.path.dirname(os.path.abspath(__file__))
-    ueu = "processed_bds_in_DENI03403000SEC5101"
     directory_path =os.path.join(base_path, ueu)
     number_of_time_steps = 8760
     sfh_cluster_path = os.path.join(base_path, ueu, 'sfh_cluster.pkl')
@@ -807,10 +844,11 @@ def run_main(heat_grid_temperature):
             date_time_index = solph.create_time_index(2025, number=number_of_time_steps - 1)
             data.index = date_time_index
             name_of_scenario = scenario["name"]
+            heat_demand_worst_case = 0
             for index, building_row in sfh_cluster.iterrows():
                 refurbish = scenario["choice"][building_row["building_id"]]
                 building = buildings_all[building_row["building_id"]][refurbish]
-                data,data_classes_comp = process_cluster(
+                data,data_classes_comp,heat_demand_worst_case_var = process_cluster(
                     building = building,
                     building_id = building_row["building_id"],
                     building_row = building_row,
@@ -823,10 +861,11 @@ def run_main(heat_grid_temperature):
                     ev=ev,
                     time_index=date_time_index
                 )
+                heat_demand_worst_case = heat_demand_worst_case+heat_demand_worst_case_var
             for index, building_row in mfh_cluster.iterrows():
                 refurbish = scenario["choice"][building_row["building_id"]]
                 building = buildings_all[building_row["building_id"]][refurbish]
-                data,data_classes_comp = process_cluster(
+                data,data_classes_comp,heat_demand_worst_case_var = process_cluster(
                     building=building,
                     building_id=building_row["building_id"],
                     building_row=building_row,
@@ -839,6 +878,7 @@ def run_main(heat_grid_temperature):
                     ev =ev,
                     time_index=date_time_index
                 )
+                heat_demand_worst_case = heat_demand_worst_case + heat_demand_worst_case_var
             typical_periods = 30
             hours_per_period = 24
 
@@ -879,7 +919,7 @@ def run_main(heat_grid_temperature):
                 data['e_demand_total'] = data[all_e_demand_columns].sum(axis=1)
                 data['building_total'] = data[all_building_demand_columns].sum(axis=1)
 
-            final_results_ref, co2_ref, time = run_model(None, None,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence)
+            final_results_ref, co2_ref, time = run_model(None, None,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence,heat_demand_worst_case,heat_grid_length)
             co2_reduction_factor_ref = 1
             peak_reduction_factor_ref = 1
             results_loop_to_save = {}
@@ -918,13 +958,11 @@ def run_main(heat_grid_temperature):
                 if len(scenarios)>2:
                     co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2,
                                              0.2, 0.1, 0.05, 0.01, -0.01, -0.05, -0.1]
-                if heat_grid_temperature == 40:
-                    step = 0.025
-                    co2_reduction_factors = [round(x, 3) for x in
-                                             [1 - i * step for i in range(int((1.0 - (-0.1)) / step) + 1)]]
+
                 # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
              #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2]
-            for ref in ["co2","peak"]:
+            references = ["co2"]#["co2","peak"]
+            for ref in references:
                 if ref=="co2":
                     peak_reference = peak_reference_save
                     co2_reference = co2_reference_save
@@ -947,7 +985,7 @@ def run_main(heat_grid_temperature):
 
                                 peak_new = peak_reference * peak_reduction_factor
 
-                            final_results, co2,time  = run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence)
+                            final_results, co2,time  = run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence,heat_demand_worst_case,heat_grid_length)
                             if final_results is None:
                                 results_loop_to_save[(co2_reduction_factor, peak_reduction_factor,ref)] = {
                                     "results": None,
@@ -1021,7 +1059,7 @@ def run_main(heat_grid_temperature):
                                     co2_new = co2_reference * co2_reduction_factor
                                 else:
                                     co2_new = co2_reference * (1 + 1 - co2_reduction_factor)
-                            final_results, co2,time  = run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence)
+                            final_results, co2,time  = run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence,heat_demand_worst_case,heat_grid_length)
                             if final_results is None:
                                 results_loop_to_save[(co2_reduction_factor, peak_reduction_factor,ref)] = {
                                     "results": None,
@@ -1091,9 +1129,8 @@ def run_main(heat_grid_temperature):
             # Save the updated or new results back to the pickle file
             with open(file_path, "wb") as f:
                 pickle.dump(existing_results, f)
-heat_grid_supply_temperatures = [40,50,60,70]
 
-
+heat_grid_supply_temperatures = [40, 50, 60, 70]
 SOLVER_THREADS = 3
 
 import multiprocessing as mp
@@ -1104,18 +1141,29 @@ from datetime import datetime
 ERROR_DIR = "error_logs"
 os.makedirs(ERROR_DIR, exist_ok=True)
 
-def wrapper(heat_grid_temperature):
+# Deine UEU + heat_grid_length Paare (aus deiner Tabelle)
+UEU_CASES = [
+    ("processed_bds_in_DENI03403000SEC5101", 890.354),
+    ("processed_bds_in_DENI03403000SEC4580", 2723.294),   # "2.723.294" -> als int
+    ("processed_bds_in_DENI03403000SEC5658", 1146.15),
+]
+
+def wrapper(args):
+    heat_grid_temperature, ueu, heat_grid_length = args
     try:
-        print(f"start: {heat_grid_temperature}")
-        run_main(heat_grid_temperature)
+        print(f"start: temp={heat_grid_temperature} | ueu={ueu} | length={heat_grid_length}")
+        run_main(heat_grid_temperature, ueu, heat_grid_length)
 
     except Exception as e:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"error_{heat_grid_temperature}_{timestamp}.txt"
+        safe_ueu = ueu.replace(os.sep, "_")
+        filename = f"error_{safe_ueu}_T{heat_grid_temperature}_{timestamp}.txt"
         path = os.path.join(ERROR_DIR, filename)
 
         with open(path, "w", encoding="utf-8") as f:
             f.write(f"heat_grid_temperature: {heat_grid_temperature}\n")
+            f.write(f"ueu: {ueu}\n")
+            f.write(f"heat_grid_length: {heat_grid_length}\n")
             f.write(f"exception: {repr(e)}\n\n")
             f.write("traceback:\n")
             f.write(traceback.format_exc())
@@ -1130,5 +1178,14 @@ if __name__ == "__main__":
 
         print("cores:", n_cores, "| processes:", n_proc, "| solver threads:", SOLVER_THREADS)
 
+        # Jobs = Kombination aus (Temperatur x UEU_CASES)
+        jobs = [
+            (temp, ueu, length)
+            for (ueu, length) in UEU_CASES
+            for temp in heat_grid_supply_temperatures
+        ]
+
         with mp.Pool(processes=n_proc) as pool:
-            pool.map(wrapper, heat_grid_supply_temperatures)
+            pool.map(wrapper, jobs)
+    else:
+        run_main(50, "processed_bds_in_DENI03403000SEC5658", 1146.15)
