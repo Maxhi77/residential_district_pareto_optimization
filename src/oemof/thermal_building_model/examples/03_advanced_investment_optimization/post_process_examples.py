@@ -270,6 +270,39 @@ for ueu in ueus :
             pickle.dump([building_dict, building_dict, combined_front], f, protocol=pickle.HIGHEST_PROTOCOL)
     else:
         building_dict = load_data(result_path,refurbishment_strategies,building_in_cluster,ueu.removeprefix("processed_bds_in_"),None,False,optimization_strategies)
+
+        refurbishment_strategies = ["no_refurbishment", "usual_refurbishment", "advanced_refurbishment", "GEG_standard"]
+        technologies = ["pv_system", "heat_storage", "battery", "gas_heater", "chp", "hp", "building"]
+        carriers = ["Electricity", "NaturalGas", "BioGas", "Hydrogen"]
+        for building in building_in_cluster:
+            for refurbishment_strategy in refurbishment_strategies:
+                for result_key in building_dict[building][refurbishment_strategy]:
+                    totex = 0
+                    result = building_dict[building][refurbishment_strategy][result_key]
+                    if result["results"] is None:
+                        continue
+                    if result is None:
+                        continue
+                    for carrier in carriers:
+                        totex += result["results"][carrier]["flow_from_grid_cost"]
+                        if result["results"][carrier]["flow_into_grid_revenue"] is not None:
+                            totex -= result["results"][carrier]["flow_into_grid_revenue"]
+                    # Step 2: Add the totex for each technology
+                    for technology in technologies:
+                        # Check for multiple instances of technologies (like gas_heater_DENILD...)
+                        tech_keys = [key for key in result["results"][building].keys() if
+                                     key.startswith(f"{technology}_{building}")]
+                        for tech_key in tech_keys:
+                            tech_data = result["results"][building][tech_key]
+                            if "investment_cost" in tech_data:
+                                totex += tech_data["investment_cost"]
+                    # Optional: If the 'building' itself has an 'investment_cost', add it as well
+                    building_data = result["results"][building]
+                    if "investment_cost" in building_data:
+                        totex += building_data["investment_cost"]
+                    building_dict[building][refurbishment_strategy][result_key]["totex_old"] = building_dict[building][refurbishment_strategy][result_key]["totex"]
+                    building_dict[building][refurbishment_strategy][result_key]["totex"] = totex
+
         print("finished loadding")
         with open(f"dec_processed_"+str(today_date)+"_results_of_"+str(ueu.removeprefix("processed_bds_in_"))+".pkl", "wb") as f:   # "wb" = write binary
             pickle.dump(building_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -284,7 +317,7 @@ for ueu in ueus :
             modes_each=('log', 'log', 'log'),
             eps_rel_merge=(0.008, 0.008, 0.008),
             modes_merge=('log', 'log', 'log'),
-            max_points_after_each_merge=8000 #12000
+            max_points_after_each_merge=9000 #12000
         )
         print("per building avg front size:", sum(len(v) for v in per_bldg.values()) / max(len(per_bldg), 1))
         print("combined_front size:", len(combined_front))
