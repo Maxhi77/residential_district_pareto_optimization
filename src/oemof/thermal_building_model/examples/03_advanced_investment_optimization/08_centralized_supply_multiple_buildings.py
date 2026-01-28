@@ -571,7 +571,7 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
         with open(os.path.join(directory_path, f"{building_id}_demand_{ev}.pkl"), "rb") as f:
             demand = pickle.load(f)
 
-        electricity_cols = [col for col in demand.columns if col.startswith("Electricity_")]
+        electricity_cols = [col for col in demand.columns if col.startswith("Electricity")]
         demand_electricity = (demand[electricity_cols].sum(axis=1) * 1000).tolist()
         warm_water_cols = [col for col in demand.columns if col.startswith("Warm Water_")]
         demand_warm_water = demand[warm_water_cols].sum(axis=1)
