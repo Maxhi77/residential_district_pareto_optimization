@@ -334,9 +334,9 @@ def run_multiprocessing(gap_starter,
 
     # Beispiel-Durchlauf
     results_loop_to_save = {}
-    counter=  1000
+    counter=  0
     # Beispiel-Durchlauf
-    gap_size = 3
+    gap_size = 1000
 
     for params in param_values:
         gap_min = gap_starter*gap_size
