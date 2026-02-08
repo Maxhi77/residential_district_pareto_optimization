@@ -228,11 +228,13 @@ class Building:
                 == variant_mapping[refurbishment_status]
             ]
             self.tabula_df = self.tabula_df[~self.tabula_df["Code_BuildingVariant"].str.contains("East", na=False)]
+            self.tabula_df = self.tabula_df[self.tabula_df["Code_BuildingVariant"].str.contains("Gen", na=False)]
             assert len(self.tabula_df) <= 1, (
-                "More than one building is founded for "
-                "the input parameters. Please write an "
-                "issue in Github"
+                "More than one building was found for the input parameters. "
+                "Please write an issue on GitHub.\n\n"
+                f"tabula_df (len={len(self.tabula_df)}):\n{self.tabula_df}"
             )
+
         elif refurbishment_status == "GEG_standard":
             self.tabula_df = self.tabula_df[~self.tabula_df["Code_BuildingVariant"].str.contains("East", na=False)]
             self.tabula_df = self.tabula_df[

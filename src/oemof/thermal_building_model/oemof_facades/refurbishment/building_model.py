@@ -229,10 +229,18 @@ class ThermalBuilding(Demand):
         self.buildings_in_cluster = buildings_in_cluster
         self.capex_annuity = self.capex_annuity * buildings_in_cluster
         self.co2_cost = self.co2_cost * buildings_in_cluster
-    def get_roof_area_for_pv(self):
-        total_a_floor = sum(self.building_object.a_floor.values())
+    def get_roof_area(self,a_roof=None):
+        total_a_floor = sum(self.building_object.a_roof.values())
+        return total_a_floor
+    def get_roof_area_for_pv(self,a_roof=None):
+        if a_roof is None:
+            total_a_floor = sum(self.building_object.a_roof.values())
+        else:
+            total_a_floor = a_roof
         # https://www.agora-energiewende.de/fileadmin/Projekte/2023/2023-16_DE_Dach-PV-Potenzial/2023-16_DE_Dach-PV-Potenzial_Dokumentation.pdf?utm_source=chatgpt.com
-        reduction_factor_for_pitched_roofs = 0.6  * 0.65
+        #Kai Mainzer, Karsten Fath, Russell McKenna, Julian Stengel, Wolf Fichtner, and Frank
+        #Schultmann. “A high-resolution determination of the technical potential for residential-roofmounted photovoltaic systems in Germany”. In: Solar Energy 105 (2014), pp. 715–731.
+        reduction_factor_for_pitched_roofs = 0.58
         return total_a_floor * reduction_factor_for_pitched_roofs
 
     def calculate_heat_distribution_temperature(self) -> float:

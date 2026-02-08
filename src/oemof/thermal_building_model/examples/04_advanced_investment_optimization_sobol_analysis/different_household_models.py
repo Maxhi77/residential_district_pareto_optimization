@@ -5,6 +5,16 @@ def get_resident_range(household_dicts):
         ranges[key] = (min(values), max(values))
     return ranges
 
+sobol_households = {
+    "CHR07 Single with work": 1,
+"CHR33 Couple under 30 years with work": 2,
+    "CHR03 Family, 1 child, both at work": 3,
+    "CHR27 Family both at work, 2 children": 4,
+    "CHR05 Family, 3 children, both with work": 5,
+    "CHR15 Multigenerational Home: working couple, 2 children, 2 seniors": 6,
+
+}
+
 households_with_families = {
     "CHR03 Family, 1 child, both at work": 3,
     "CHR22 Single woman, 1 child, with work": 2,
