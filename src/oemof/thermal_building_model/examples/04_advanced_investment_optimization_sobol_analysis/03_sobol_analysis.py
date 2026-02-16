@@ -20,7 +20,7 @@ import pickle
 import multiprocessing
 from SALib.sample import saltelli
 
-def main(year_of_construction,target_residents,tabula_building_code, building_type,building_size,demand_path,floor_to_roof_area_ratio,azimuth,tilt):
+def main(year_of_construction,target_residents,tabula_building_code, building_type,building_size,demand_path,floor_to_roof_area_ratio,azimuth,tilt,co2_limit,peak_new):
     target_residents = target_residents
     building_type = building_type
     building_id = tabula_building_code
@@ -37,7 +37,9 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
     es = solph.EnergySystem(timeindex=date_time_index,
                             infer_last_interval=False)
 
-    electricity_grid_dataclass = ElectricityGrid()
+    electricity_grid_dataclass = ElectricityGrid(max_peak_from_grid=peak_new,
+                                                     max_peak_into_grid=peak_new)
+
 
 
     electricity_grid_bus_from_grid = electricity_grid_dataclass.get_bus_from_grid()
@@ -221,8 +223,11 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
     es.add(*(electricity_components))
     model = solph.Model(es)
 
+    if co2_limit is None:
+        model = solph.constraints.additional_total_limit(model, "co2", limit=10000000)
 
-    model = solph.constraints.additional_total_limit(model, "co2", limit=10000000)
+    else:
+        model = solph.constraints.additional_total_limit(model, "co2", limit=co2_limit1 )
     # Show the graph
     # Show the graph
 
@@ -314,7 +319,7 @@ sfh_floor_area_min, sfh_floor_area_max = 105, 320
 mfh_floor_area_min, mfh_floor_area_max = 366, 528
 
 sfh_residents_min, sfh_residents_max = 1, 6
-mfh_residents_min, mfh_residents_max = 1, 14
+mfh_residents_min, mfh_residents_max = 3, 14
 
 sfh_ratio_min, sfh_ratio_max = 0.8, 3 #floor to roof
 mfh_ratio_min, mfh_ratio_max = 2, 5
@@ -322,7 +327,44 @@ mfh_ratio_min, mfh_ratio_max = 2, 5
 # Mapping
 if True:
     from different_household_models import sobol_households
+import random
 
+def random_household_sizes(total: int, k: int, min_size: int = 1, max_size: int = 6) -> list[int]:
+    """
+    Liefert eine zufällige Liste der Länge k, deren Summe total ist,
+    und jeder Eintrag liegt in [min_size, max_size].
+    """
+    if total < k * min_size or total > k * max_size:
+        raise ValueError(f"Unmöglich: total={total} passt nicht zu k={k} mit [{min_size},{max_size}]")
+
+    remaining = total
+    sizes = []
+    for i in range(k):
+        remaining_slots = k - i - 1
+
+        # was muss mindestens / maximal noch übrig bleiben?
+        min_for_rest = remaining_slots * min_size
+        max_for_rest = remaining_slots * max_size
+
+        # aktuelle Wahl muss so sein, dass Rest noch möglich ist
+        low = max(min_size, remaining - max_for_rest)
+        high = min(max_size, remaining - min_for_rest)
+
+        s = random.randint(low, high)
+        sizes.append(s)
+        remaining -= s
+
+    random.shuffle(sizes)
+    return sizes
+def possible_households_by_size(sobol_households: dict, sizes: list[int]) -> list[list[tuple]]:
+    """
+    Für jede Haushaltsgröße in sizes: Liste möglicher Haushalte [(name,res), ...]
+    """
+    result = []
+    for s in sizes:
+        possible = [(name, res) for name, res in sobol_households.items() if res == s]
+        result.append(possible)
+    return result
 def run_multiprocessing(gap_starter,
                         idx_size,
                         idx_year_class,
@@ -334,6 +376,9 @@ def run_multiprocessing(gap_starter,
 
     # Beispiel-Durchlauf
     results_loop_to_save = {}
+    results_loop_to_save_peak_limit = {}
+    results_loop_to_save_co2_limit = {}
+
     counter=  0
     # Beispiel-Durchlauf
     gap_size = 1000
@@ -352,27 +397,46 @@ def run_multiprocessing(gap_starter,
         def reverse_normalize(normalized_value, min_val, max_val):
             return normalized_value * (max_val - min_val) + min_val
 
-        building_type = "SFH"
+        building_type = "MFH"
 
         if building_type == "SFH":
             building_size = reverse_normalize(params[idx_size], sfh_floor_area_min, sfh_floor_area_max)
             normalized_residents = reverse_normalize(params[idx_residents], sfh_residents_min, sfh_residents_max)
             floor_to_roof_area_ratio = reverse_normalize(params[idx_floor_to_roof_area_ratio], sfh_ratio_min, sfh_ratio_max)
+            target_residents = normalized_residents
+            # Passende Haushalte filtern
+            possible_households = [
+                (name, res) for name, res in sobol_households.items()
+                if res == int(target_residents)
+            ]
 
-        target_residents = normalized_residents
+            if possible_households:
+                chosen_household, _ = random.choice(possible_households)
+            else:
+                chosen_household = "Kein passender Haushalt gefunden"
+        elif building_type == "MFH":
+            building_size = reverse_normalize(params[idx_size], mfh_floor_area_min, mfh_floor_area_max)
+            normalized_residents = reverse_normalize(params[idx_residents], mfh_residents_min, mfh_residents_max)
+            floor_to_roof_area_ratio = reverse_normalize(params[idx_floor_to_roof_area_ratio], mfh_ratio_min, mfh_ratio_max)
+            # Passende Haushalte filtern
+            target_residents = int(normalized_residents)
+            if target_residents == 3:
+                number_households = 3
+            elif target_residents == 4:
+                number_households = random.choice([3, 4])
+            elif target_residents > 4:
+                number_households = random.randint(3, 5)  # 3,4,5
+
+            # 2) in Haushaltsgrößen aufteilen (1..6)
+            sizes = random_household_sizes(target_residents, number_households, 1, 6)
+            possible_households_lists = possible_households_by_size(sobol_households, sizes)
+            chosen_household = possible_households_lists
+
+
         tabula_year_class = int(params[idx_year_class])  # Die Nummer, die du brauchst
         azimuth = params[idx_azimuth]
         tilt = params[idx_tilt]
-        # Passende Haushalte filtern
-        possible_households = [
-            (name, res) for name, res in sobol_households.items()
-            if res == int(target_residents)
-        ]
 
-        if possible_households:
-            chosen_household, _ = random.choice(possible_households)
-        else:
-            chosen_household = "Kein passender Haushalt gefunden"
         # TABULA-Building-Code generieren
 
         if tabula_year_class == 1:
@@ -418,11 +482,14 @@ def run_multiprocessing(gap_starter,
                 return f"Results_CHH_{number}"  # ohne führende Null
             else:
                 return "Results_INVALID"
-        result_key = format_household_key(chosen_household)
-        #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles\{result_key}'
-        demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
-
-
+        if building_type == "SFH":
+            result_key = format_household_key(chosen_household)
+            #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles\{result_key}'
+            demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
+        elif building_type == "MFH":
+            result_key = format_household_key(chosen_household)
+            #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles\{result_key}'
+            demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
         main(year_of_construction,
              target_residents,
              tabula_building_code,
@@ -440,10 +507,24 @@ def run_multiprocessing(gap_starter,
              building_size,
              demand_path,
              floor_to_roof_area_ratio,
-             azimuth, tilt
+             azimuth, tilt,None,None
                  )
         if final_results is None:
             results_loop_to_save[counter] = {
+                "results": None,
+
+                "co2": None,
+                "totex": None,
+                "peak": None
+            }
+            results_loop_to_save_co2_limit[counter] = {
+                "results": None,
+
+                "co2": None,
+                "totex": None,
+                "peak": None
+            }
+            results_loop_to_save_peak_limit[counter] = {
                 "results": None,
 
                 "co2": None,
@@ -461,6 +542,69 @@ def run_multiprocessing(gap_starter,
                     "totex": totex,
                     "peak": peak
             }
+            final_results_co2_limit, co2_co2_limit = main(year_of_construction,
+                                      target_residents,
+                                      tabula_building_code,
+                                      building_type,
+                                      building_size,
+                                      demand_path,
+                                      floor_to_roof_area_ratio,
+                                      azimuth, tilt, co2*0.5, None
+                                      )
+            if final_results_co2_limit is None:
+                results_loop_to_save_co2_limit[counter] = {
+                    "results": None,
+
+                    "co2": None,
+                    "totex": None,
+                    "peak": None
+                }
+                results_loop_to_save_peak_limit[counter] = {
+                    "results": None,
+
+                    "co2": None,
+                    "totex": None,
+                    "peak": None
+                }
+            else:
+                totex = final_results_co2_limit["totex"]
+                peak = (final_results_co2_limit["Electricity"]["peak_into_grid"],
+                        final_results_co2_limit["Electricity"]["peak_from_grid"])
+                results_loop_to_save_co2_limit[counter] = {
+                    "results": final_results_co2_limit,
+
+                    "co2": co2_co2_limit,
+                    "totex": totex,
+                    "peak": peak
+                }
+                final_results_peak_limit, co2_peak_limit = main(year_of_construction,
+                                                              target_residents,
+                                                              tabula_building_code,
+                                                              building_type,
+                                                              building_size,
+                                                              demand_path,
+                                                              floor_to_roof_area_ratio,
+                                                              azimuth, tilt, co2*0.5, peak*0.5
+                                                              )
+                if final_results_peak_limit is None:
+                    results_loop_to_save_peak_limit[counter] = {
+                        "results": None,
+
+                        "co2": None,
+                        "totex": None,
+                        "peak": None
+                    }
+                else:
+                    totex = final_results_co2_limit["totex"]
+                    peak = (final_results_co2_limit["Electricity"]["peak_into_grid"],
+                            final_results_co2_limit["Electricity"]["peak_from_grid"])
+                    results_loop_to_save_peak_limit[counter] = {
+                        "results": final_results_peak_limit,
+
+                        "co2": co2_peak_limit,
+                        "totex": totex,
+                        "peak": peak
+                    }
         if False:
             results_loop_to_save[(counter,building_size, household_type,target_residents,year_of_construction)] = {
                         "results": None,
@@ -469,16 +613,23 @@ def run_multiprocessing(gap_starter,
                         "peak": None
                     }
         if counter % gap_size== 0 or counter %( len(param_values)-1)== 0:
-            file_path="results_sobol_"+str(building_type)+"_"+str(gap_starter)+"_"+str(counter)+".pkl"
+            file_path="sobol_"+str(building_type)+"_"+str(gap_starter)+"_"+str(counter)+".pkl"
+            file_path_co2 = "sobol_co2_" + str(building_type) + "_" + str(gap_starter) + "_" + str(counter) + ".pkl"
+            file_path_peak = "sobol_peak_" + str(building_type) + "_" + str(gap_starter) + "_" + str(counter) + ".pkl"
             # If the file doesn't exist, create it and save the results
-            existing_results = results_loop_to_save
             print(f"New results created for {file_path}")
 
             # Save the updated or new results back to the pickle file
             with open(file_path, "wb") as f:
-                pickle.dump(existing_results, f)
+                pickle.dump(results_loop_to_save, f)
+            with open(file_path_co2, "wb") as f:
+                pickle.dump(results_loop_to_save_co2_limit, f)
+            with open(file_path_peak, "wb") as f:
+                pickle.dump(results_loop_to_save_peak_limit, f)
             # Save the updated or new results back to the pickle file
             results_loop_to_save = {}
+            results_loop_to_save_peak_limit = {}
+            results_loop_to_save_co2_limit = {}
         counter += 1
         if gap_max < counter:
             break
