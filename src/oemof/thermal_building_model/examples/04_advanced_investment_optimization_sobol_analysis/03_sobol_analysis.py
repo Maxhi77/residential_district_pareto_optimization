@@ -227,7 +227,7 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
         model = solph.constraints.additional_total_limit(model, "co2", limit=10000000)
 
     else:
-        model = solph.constraints.additional_total_limit(model, "co2", limit=co2_limit1 )
+        model = solph.constraints.additional_total_limit(model, "co2", limit=co2_limit )
     # Show the graph
     # Show the graph
 
