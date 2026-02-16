@@ -397,7 +397,7 @@ def run_multiprocessing(gap_starter,
         def reverse_normalize(normalized_value, min_val, max_val):
             return normalized_value * (max_val - min_val) + min_val
 
-        building_type = "MFH"
+        building_type = "SFH"
 
         if building_type == "SFH":
             building_size = reverse_normalize(params[idx_size], sfh_floor_area_min, sfh_floor_area_max)
