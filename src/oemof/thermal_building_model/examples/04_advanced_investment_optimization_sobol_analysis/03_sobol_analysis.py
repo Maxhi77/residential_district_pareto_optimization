@@ -576,7 +576,7 @@ def run_multiprocessing(gap_starter,
                                                               building_size,
                                                               demand_path,
                                                               floor_to_roof_area_ratio,
-                                                              azimuth, tilt, co2*0.5, peak*0.5
+                                                              azimuth, tilt, co2*0.5, max(peak)*0.5
                                                               )
                 if final_results_peak_limit is None:
                     results_loop_to_save_peak_limit[counter] = {
