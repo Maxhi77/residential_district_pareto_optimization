@@ -602,7 +602,7 @@ def run_multiprocessing(gap_starter,
                         "totex": None,
                         "peak": None
                     }
-        if counter % gap_size == 0 or counter % (len(param_values) - 1) == 0 or counter % (len(param_values) - 2) == 0:
+        if counter % 500 == 0 or counter % (len(param_values) - 1) == 0 or counter % (len(param_values) - 2) == 0:
             file_path="sobol_"+str(building_type)+"_"+str(gap_starter)+"_"+str(counter)+".pkl"
             file_path_co2 = "sobol_co2_" + str(building_type) + "_" + str(gap_starter) + "_" + str(counter) + ".pkl"
             file_path_peak = "sobol_peak_" + str(building_type) + "_" + str(gap_starter) + "_" + str(counter) + ".pkl"
@@ -625,9 +625,9 @@ def run_multiprocessing(gap_starter,
             break
 if __name__ == "__main__":
 
-    gap_values = range(0,8)  # Gap von 0 bis 9
+    gap_values = range(0,9)  # Gap von 0 bis 9
     processes = []
-    if True:
+    if False:
         run_multiprocessing(0,
                             idx_size,
                             idx_year_class,
@@ -635,7 +635,7 @@ if __name__ == "__main__":
                             idx_azimuth,
                             idx_tilt,
                             )
-    if False:
+    if True:
 
         for gap_starter in gap_values:
             p = multiprocessing.Process(target=run_multiprocessing, args=(gap_starter,
