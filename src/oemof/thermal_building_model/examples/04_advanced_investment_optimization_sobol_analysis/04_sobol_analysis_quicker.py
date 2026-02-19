@@ -594,7 +594,7 @@ def run_multiprocessing(gap_starter,
                         "totex": totex,
                         "peak": peak
                     }
-                break
+
         if False:
             results_loop_to_save[(counter,building_size, household_type,target_residents,year_of_construction)] = {
                         "results": None,
