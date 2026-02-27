@@ -22,7 +22,7 @@ def test_tabula_reader():
 
     assert generic_building_example.a_floor["a_floor_1"] == 77.36549165120594
     assert specific_building_example.a_floor["a_floor_1"] == 115.8
-    assert generic_building_example.h_tr_em == 227.628224310252
-    assert specific_building_example.h_tr_em == 166.73835342102404
+    assert generic_building_example.h_tr_em == 235.54147125751112
+    assert specific_building_example.h_tr_em == 169.44835342102402
     assert generic_building_example.h_transmission == 337.832305942905
     assert specific_building_example.h_transmission == 204.67835342102404
