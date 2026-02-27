@@ -1,6 +1,11 @@
 from openpyxl.styles.builtins import output
 
-from oemof.thermal_building_model.oemof_facades.base_component import BaseComponent, InvestmentComponents, PhysicalBaseUnit
+from oemof.thermal_building_model.oemof_facades.base_component import (
+    BaseComponent,
+    InvestmentComponents,
+    PhysicalBaseUnit,
+    extract_investment_capacity_from_results,
+)
 from typing import Optional
 from oemof import solph
 from dataclasses import dataclass, field
@@ -181,11 +186,11 @@ class Storage(BaseComponent):
 
     def get_capacity(self, results, component):
         if self.investment:
-            if self.investment_component.multiperiod:
-                return (results[component, None]["period_scalars"]["invest"].sum(),1 if results[component, None]["period_scalars"]["invest"].sum()>0 else 0)
-            else:
-                return (solph.views.node(results, None)["scalars"][((component, None), "invest")]
-                        ,solph.views.node(results, None)["scalars"].get(((component, None), "invest_status"), 0))
+            return extract_investment_capacity_from_results(
+                results=results,
+                component=component,
+                bus=None,
+            )
         else:
             return component.nominal_storage_capacity, 0
 

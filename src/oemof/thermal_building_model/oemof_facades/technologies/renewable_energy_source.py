@@ -1,4 +1,9 @@
-from oemof.thermal_building_model.oemof_facades.base_component import BaseComponent, InvestmentComponents, PhysicalBaseUnit
+from oemof.thermal_building_model.oemof_facades.base_component import (
+    BaseComponent,
+    InvestmentComponents,
+    PhysicalBaseUnit,
+    extract_investment_capacity_from_results,
+)
 from oemof.thermal_building_model.oemof_facades.helper_functions import connect_buses
 
 from typing import Optional, List
@@ -85,12 +90,11 @@ class RenewableEnergySource(BaseComponent):
 
     def get_capacity(self,results, component):
         if self.investment:
-            if self.investment_component.multiperiod:
-                return (results[component, self.bus]["period_scalars"]["invest"].sum(),1 if results[component, self.bus]["period_scalars"]["invest"].sum()>0 else 0)
-            else:
-                return (solph.views.node(results, self.bus)[
-                    "scalars"][ ((component, self.bus), "invest")],
-                        solph.views.node(results, self.bus)["scalars"].get(((component, self.bus), "invest_status"), 0))
+            return extract_investment_capacity_from_results(
+                results=results,
+                component=component,
+                bus=self.bus,
+            )
         else:
             return component.outputs[self.bus].nominal_capacity,0
 

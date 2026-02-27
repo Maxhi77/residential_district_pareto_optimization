@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from oemof.tools import economics
-from typing import Optional
+from typing import Any, Optional
+from oemof import solph
 
 OBSERVATION_PERIOD = 20
 INTEREST_RATE =0.03
@@ -24,7 +25,72 @@ class BaseComponent:
 class TimeConfiguration:
     lifetime: float
     observation_period: float = OBSERVATION_PERIOD
-    multiperiod: bool = False
+    # Kept for backward compatibility; capacity extraction is auto-detected
+    # from result structure and does not require manual toggling anymore.
+    multiperiod: Optional[bool] = None
+
+
+def _as_float(value: Any) -> float:
+    """Convert scalar/pandas-like objects to float."""
+    if hasattr(value, "sum"):
+        value = value.sum()
+    return float(value)
+
+
+def extract_investment_capacity_from_results(
+    results: dict,
+    component: Any,
+    bus: Any,
+) -> tuple[float, float]:
+    """Return `(capacity, invest_status)` for both single- and multi-period results.
+
+    This function auto-detects whether invest values live in `period_scalars`
+    or `scalars`, removing the need for manual multiperiod flags in scripts.
+    """
+    result_key = (component, bus)
+    node_result = results.get(result_key)
+    if node_result is not None:
+        period_scalars = node_result.get("period_scalars")
+        if period_scalars is not None and "invest" in period_scalars:
+            capacity = _as_float(period_scalars["invest"])
+            if "invest_status" in period_scalars:
+                invest_status = _as_float(period_scalars["invest_status"])
+            else:
+                invest_status = 1.0 if capacity > 0 else 0.0
+            return capacity, invest_status
+
+        scalars = node_result.get("scalars")
+        if scalars is not None and "invest" in scalars:
+            capacity = _as_float(scalars["invest"])
+            if "invest_status" in scalars:
+                invest_status = _as_float(scalars["invest_status"])
+            else:
+                invest_status = 1.0 if capacity > 0 else 0.0
+            return capacity, invest_status
+
+    # Fallback via node-view for compatibility with older/newer result layouts.
+    node_view = solph.views.node(results, bus)
+    scalars = node_view.get("scalars")
+    scalar_invest_key = ((component, bus), "invest")
+    scalar_status_key = ((component, bus), "invest_status")
+    if scalars is not None and scalar_invest_key in scalars:
+        capacity = _as_float(scalars[scalar_invest_key])
+        invest_status = _as_float(scalars.get(scalar_status_key, 1.0 if capacity > 0 else 0.0))
+        return capacity, invest_status
+
+    period_scalars = node_view.get("period_scalars")
+    if period_scalars is not None and scalar_invest_key in period_scalars:
+        capacity = _as_float(period_scalars[scalar_invest_key])
+        invest_status = _as_float(
+            period_scalars.get(scalar_status_key, 1.0 if capacity > 0 else 0.0)
+        )
+        return capacity, invest_status
+
+    raise KeyError(
+        f"Could not extract invest information for component={component} and bus={bus}."
+    )
+
+
 @dataclass
 class InvestmentComponents(TimeConfiguration):
     maximum_capacity: float

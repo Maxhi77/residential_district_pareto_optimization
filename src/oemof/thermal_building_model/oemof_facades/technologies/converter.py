@@ -1,4 +1,8 @@
-from oemof.thermal_building_model.oemof_facades.base_component import BaseComponent, InvestmentComponents
+from oemof.thermal_building_model.oemof_facades.base_component import (
+    BaseComponent,
+    InvestmentComponents,
+    extract_investment_capacity_from_results,
+)
 from typing import Optional, List
 from oemof import solph
 from oemof.network import Bus
@@ -81,12 +85,11 @@ class Converter(BaseComponent):
                 "total_efficiency":total_efficiency}
     def get_capacity(self,results,component):
         if self.investment:
-            if self.investment_component.multiperiod:
-                return (results[component, self.bus]["period_scalars"]["invest"].sum(),1 if results[component, self.bus]["period_scalars"]["invest"].sum()>0 else 0)
-            else:
-                return (solph.views.node(results, self.bus)[
-                    "scalars"][ ((component, self.bus), "invest")]
-                        ,solph.views.node(results, self.bus)["scalars"].get(((component, self.bus), "invest_status"), 0))
+            return extract_investment_capacity_from_results(
+                results=results,
+                component=component,
+                bus=self.bus,
+            )
         else:
             return component.outputs[self.bus].nominal_capacity, 0
     def get_investment_cost(self,capacity,invest_status):
