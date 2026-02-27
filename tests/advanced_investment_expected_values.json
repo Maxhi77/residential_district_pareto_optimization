@@ -1,0 +1,9 @@
+{
+  "centralized_facade_toy_system::gurobi": {
+    "conv_h_from_grid_50_b1_sum": 18.265625,
+    "conv_h_from_grid_50_b2_sum": 18.265625,
+    "heat_grid_sink_sum": 3.0,
+    "heat_grid_source_sum": 3.0,
+    "objective": 4950.234515682799
+  }
+}

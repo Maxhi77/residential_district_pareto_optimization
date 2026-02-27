@@ -1,0 +1,47 @@
+{
+  "air_heat_pump::gurobi": {
+    "capacity": 4.0,
+    "flow_from_converter_sum": 12.0,
+    "investment_cost": 147.87455671309,
+    "objective": 149.1630357321214
+  },
+  "battery::gurobi": {
+    "capacity": 0.1,
+    "flow_co2_sum": 0.05,
+    "flow_into_sum": 0.005000000000017948,
+    "investment_cost": 10.470822557785997,
+    "objective": 10.470822557785997
+  },
+  "chp::gurobi": {
+    "capacity": 3.0,
+    "flow_from_converter_sum": 9.0,
+    "investment_cost": 161.3176982324618,
+    "objective": 164.8879461663461
+  },
+  "gas_heater::gurobi": {
+    "capacity": 6.0606060606060606,
+    "flow_from_converter_sum": 16.0,
+    "investment_cost": 135.6535189682065,
+    "objective": 137.9646300793176
+  },
+  "heat_grid::gurobi": {
+    "investment_co2": 308.69305626666664,
+    "investment_cost": 4748.644297243673,
+    "objective": 3561.4832229327544,
+    "sink_flow_sum": 3.0
+  },
+  "hot_water_tank::gurobi": {
+    "capacity": 0.28892345483495585,
+    "flow_co2_sum": 8.0,
+    "flow_into_sum": 3.0,
+    "investment_cost": 20.675820117909765,
+    "objective": 20.675820117909765
+  },
+  "pv::gurobi": {
+    "capacity": 0.1,
+    "grid_import_sum": 0.0,
+    "investment_cost": 9.410199063560272,
+    "objective": 9.410199063560272,
+    "sum": 0.0030000000000000027
+  }
+}
