@@ -111,6 +111,11 @@ class WarmWater(Demand):
     demand_temperature = 50
     def __post_init__(self):
         fraction_of_hot_water = (35-10)/(self.demand_temperature-10)
+        heat_capacity_water = 4.18  # [kJ/(kg/K)
+        thermal_conversion_factor = (
+            (35 - 10) * heat_capacity_water * (1000 / 3600)
+        ) / PhysicalBaseUnit.factor
+
         if self.value_list is None:
             if self.demand_path is None:
                 main_path = get_project_root()
@@ -129,11 +134,7 @@ class WarmWater(Demand):
                     .sum()
                     .to_frame(name="Hourly_Sum")["Hourly_Sum"]
                 )
-                heat_capacity_water = 4.18  # [kJ/(kg/K)
-                warm_water_demand_in_watt = (
-                        (35 - 10) * heat_capacity_water * warm_water_demand_df * (1000 / 3600)
-                ) / PhysicalBaseUnit.factor
-                self.value_list = warm_water_demand_in_watt
+                self.value_list = warm_water_demand_df.tolist()
 
 
             else:
@@ -147,18 +148,14 @@ class WarmWater(Demand):
                     .to_frame(name="Hourly_Sum")["Hourly_Sum"]
                 )
 
-                #df_ww=df["Warm Water_HH1"]
-                df_ww=warm_water_demand_df
-                heat_capacity_water = 4.18  # [kJ/(kg/K)
-                warm_water_demand_in_watt = (
-                        (35 - 10) * heat_capacity_water * df_ww * (1000 / 3600)
-                ) / PhysicalBaseUnit.factor
-                self.value_list = warm_water_demand_in_watt.tolist()
+                self.value_list = warm_water_demand_df.tolist()
         else:
-            df_ww =  self.value_list
-            heat_capacity_water = 4.18  # [kJ/(kg/K)
-            warm_water_demand_in_watt = (
-                    (35 - 10) * heat_capacity_water * df_ww * (1000 / 3600)
-            ) / PhysicalBaseUnit.factor
-            self.value_list = warm_water_demand_in_watt.tolist()
-        self.value_list=[x * fraction_of_hot_water for x in self.value_list]
+            if hasattr(self.value_list, "tolist"):
+                self.value_list = self.value_list.tolist()
+            else:
+                self.value_list = list(self.value_list)
+
+        self.value_list = [
+            x * thermal_conversion_factor * fraction_of_hot_water
+            for x in self.value_list
+        ]

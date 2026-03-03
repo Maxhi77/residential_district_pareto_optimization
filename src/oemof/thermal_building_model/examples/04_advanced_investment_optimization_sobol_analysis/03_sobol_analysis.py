@@ -1,5 +1,5 @@
 from oemof.thermal_building_model.oemof_facades.base_component import  PhysicalBaseUnit
-
+import pandas as pd
 from oemof.thermal_building_model.oemof_facades.infrastructure.grids import ElectricityGrid, GasGrid
 from oemof.thermal_building_model.oemof_facades.infrastructure.carriers import ElectricityCarrier, HeatCarrier, \
     GasCarrier
@@ -19,8 +19,8 @@ import os
 import pickle
 import multiprocessing
 from SALib.sample import saltelli
-
-def main(year_of_construction,target_residents,tabula_building_code, building_type,building_size,demand_path,floor_to_roof_area_ratio,azimuth,tilt,co2_limit,peak_new):
+import csv
+def main(year_of_construction,target_residents,tabula_building_code, building_type,building_size,demand_path,floor_to_roof_area_ratio,azimuth,tilt,co2_limit,peak_new,result_key):
     target_residents = target_residents
     building_type = building_type
     building_id = tabula_building_code
@@ -49,8 +49,34 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
     electricity_carrier_dataclass = ElectricityCarrier()
     electricity_carrier_bus = electricity_carrier_dataclass.get_bus()
     connect_buses(input=electricity_grid_bus_from_grid, target=electricity_carrier_bus, output=electricity_grid_bus_into_grid)
-    electricity_demand_dataclass = ElectricityDemand(demand_path = demand_path+'/SumProfiles.Electricity.csv',
+    if building_type=="SFH":
+        electricity_demand_dataclass = ElectricityDemand(demand_path = demand_path+'/SumProfiles.Electricity.csv',
                                                     bus=electricity_carrier_bus)
+    elif building_type =="MFH":
+        # Demands laden
+        value_list_elect_demand = []
+        from pathlib import Path
+        for result_k in result_key:
+            csv_path = Path(demand_path) / result_k / "SumProfiles.Electricity.csv"
+            with open(csv_path, newline="", encoding="utf-8") as f:
+                df_elect = pd.read_csv(
+                    os.path.join(csv_path),
+                    delimiter=";",
+                )
+                elect_df = (
+                    df_elect.groupby(df_elect.index // 60)["Sum [kWh]"]
+                    .sum()
+                    .to_frame(name="Hourly_Sum")["Hourly_Sum"]
+                )  * 1000
+                values = elect_df.tolist() # Spalte "Sum [kWh]"
+
+            if not value_list_elect_demand:
+                value_list_elect_demand = values
+            else:
+                value_list_elect_demand = [a + b for a, b in zip(value_list_elect_demand, values)]
+        # Datenklassen
+
+        electricity_demand_dataclass = ElectricityDemand(value_list=value_list_elect_demand,bus=electricity_carrier_bus)
     electricity_demand = electricity_demand_dataclass.create_demand()
 
     electricity  = [electricity_grid_bus_from_grid,
@@ -88,12 +114,42 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
         es.add(value)
     building_dataclass.bus = heat_carrier_bus[building_dataclass.level_heating_demand]
 
+    if building_type =="SFH":
+        heat_demand_dataclass = WarmWater(name="WarmWater",
+                                           level = 40,
+                                           bus=heat_carrier_bus[40],
+                                            demand_path=demand_path+'/SumProfiles.Warm Water.csv')
+        heat_demand = heat_demand_dataclass.create_demand()
 
-    heat_demand_dataclass = WarmWater(name="WarmWater",
-                                       level = 40,
-                                       bus=heat_carrier_bus[40],
-                                        demand_path=demand_path+'/SumProfiles.Warm Water.csv')
-    heat_demand = heat_demand_dataclass.create_demand()
+    elif building_type =="MFH":
+        # Demands laden
+        value_list_ww_demand = []
+
+        for result_k in result_key:
+            csv_path = Path(demand_path) / result_k / "SumProfiles.Warm Water.csv"
+            with open(csv_path, newline="", encoding="utf-8") as f:
+                reader = csv.reader(f, delimiter=";")
+                df_warm_water = pd.read_csv(
+                    os.path.join(csv_path),
+                    delimiter=";"
+                )
+                warm_water_demand_df = (
+                    df_warm_water.groupby(df_warm_water.index // 60)["Sum [L]"]
+                    .sum()
+                    .to_frame(name="Hourly_Sum")["Hourly_Sum"]
+                )
+                values = warm_water_demand_df.tolist()
+            if not value_list_ww_demand:
+                value_list_ww_demand = values
+            else:
+                value_list_ww_demand = [a + b for a, b in zip(value_list_ww_demand, values)]
+        heat_demand_dataclass = WarmWater(name="WarmWater",
+                                          level=40,
+                                          bus=heat_carrier_bus[40],
+                                          value_list=value_list_ww_demand)
+        heat_demand = heat_demand_dataclass.create_demand()
+
+
     hot_water_tank_config_building = copy.deepcopy(hot_water_tank_config)
     hot_water_tank_config_building.maximum_capacity =  4
     hot_water_tank_input_bus = solph.buses.Bus(label=f"tank_input_bus_{building_id}")
@@ -239,6 +295,8 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
         model.solve(solver=solver, solve_kwargs={"tee": True})
         meta_results = solph.processing.meta_results(model)
         results = solph.processing.results(model)
+        print(meta_results["objective"])
+        print(meta_results["solver"]["Wall time"])
         final_results = {}
         final_results[hot_water_tank_dataclass.name] = hot_water_tank_dataclass.post_process(results,hot_water_tank)
 
@@ -295,7 +353,7 @@ problem = {
     'num_vars': 6,
     'names': ['net_floor_area','floor_to_roof_area_ratio', 'tabula_year_class', 'number_of_residents',"azimuth","tilt"],
     'bounds': [
-        [0, 1],      # Wohnfläche in m²
+        [0, 1],      # WohnflÃ¤che in mÂ²
         [0,1]   ,        #floor_to_roof_area_ratio
         [1, 11],        # tabula_year_class (1-11 Klassen)
         [0, 1],         # Bewohner
@@ -303,9 +361,9 @@ problem = {
         [30, 60]          # tilt
     ]
 }
-# Sampling (kleine Anzahl für Test)
+# Sampling (kleine Anzahl fÃ¼r Test)
 param_values = saltelli.sample(problem, int(1024), calc_second_order=False)
-# laut chat gpt bei 6 params sollte man n=	1024für gute Ergebnisse, das wären 16.000 Durchläufe
+# laut chat gpt bei 6 params sollte man n=	1024fÃ¼r gute Ergebnisse, das wÃ¤ren 16.000 DurchlÃ¤ufe
 # Spaltenindex merken
 # sfh liegt zwischen 1.5:3 und MFH zwischen 2:4
 idx_size = problem['names'].index('net_floor_area')
@@ -323,7 +381,7 @@ mfh_residents_min, mfh_residents_max = 3, 14
 
 sfh_ratio_min, sfh_ratio_max = 0.8, 3 #floor to roof
 mfh_ratio_min, mfh_ratio_max = 2, 5
-# Runden der gewünschten Variablen
+# Runden der gewÃ¼nschten Variablen
 # Mapping
 if True:
     from different_household_models import sobol_households
@@ -331,22 +389,22 @@ import random
 
 def random_household_sizes(total: int, k: int, min_size: int = 1, max_size: int = 6) -> list[int]:
     """
-    Liefert eine zufällige Liste der Länge k, deren Summe total ist,
+    Liefert eine zufÃ¤llige Liste der LÃ¤nge k, deren Summe total ist,
     und jeder Eintrag liegt in [min_size, max_size].
     """
     if total < k * min_size or total > k * max_size:
-        raise ValueError(f"Unmöglich: total={total} passt nicht zu k={k} mit [{min_size},{max_size}]")
+        raise ValueError(f"UnmÃ¶glich: total={total} passt nicht zu k={k} mit [{min_size},{max_size}]")
 
     remaining = total
     sizes = []
     for i in range(k):
         remaining_slots = k - i - 1
 
-        # was muss mindestens / maximal noch übrig bleiben?
+        # was muss mindestens / maximal noch Ã¼brig bleiben?
         min_for_rest = remaining_slots * min_size
         max_for_rest = remaining_slots * max_size
 
-        # aktuelle Wahl muss so sein, dass Rest noch möglich ist
+        # aktuelle Wahl muss so sein, dass Rest noch mÃ¶glich ist
         low = max(min_size, remaining - max_for_rest)
         high = min(max_size, remaining - min_for_rest)
 
@@ -358,7 +416,7 @@ def random_household_sizes(total: int, k: int, min_size: int = 1, max_size: int 
     return sizes
 def possible_households_by_size(sobol_households: dict, sizes: list[int]) -> list[list[tuple]]:
     """
-    Für jede Haushaltsgröße in sizes: Liste möglicher Haushalte [(name,res), ...]
+    FÃ¼r jede HaushaltsgrÃ¶ÃŸe in sizes: Liste mÃ¶glicher Haushalte [(name,res), ...]
     """
     result = []
     for s in sizes:
@@ -381,7 +439,9 @@ def run_multiprocessing(gap_starter,
 
     counter=  0
     # Beispiel-Durchlauf
-    gap_size = 1000
+    gap_size = 10
+    gap_size_saver = 10
+    status=True
 
     for params in param_values:
         gap_min = gap_starter*gap_size
@@ -389,15 +449,17 @@ def run_multiprocessing(gap_starter,
         if gap_min > counter:
             counter += 1
             continue
+        if status is False:
+            break
         print("gap_starter "+str(gap_starter)+" gap_size " + str(gap_size)+" counter "+ str(counter) )
 
 
         # Normalisierungsfunktion
-        # Rückberechnungsfunktion
+        # RÃ¼ckberechnungsfunktion
         def reverse_normalize(normalized_value, min_val, max_val):
             return normalized_value * (max_val - min_val) + min_val
 
-        building_type = "SFH"
+        building_type = "MFH"
 
         if building_type == "SFH":
             building_size = reverse_normalize(params[idx_size], sfh_floor_area_min, sfh_floor_area_max)
@@ -427,7 +489,7 @@ def run_multiprocessing(gap_starter,
             elif target_residents > 4:
                 number_households = random.randint(3, 5)  # 3,4,5
 
-            # 2) in Haushaltsgrößen aufteilen (1..6)
+            # 2) in HaushaltsgrÃ¶ÃŸen aufteilen (1..6)
             sizes = random_household_sizes(target_residents, number_households, 1, 6)
             possible_households_lists = possible_households_by_size(sobol_households, sizes)
             chosen_household = possible_households_lists
@@ -476,21 +538,60 @@ def run_multiprocessing(gap_starter,
 
 
         def format_household_key(chosen_household):
-            match = re.match(r"CHR0?(\d+)", chosen_household)
-            if match:
-                number = int(match.group(1))  # int entfernt führende Nullen
-                return f"Results_CHH_{number}"  # ohne führende Null
-            else:
+            def map_chr_to_result_key(household_name):
+                if not isinstance(household_name, str):
+                    return None
+
+                match = re.match(r"CHR0?(\d+)", household_name.strip())
+                if match:
+                    number = int(match.group(1))  # int entfernt fuehrende Nullen
+                    return f"Results_CHH_{number}"
+                return None
+
+            if isinstance(chosen_household, str):
+                result_key_single = map_chr_to_result_key(chosen_household)
+                return result_key_single if result_key_single else "Results_INVALID"
+
+            extracted_household_names = []
+            if isinstance(chosen_household, (list, tuple)):
+                for household in chosen_household:
+                    if isinstance(household, str):
+                        extracted_household_names.append(household)
+                        continue
+
+                    if isinstance(household, (list, tuple)) and household:
+                        first_entry = household[0]
+                        if isinstance(first_entry, str):
+                            extracted_household_names.append(first_entry)
+                        elif isinstance(first_entry, (list, tuple)) and first_entry:
+                            if isinstance(first_entry[0], str):
+                                extracted_household_names.append(first_entry[0])
+
+            result_keys = [
+                result_key
+                for result_key in (
+                    map_chr_to_result_key(household_name)
+                    for household_name in extracted_household_names
+                )
+                if result_key is not None
+            ]
+
+            if not result_keys:
                 return "Results_INVALID"
+            if len(result_keys) == 1:
+                return result_keys[0]
+            return result_keys
+
         if building_type == "SFH":
             result_key = format_household_key(chosen_household)
             #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles\{result_key}'
-            demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
+            #demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
         elif building_type == "MFH":
             result_key = format_household_key(chosen_household)
-            #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles\{result_key}'
-            demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
 
+            #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
+            #demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
+            demand_path = f'/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
 
         final_results, co2  = main(year_of_construction,
              target_residents,
@@ -499,7 +600,7 @@ def run_multiprocessing(gap_starter,
              building_size,
              demand_path,
              floor_to_roof_area_ratio,
-             azimuth, tilt,None,None
+             azimuth, tilt,None,None,result_key
                  )
         if final_results is None:
             results_loop_to_save[counter] = {
@@ -541,7 +642,7 @@ def run_multiprocessing(gap_starter,
                                       building_size,
                                       demand_path,
                                       floor_to_roof_area_ratio,
-                                      azimuth, tilt, co2*0.5, None
+                                      azimuth, tilt, co2*0.5, None,result_key
                                       )
             if final_results_co2_limit is None:
                 results_loop_to_save_co2_limit[counter] = {
@@ -576,7 +677,7 @@ def run_multiprocessing(gap_starter,
                                                               building_size,
                                                               demand_path,
                                                               floor_to_roof_area_ratio,
-                                                              azimuth, tilt, co2*0.5, max(peak)*0.5
+                                                              azimuth, tilt, co2*0.5, max(peak)*0.5,result_key
                                                               )
                 if final_results_peak_limit is None:
                     results_loop_to_save_peak_limit[counter] = {
@@ -604,7 +705,7 @@ def run_multiprocessing(gap_starter,
                         "totex": None,
                         "peak": None
                     }
-        if counter % gap_size== 0 or counter %( len(param_values)-1)== 0:
+        if counter % gap_size_saver== 0 or counter %( len(param_values)-1)== 0 or counter %( len(param_values)-2)== 0:
             file_path="sobol_"+str(building_type)+"_"+str(gap_starter)+"_"+str(counter)+".pkl"
             file_path_co2 = "sobol_co2_" + str(building_type) + "_" + str(gap_starter) + "_" + str(counter) + ".pkl"
             file_path_peak = "sobol_peak_" + str(building_type) + "_" + str(gap_starter) + "_" + str(counter) + ".pkl"
@@ -629,7 +730,7 @@ if __name__ == "__main__":
 
     gap_values = range(0,8)  # Gap von 0 bis 9
     processes = []
-    if False:
+    if True:
         run_multiprocessing(0,
                             idx_size,
                             idx_year_class,
@@ -654,3 +755,4 @@ if __name__ == "__main__":
             p.join()
 
 # START 19:09
+
