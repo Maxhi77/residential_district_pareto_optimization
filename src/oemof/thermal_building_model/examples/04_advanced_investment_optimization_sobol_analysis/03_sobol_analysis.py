@@ -738,7 +738,7 @@ if __name__ == "__main__":
                             idx_azimuth,
                             idx_tilt,
                             )
-    if True:
+    if False:
 
         for gap_starter in gap_values:
             p = multiprocessing.Process(target=run_multiprocessing, args=(gap_starter,
