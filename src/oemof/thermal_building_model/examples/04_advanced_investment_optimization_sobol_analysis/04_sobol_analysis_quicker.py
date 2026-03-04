@@ -19,6 +19,7 @@ import copy
 import os
 import pickle
 import multiprocessing
+import argparse
 from SALib.sample import saltelli
 
 def main(year_of_construction,target_residents,tabula_building_code, building_type,building_size,demand_path,floor_to_roof_area_ratio,azimuth,tilt,co2_limit,peak_new,result_key):
@@ -430,6 +431,10 @@ def run_multiprocessing(gap_starter,
                         idx_residents,
                         idx_azimuth,
                         idx_tilt,
+                        setted_gap=0,
+                        gap_size=200,
+                        gap_size_saver=200,
+                        building_type="MFH",
                         ):
 
 
@@ -439,11 +444,7 @@ def run_multiprocessing(gap_starter,
     results_loop_to_save_co2_limit = {}
 
     counter=  0
-    # Beispiel-Durchlauf
-    gap_size = 200
     status=True
-    gap_size_saver = 200
-    setted_gap = 0 # +gap_size_saver*9
     for params in param_values:
         gap_min = gap_starter*gap_size + setted_gap
         gap_max =(gap_starter+1)*gap_size + setted_gap
@@ -458,8 +459,6 @@ def run_multiprocessing(gap_starter,
         # Rückberechnungsfunktion
         def reverse_normalize(normalized_value, min_val, max_val):
             return normalized_value * (max_val - min_val) + min_val
-
-        building_type = "MFH"
 
         if building_type == "SFH":
             building_size = reverse_normalize(params[idx_size], sfh_floor_area_min, sfh_floor_area_max)
@@ -588,8 +587,8 @@ def run_multiprocessing(gap_starter,
             demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
         elif building_type == "MFH":
             result_key = format_household_key(chosen_household)
-            demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
-            #demand_path = f'/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles'
+            #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
+            demand_path = f'/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles'
 
 
         final_results, co2  = main(year_of_construction,
@@ -727,27 +726,65 @@ def run_multiprocessing(gap_starter,
         if gap_max < counter:
             break
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run sobol_analysis_quicker with optional offset for cluster jobs.")
+    parser.add_argument("--gap-start", type=int, default=0, help="First gap_starter index (inclusive).")
+    parser.add_argument("--gap-end", type=int, default=8, help="Last gap_starter index (inclusive).")
+    parser.add_argument("--gap-size", type=int, default=150, help="Number of Sobol samples per gap_starter.")
+    parser.add_argument("--gap-size-saver", type=int, default=150, help="Save cadence and offset base size.")
+    parser.add_argument("--building-type", type=str, default="MFH", choices=["SFH", "MFH"])
+    parser.add_argument("--setted-gap", type=int, default=None, help="Absolute global offset. If set, multiplier is ignored.")
+    parser.add_argument("--offset-multiplier", type=int, default=None, help="Offset multiplier. If omitted, uses SLURM_ARRAY_TASK_ID or 0.")
+    parser.add_argument("--serial", action="store_true", help="Run gaps sequentially instead of spawning subprocesses.")
+    args = parser.parse_args()
 
-    gap_values = range(0,9)  # Gap von 0 bis 9
-    processes = []
-    if True:
-        run_multiprocessing(0,
-                            idx_size,
-                            idx_year_class,
-                            idx_residents,
-                            idx_azimuth,
-                            idx_tilt,
-                            )
-    if True:
+    if args.gap_end < args.gap_start:
+        raise ValueError("gap-end must be >= gap-start")
 
+    gap_values = range(args.gap_start, args.gap_end + 1)
+    number_of_gaps = args.gap_end - args.gap_start + 1
+
+    if args.setted_gap is not None:
+        setted_gap = args.setted_gap
+    else:
+        offset_multiplier = args.offset_multiplier
+        if offset_multiplier is None:
+            offset_multiplier = int(os.environ.get("SLURM_ARRAY_TASK_ID", "0"))
+        setted_gap = args.gap_size_saver * number_of_gaps * offset_multiplier
+
+    print(f"Running gaps {args.gap_start}-{args.gap_end}, setted_gap={setted_gap}, building_type={args.building_type}")
+
+    if args.serial:
         for gap_starter in gap_values:
-            p = multiprocessing.Process(target=run_multiprocessing, args=(gap_starter,
-                                                                          idx_size,
-                                                                          idx_year_class,
-                                                                          idx_residents,
-                                                                          idx_azimuth,
-                                                                          idx_tilt,
-                                                                          ))
+            run_multiprocessing(
+                gap_starter,
+                idx_size,
+                idx_year_class,
+                idx_residents,
+                idx_azimuth,
+                idx_tilt,
+                setted_gap,
+                args.gap_size,
+                args.gap_size_saver,
+                args.building_type,
+            )
+    else:
+        processes = []
+        for gap_starter in gap_values:
+            p = multiprocessing.Process(
+                target=run_multiprocessing,
+                args=(
+                    gap_starter,
+                    idx_size,
+                    idx_year_class,
+                    idx_residents,
+                    idx_azimuth,
+                    idx_tilt,
+                    setted_gap,
+                    args.gap_size,
+                    args.gap_size_saver,
+                    args.building_type,
+                ),
+            )
             processes.append(p)
             p.start()
 
