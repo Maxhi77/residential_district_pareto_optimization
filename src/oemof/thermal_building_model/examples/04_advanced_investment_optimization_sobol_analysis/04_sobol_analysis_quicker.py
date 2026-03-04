@@ -90,8 +90,9 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
                     electricity_grid_source,
                     electricity_carrier_bus,
                     electricity_demand]
+
     building_dataclass = ThermalBuilding(name=building_id,
-                                         building_type="SFH",
+                                         building_type=building_type,
                                          number_of_occupants=target_residents,
                                          floor_area=floor_area,
                                          country="DE",
@@ -524,10 +525,11 @@ def run_multiprocessing(gap_starter,
             year_of_construction = 2020
 
         refurbishment_status_tabula ="no_refurbishment"
-
-        tabula_building_code = f"DE.N.SFH.{tabula_year_class:02d}.Gen.ReEx.001.001"
-
-        print(f" Ziel-Bewohner: {target_residents}, Haushalt: {chosen_household}")
+        if building_type =="SFH":
+            tabula_building_code = f"DE.N.SFH.{tabula_year_class:02d}.Gen.ReEx.001.001"
+        elif building_type =="MFH":
+            tabula_building_code = f"DE.N.MFH.{tabula_year_class:02d}.Gen.ReEx.001.001"
+        print(f" Ziel-Bewohner: {target_residents}, Haushalt: {chosen_household}, Floor Area: {building_size}")
         print(f"TABULA-Code: {year_of_construction}\n")
         print("building size: " +str(building_size) )
         print("counter: " + str(counter))
@@ -584,8 +586,8 @@ def run_multiprocessing(gap_starter,
             demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
         elif building_type == "MFH":
             result_key = format_household_key(chosen_household)
-            #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles\{result_key}'
-            demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles'
+            demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
+            #demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles'
 
 
         final_results, co2  = main(year_of_construction,
