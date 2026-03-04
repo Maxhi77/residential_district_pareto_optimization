@@ -11,6 +11,7 @@ from oemof.thermal_building_model.oemof_facades.technologies.converter import Ai
 from oemof.thermal_building_model.oemof_facades.refurbishment.building_model import ThermalBuilding
 from oemof import solph
 from oemof.thermal_building_model.helpers.calculate_pv_electricity_yield import simulate_pv_yield
+import pandas as pd
 
 import random
 from oemof.thermal_building_model.input.economics.investment_components_sobol import battery_config,hot_water_tank_config,air_heat_pump_config,gas_heater_config,pv_system_config
@@ -20,7 +21,7 @@ import pickle
 import multiprocessing
 from SALib.sample import saltelli
 
-def main(year_of_construction,target_residents,tabula_building_code, building_type,building_size,demand_path,floor_to_roof_area_ratio,azimuth,tilt,co2_limit,peak_new):
+def main(year_of_construction,target_residents,tabula_building_code, building_type,building_size,demand_path,floor_to_roof_area_ratio,azimuth,tilt,co2_limit,peak_new,result_key):
     target_residents = target_residents
     building_type = building_type
     building_id = tabula_building_code
@@ -49,8 +50,38 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
     electricity_carrier_dataclass = ElectricityCarrier()
     electricity_carrier_bus = electricity_carrier_dataclass.get_bus()
     connect_buses(input=electricity_grid_bus_from_grid, target=electricity_carrier_bus, output=electricity_grid_bus_into_grid)
-    electricity_demand_dataclass = ElectricityDemand(demand_path = demand_path+'/SumProfiles.Electricity.csv',
-                                                    bus=electricity_carrier_bus)
+    if building_type == "SFH":
+        electricity_demand_dataclass = ElectricityDemand(
+            demand_path=demand_path + '/SumProfiles.Electricity.csv',
+            bus=electricity_carrier_bus,
+        )
+    elif building_type == "MFH":
+        value_list_elect_demand = []
+        result_key_list = [result_key] if isinstance(result_key, str) else list(result_key)
+
+        for result_k in result_key_list:
+            csv_path = os.path.join(demand_path, result_k, "SumProfiles.Electricity.csv")
+            df_elect = pd.read_csv(csv_path, delimiter=";")
+            elect_df = (
+                df_elect.groupby(df_elect.index // 60)["Sum [kWh]"]
+                .sum()
+                .to_frame(name="Hourly_Sum")["Hourly_Sum"]
+            ) * 1000
+            values = elect_df.tolist()
+
+            if not value_list_elect_demand:
+                value_list_elect_demand = values
+            else:
+                value_list_elect_demand = [
+                    a + b for a, b in zip(value_list_elect_demand, values)
+                ]
+
+        electricity_demand_dataclass = ElectricityDemand(
+            value_list=value_list_elect_demand,
+            bus=electricity_carrier_bus,
+        )
+    else:
+        raise ValueError(f"Unknown building_type: {building_type}")
     electricity_demand = electricity_demand_dataclass.create_demand()
 
     electricity  = [electricity_grid_bus_from_grid,
@@ -84,10 +115,40 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
     building_dataclass.bus = heat_carrier_bus[building_dataclass.level_heating_demand]
 
 
-    heat_demand_dataclass = WarmWater(name="WarmWater",
-                                       level = building_dataclass.level_heating_demand,
-                                       bus=heat_carrier_dataclass.get_bus()[building_dataclass.level_heating_demand],
-                                        demand_path=demand_path+'/SumProfiles.Warm Water.csv')
+    if building_type == "SFH":
+        heat_demand_dataclass = WarmWater(
+            name="WarmWater",
+            level=building_dataclass.level_heating_demand,
+            bus=heat_carrier_dataclass.get_bus()[building_dataclass.level_heating_demand],
+            demand_path=demand_path + '/SumProfiles.Warm Water.csv',
+        )
+    elif building_type == "MFH":
+        value_list_ww_demand = []
+        result_key_list = [result_key] if isinstance(result_key, str) else list(result_key)
+
+        for result_k in result_key_list:
+            csv_path = os.path.join(demand_path, result_k, "SumProfiles.Warm Water.csv")
+            df_warm_water = pd.read_csv(csv_path, delimiter=";")
+            warm_water_demand_df = (
+                df_warm_water.groupby(df_warm_water.index // 60)["Sum [L]"]
+                .sum()
+                .to_frame(name="Hourly_Sum")["Hourly_Sum"]
+            )
+            values = warm_water_demand_df.tolist()
+
+            if not value_list_ww_demand:
+                value_list_ww_demand = values
+            else:
+                value_list_ww_demand = [a + b for a, b in zip(value_list_ww_demand, values)]
+
+        heat_demand_dataclass = WarmWater(
+            name="WarmWater",
+            level=building_dataclass.level_heating_demand,
+            bus=heat_carrier_dataclass.get_bus()[building_dataclass.level_heating_demand],
+            value_list=value_list_ww_demand,
+        )
+    else:
+        raise ValueError(f"Unknown building_type: {building_type}")
 
     factor = building_dataclass.level_heating_demand/80
 
@@ -473,12 +534,49 @@ def run_multiprocessing(gap_starter,
 
 
         def format_household_key(chosen_household):
-            match = re.match(r"CHR0?(\d+)", chosen_household)
-            if match:
-                number = int(match.group(1))  # int entfernt führende Nullen
-                return f"Results_CHH_{number}"  # ohne führende Null
-            else:
+            def map_chr_to_result_key(household_name):
+                if not isinstance(household_name, str):
+                    return None
+
+                match = re.match(r"CHR0?(\d+)", household_name.strip())
+                if match:
+                    number = int(match.group(1))  # int entfernt fuehrende Nullen
+                    return f"Results_CHH_{number}"
+                return None
+
+            if isinstance(chosen_household, str):
+                result_key_single = map_chr_to_result_key(chosen_household)
+                return result_key_single if result_key_single else "Results_INVALID"
+
+            extracted_household_names = []
+            if isinstance(chosen_household, (list, tuple)):
+                for household in chosen_household:
+                    if isinstance(household, str):
+                        extracted_household_names.append(household)
+                        continue
+
+                    if isinstance(household, (list, tuple)) and household:
+                        first_entry = household[0]
+                        if isinstance(first_entry, str):
+                            extracted_household_names.append(first_entry)
+                        elif isinstance(first_entry, (list, tuple)) and first_entry:
+                            if isinstance(first_entry[0], str):
+                                extracted_household_names.append(first_entry[0])
+
+            result_keys = [
+                result_key
+                for result_key in (
+                    map_chr_to_result_key(household_name)
+                    for household_name in extracted_household_names
+                )
+                if result_key is not None
+            ]
+
+            if not result_keys:
                 return "Results_INVALID"
+            if len(result_keys) == 1:
+                return result_keys[0]
+            return result_keys
         if building_type == "SFH":
             result_key = format_household_key(chosen_household)
             #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles\{result_key}'
@@ -486,7 +584,7 @@ def run_multiprocessing(gap_starter,
         elif building_type == "MFH":
             result_key = format_household_key(chosen_household)
             #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles\{result_key}'
-            demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
+            demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles'
 
 
         final_results, co2  = main(year_of_construction,
@@ -496,7 +594,7 @@ def run_multiprocessing(gap_starter,
              building_size,
              demand_path,
              floor_to_roof_area_ratio,
-             azimuth, tilt,None,None
+             azimuth, tilt,None,None,result_key
                  )
         if final_results is None:
             results_loop_to_save[counter] = {
@@ -538,7 +636,7 @@ def run_multiprocessing(gap_starter,
                                       building_size,
                                       demand_path,
                                       floor_to_roof_area_ratio,
-                                      azimuth, tilt, co2*0.5, None
+                                      azimuth, tilt, co2*0.5, None,result_key
                                       )
             if final_results_co2_limit is None:
                 results_loop_to_save_co2_limit[counter] = {
@@ -573,7 +671,7 @@ def run_multiprocessing(gap_starter,
                                                               building_size,
                                                               demand_path,
                                                               floor_to_roof_area_ratio,
-                                                              azimuth, tilt, co2*0.5, max(peak)*0.5
+                                                              azimuth, tilt, co2*0.5, max(peak)*0.5,result_key
                                                               )
                 if final_results_peak_limit is None:
                     results_loop_to_save_peak_limit[counter] = {
