@@ -287,7 +287,7 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
     # Show the graph
     # Show the graph
 
-    try:
+    if True:
         print("__________")
         print("start for:")
 
@@ -343,9 +343,9 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
         final_results["peak_from_grid"] = final_results[electricity_grid_dataclass.name]["peak_from_grid"]
         final_results["peak_into_grid"] = final_results[electricity_grid_dataclass.name]["peak_into_grid"]
         return final_results, co2
-    except Exception as e:
-        print(e)
-        return None, None
+    #except Exception as e:
+        #print(e)
+        #return None, None
 
 print("start")
 # 1. Problem definieren
