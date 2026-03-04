@@ -397,6 +397,10 @@ class Building:
             row["q_int"].values[0])  # [kWh/(m²a)]
         self.q_internal_gains_annual = float(
             row["q_int"].values[0])  # [kWh/(m²a)]
+        print("DEBUG n_air_use type:", type(row["n_air_use"]))
+        print("DEBUG n_air_use value:\n", row["n_air_use"])
+        print("DEBUG n_air_infiltration type:", type(row["n_air_infiltration"]))
+        print("DEBUG n_air_infiltration value:\n", row["n_air_infiltration"])
         self.total_air_change_rate = float(
             row["n_air_use"] + row["n_air_infiltration"]
         )  # [1/h]

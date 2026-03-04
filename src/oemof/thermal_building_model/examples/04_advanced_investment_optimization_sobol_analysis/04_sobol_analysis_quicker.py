@@ -442,9 +442,10 @@ def run_multiprocessing(gap_starter,
     gap_size = 3
     status=True
     gap_size_saver = 3
+    gap = 0
     for params in param_values:
-        gap_min = gap_starter*gap_size
-        gap_max =(gap_starter+1)*gap_size
+        gap_min = gap_starter*gap_size + gap
+        gap_max =(gap_starter+1)*gap_size + gap
         if gap_min > counter:
             counter += 1
             continue
@@ -586,8 +587,8 @@ def run_multiprocessing(gap_starter,
             demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
         elif building_type == "MFH":
             result_key = format_household_key(chosen_household)
-            demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
-            #demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles'
+            #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
+            #demand_path = f'/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles'
 
 
         final_results, co2  = main(year_of_construction,
