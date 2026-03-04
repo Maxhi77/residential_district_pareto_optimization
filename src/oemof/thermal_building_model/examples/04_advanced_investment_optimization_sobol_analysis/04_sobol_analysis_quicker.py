@@ -241,6 +241,7 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
     from oemof.thermal_building_model.helpers.path_helper import get_project_root
 
     main_path = get_project_root()
+    print("main path:"+str(main_path))
     epw_path = os.path.join(
         main_path,
         "thermal_building_model",
@@ -587,7 +588,7 @@ def run_multiprocessing(gap_starter,
             demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
         elif building_type == "MFH":
             result_key = format_household_key(chosen_household)
-            #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
+            demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
             demand_path = f'/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles'
 
 
