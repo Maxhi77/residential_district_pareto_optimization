@@ -705,9 +705,10 @@ def run_multiprocessing(gap_starter,
                         "peak": None
                     }
         if counter % gap_size_saver == 0 or counter % (len(param_values) - 1) == 0 or counter % (len(param_values) - 2) == 0:
-            file_path="sobol_"+str(building_type)+"_"+str(gap_starter)+"_"+str(counter)+".pkl"
-            file_path_co2 = "sobol_co2_" + str(building_type) + "_" + str(gap_starter) + "_" + str(counter) + ".pkl"
-            file_path_peak = "sobol_peak_" + str(building_type) + "_" + str(gap_starter) + "_" + str(counter) + ".pkl"
+            gap_value_to_save  = setted_gap + gap_starter
+            file_path="sobol_"+str(building_type)+"_"+str(gap_value_to_save)+"_"+str(counter)+".pkl"
+            file_path_co2 = "sobol_co2_" + str(building_type) + "_" + str(gap_value_to_save) + "_" + str(counter) + ".pkl"
+            file_path_peak = "sobol_peak_" + str(building_type) + "_" + str(gap_value_to_save) + "_" + str(counter) + ".pkl"
             # If the file doesn't exist, create it and save the results
             print(f"New results created for {file_path}")
 
@@ -728,9 +729,9 @@ def run_multiprocessing(gap_starter,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run sobol_analysis_quicker with optional offset for cluster jobs.")
     parser.add_argument("--gap-start", type=int, default=0, help="First gap_starter index (inclusive).")
-    parser.add_argument("--gap-end", type=int, default=8, help="Last gap_starter index (inclusive).")
-    parser.add_argument("--gap-size", type=int, default=150, help="Number of Sobol samples per gap_starter.")
-    parser.add_argument("--gap-size-saver", type=int, default=150, help="Save cadence and offset base size.")
+    parser.add_argument("--gap-end", type=int, default=3, help="Last gap_starter index (inclusive).")
+    parser.add_argument("--gap-size", type=int, default=5, help="Number of Sobol samples per gap_starter.")
+    parser.add_argument("--gap-size-saver", type=int, default=5, help="Save cadence and offset base size.")
     parser.add_argument("--building-type", type=str, default="MFH", choices=["SFH", "MFH"])
     parser.add_argument("--setted-gap", type=int, default=None, help="Absolute global offset. If set, multiplier is ignored.")
     parser.add_argument("--offset-multiplier", type=int, default=None, help="Offset multiplier. If omitted, uses SLURM_ARRAY_TASK_ID or 0.")
