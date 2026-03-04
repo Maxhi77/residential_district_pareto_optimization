@@ -438,8 +438,9 @@ def run_multiprocessing(gap_starter,
 
     counter=  0
     # Beispiel-Durchlauf
-    gap_size = 1000
+    gap_size = 3
     status=True
+    gap_size_saver = 3
     for params in param_values:
         gap_min = gap_starter*gap_size
         gap_max =(gap_starter+1)*gap_size
@@ -455,7 +456,7 @@ def run_multiprocessing(gap_starter,
         def reverse_normalize(normalized_value, min_val, max_val):
             return normalized_value * (max_val - min_val) + min_val
 
-        building_type = "SFH"
+        building_type = "MFH"
 
         if building_type == "SFH":
             building_size = reverse_normalize(params[idx_size], sfh_floor_area_min, sfh_floor_area_max)
@@ -700,7 +701,7 @@ def run_multiprocessing(gap_starter,
                         "totex": None,
                         "peak": None
                     }
-        if counter % 500 == 0 or counter % (len(param_values) - 1) == 0 or counter % (len(param_values) - 2) == 0:
+        if counter % gap_size_saver == 0 or counter % (len(param_values) - 1) == 0 or counter % (len(param_values) - 2) == 0:
             file_path="sobol_"+str(building_type)+"_"+str(gap_starter)+"_"+str(counter)+".pkl"
             file_path_co2 = "sobol_co2_" + str(building_type) + "_" + str(gap_starter) + "_" + str(counter) + ".pkl"
             file_path_peak = "sobol_peak_" + str(building_type) + "_" + str(gap_starter) + "_" + str(counter) + ".pkl"
@@ -725,7 +726,7 @@ if __name__ == "__main__":
 
     gap_values = range(0,9)  # Gap von 0 bis 9
     processes = []
-    if False:
+    if True:
         run_multiprocessing(0,
                             idx_size,
                             idx_year_class,
