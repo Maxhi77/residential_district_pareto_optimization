@@ -588,7 +588,7 @@ def run_multiprocessing(gap_starter,
         elif building_type == "MFH":
             result_key = format_household_key(chosen_household)
             #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
-            #demand_path = f'/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles'
+            demand_path = f'/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles'
 
 
         final_results, co2  = main(year_of_construction,
