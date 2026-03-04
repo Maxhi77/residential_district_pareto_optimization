@@ -443,7 +443,7 @@ def run_multiprocessing(gap_starter,
     gap_size = 200
     status=True
     gap_size_saver = 200
-    setted_gap = 0 # +gap_size_saver*8
+    setted_gap = 0 # +gap_size_saver*9
     for params in param_values:
         gap_min = gap_starter*gap_size + setted_gap
         gap_max =(gap_starter+1)*gap_size + setted_gap
