@@ -293,10 +293,11 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
         print("start for:")
 
 
-        model.solve(solver=solver, solve_kwargs={"tee": True})
+        model.solve(solver=solver, solve_kwargs={"tee": True},
+                                              cmdline_options={"mipgap": 0.0075})
         meta_results = solph.processing.meta_results(model)
         print(meta_results["objective"])
-        print(meta_results["solver"]["Wall time"])
+        #print(meta_results["solver"]["Wall time"])
         results = solph.processing.results(model)
 
         final_results = {}
@@ -432,9 +433,11 @@ def run_multiprocessing(gap_starter,
                         idx_azimuth,
                         idx_tilt,
                         setted_gap=0,
+                        n_samples=None,
                         gap_size=200,
                         gap_size_saver=200,
                         building_type="MFH",
+                        host_name="unknown",
                         ):
 
 
@@ -442,17 +445,34 @@ def run_multiprocessing(gap_starter,
     results_loop_to_save = {}
     results_loop_to_save_peak_limit = {}
     results_loop_to_save_co2_limit = {}
+    results_loop_to_save_simple = {}
+    results_loop_to_save_peak_limit_simple = {}
+    results_loop_to_save_co2_limit_simple = {}
+
+    if n_samples is None:
+        n_samples = max(0, len(param_values) - setted_gap)
+    if n_samples <= 0:
+        return
+
+    host_end_exclusive = min(setted_gap + n_samples, len(param_values))
+    if setted_gap >= host_end_exclusive:
+        return
 
     counter=  0
     status=True
     for params in param_values:
-        gap_min = gap_starter*gap_size + setted_gap
-        gap_max =(gap_starter+1)*gap_size + setted_gap
+        gap_min = gap_starter * gap_size + setted_gap
+        gap_max = min((gap_starter + 1) * gap_size + setted_gap, host_end_exclusive)
+        if gap_min >= gap_max:
+            break
+
         if gap_min > counter:
             counter += 1
             continue
+        if counter >= gap_max:
+            break
         status=False
-        print("gap_starter "+str(gap_starter)+" gap_size " + str(gap_size)+" counter "+ str(counter) )
+        print("setted_gap: " +str(setted_gap)+" gap_min" + str(gap_min)+" counter "+ str(counter))
 
 
         # Normalisierungsfunktion
@@ -587,7 +607,7 @@ def run_multiprocessing(gap_starter,
             demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
         elif building_type == "MFH":
             result_key = format_household_key(chosen_household)
-            #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
+            demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
             demand_path = f'/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles'
 
 
@@ -608,6 +628,11 @@ def run_multiprocessing(gap_starter,
                 "totex": None,
                 "peak": None
             }
+            results_loop_to_save_simple[counter] = {
+                "co2": None,
+                "totex": None,
+                "peak": None
+            }
             results_loop_to_save_co2_limit[counter] = {
                 "results": None,
 
@@ -615,9 +640,19 @@ def run_multiprocessing(gap_starter,
                 "totex": None,
                 "peak": None
             }
+            results_loop_to_save_co2_limit_simple[counter] = {
+                "co2": None,
+                "totex": None,
+                "peak": None
+            }
             results_loop_to_save_peak_limit[counter] = {
                 "results": None,
 
+                "co2": None,
+                "totex": None,
+                "peak": None
+            }
+            results_loop_to_save_peak_limit_simple[counter] = {
                 "co2": None,
                 "totex": None,
                 "peak": None
@@ -632,6 +667,11 @@ def run_multiprocessing(gap_starter,
                     "co2": co2,
                     "totex": totex,
                     "peak": peak
+            }
+            results_loop_to_save_simple[counter] = {
+                "co2": co2,
+                "totex": totex,
+                "peak": peak
             }
             final_results_co2_limit, co2_co2_limit = main(year_of_construction,
                                       target_residents,
@@ -650,9 +690,19 @@ def run_multiprocessing(gap_starter,
                     "totex": None,
                     "peak": None
                 }
+                results_loop_to_save_co2_limit_simple[counter] = {
+                    "co2": None,
+                    "totex": None,
+                    "peak": None
+                }
                 results_loop_to_save_peak_limit[counter] = {
                     "results": None,
 
+                    "co2": None,
+                    "totex": None,
+                    "peak": None
+                }
+                results_loop_to_save_peak_limit_simple[counter] = {
                     "co2": None,
                     "totex": None,
                     "peak": None
@@ -664,6 +714,11 @@ def run_multiprocessing(gap_starter,
                 results_loop_to_save_co2_limit[counter] = {
                     "results": final_results_co2_limit,
 
+                    "co2": co2_co2_limit,
+                    "totex": totex,
+                    "peak": peak
+                }
+                results_loop_to_save_co2_limit_simple[counter] = {
                     "co2": co2_co2_limit,
                     "totex": totex,
                     "peak": peak
@@ -685,6 +740,11 @@ def run_multiprocessing(gap_starter,
                         "totex": None,
                         "peak": None
                     }
+                    results_loop_to_save_peak_limit_simple[counter] = {
+                        "co2": None,
+                        "totex": None,
+                        "peak": None
+                    }
                 else:
                     totex = final_results_co2_limit["totex"]
                     peak = (final_results_co2_limit["Electricity"]["peak_into_grid"],
@@ -692,6 +752,11 @@ def run_multiprocessing(gap_starter,
                     results_loop_to_save_peak_limit[counter] = {
                         "results": final_results_peak_limit,
 
+                        "co2": co2_peak_limit,
+                        "totex": totex,
+                        "peak": peak
+                    }
+                    results_loop_to_save_peak_limit_simple[counter] = {
                         "co2": co2_peak_limit,
                         "totex": totex,
                         "peak": peak
@@ -704,11 +769,19 @@ def run_multiprocessing(gap_starter,
                         "totex": None,
                         "peak": None
                     }
-        if counter % gap_size_saver == 0 or counter % (len(param_values) - 1) == 0 or counter % (len(param_values) - 2) == 0:
+        if (
+            counter % gap_size_saver == 0
+            or counter == (gap_max - 1)
+            or counter == (len(param_values) - 1)
+            or counter == (len(param_values) - 2)
+        ):
             gap_value_to_save  = setted_gap + gap_starter
-            file_path="sobol_"+str(building_type)+"_"+str(gap_value_to_save)+"_"+str(counter)+".pkl"
-            file_path_co2 = "sobol_co2_" + str(building_type) + "_" + str(gap_value_to_save) + "_" + str(counter) + ".pkl"
-            file_path_peak = "sobol_peak_" + str(building_type) + "_" + str(gap_value_to_save) + "_" + str(counter) + ".pkl"
+            file_path = f"sobol_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
+            file_path_co2 = f"sobol_co2_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
+            file_path_peak = f"sobol_peak_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
+            file_path_simple = f"simple_sobol_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
+            file_path_co2_simple = f"simple_sobol_co2_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
+            file_path_peak_simple = f"simple_sobol_peak_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
             # If the file doesn't exist, create it and save the results
             print(f"New results created for {file_path}")
 
@@ -719,42 +792,65 @@ def run_multiprocessing(gap_starter,
                 pickle.dump(results_loop_to_save_co2_limit, f)
             with open(file_path_peak, "wb") as f:
                 pickle.dump(results_loop_to_save_peak_limit, f)
+            with open(file_path_simple, "wb") as f:
+                pickle.dump(results_loop_to_save_simple, f)
+            with open(file_path_co2_simple, "wb") as f:
+                pickle.dump(results_loop_to_save_co2_limit_simple, f)
+            with open(file_path_peak_simple, "wb") as f:
+                pickle.dump(results_loop_to_save_peak_limit_simple, f)
             # Save the updated or new results back to the pickle file
             results_loop_to_save = {}
             results_loop_to_save_peak_limit = {}
             results_loop_to_save_co2_limit = {}
+            results_loop_to_save_simple = {}
+            results_loop_to_save_peak_limit_simple = {}
+            results_loop_to_save_co2_limit_simple = {}
         counter += 1
-        if gap_max < counter:
+        if counter >= gap_max:
             break
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run sobol_analysis_quicker with optional offset for cluster jobs.")
-    parser.add_argument("--gap-start", type=int, default=0, help="First gap_starter index (inclusive).")
-    parser.add_argument("--gap-end", type=int, default=3, help="Last gap_starter index (inclusive).")
-    parser.add_argument("--gap-size", type=int, default=5, help="Number of Sobol samples per gap_starter.")
-    parser.add_argument("--gap-size-saver", type=int, default=5, help="Save cadence and offset base size.")
+    parser = argparse.ArgumentParser(description="Run sobol analysis with explicit per-host slice.")
+    parser.add_argument("--host-name", type=str, default="unknown")
+
+    parser.add_argument("--setted-gap", type=int, required=True,
+                        help="Absolute start index in param_values for this host/run (required).")
+    parser.add_argument("--n-samples", type=int, required=True,
+                        help="How many samples this host should process (required).")
+
+    parser.add_argument("--gap-size", type=int, default=5)
+    parser.add_argument("--gap-size-saver", type=int, default=5)
     parser.add_argument("--building-type", type=str, default="MFH", choices=["SFH", "MFH"])
-    parser.add_argument("--setted-gap", type=int, default=None, help="Absolute global offset. If set, multiplier is ignored.")
-    parser.add_argument("--offset-multiplier", type=int, default=None, help="Offset multiplier. If omitted, uses SLURM_ARRAY_TASK_ID or 0.")
-    parser.add_argument("--serial", action="store_true", help="Run gaps sequentially instead of spawning subprocesses.")
+
+    parser.add_argument("--workers", type=int, default=1,
+                        help="Max number of gap processes to run in parallel on this host.")
+    parser.add_argument("--serial", action="store_true",
+                        help="Run gaps sequentially (no multiprocessing).")
     args = parser.parse_args()
 
-    if args.gap_end < args.gap_start:
-        raise ValueError("gap-end must be >= gap-start")
+    if args.setted_gap < 0:
+        raise ValueError("--setted-gap must be >= 0")
+    if args.n_samples <= 0:
+        raise ValueError("--n-samples must be > 0")
+    if args.gap_size <= 0:
+        raise ValueError("--gap-size must be > 0")
+    if args.workers <= 0:
+        raise ValueError("--workers must be > 0")
 
-    gap_values = range(args.gap_start, args.gap_end + 1)
-    number_of_gaps = args.gap_end - args.gap_start + 1
+    setted_gap = args.setted_gap
+    available_samples = max(0, len(param_values) - setted_gap)
+    effective_samples = min(args.n_samples, available_samples)
+    if effective_samples <= 0:
+        raise ValueError("No samples available for this --setted-gap in param_values.")
 
-    if args.setted_gap is not None:
-        setted_gap = args.setted_gap
-    else:
-        offset_multiplier = args.offset_multiplier
-        if offset_multiplier is None:
-            offset_multiplier = int(os.environ.get("SLURM_ARRAY_TASK_ID", "0"))
-        setted_gap = args.gap_size_saver * number_of_gaps * offset_multiplier
+    number_of_gaps = (effective_samples + args.gap_size - 1) // args.gap_size
+    gap_values = range(number_of_gaps)
 
-    print(f"Running gaps {args.gap_start}-{args.gap_end}, setted_gap={setted_gap}, building_type={args.building_type}")
+    print(
+        f"host={args.host_name} setted_gap={setted_gap} n_samples={effective_samples} "
+        f"gaps={number_of_gaps} gap_size={args.gap_size} workers={args.workers}"
+    )
 
-    if args.serial:
+    if args.serial or args.workers == 1:
         for gap_starter in gap_values:
             run_multiprocessing(
                 gap_starter,
@@ -764,32 +860,38 @@ if __name__ == "__main__":
                 idx_azimuth,
                 idx_tilt,
                 setted_gap,
+                effective_samples,
                 args.gap_size,
                 args.gap_size_saver,
                 args.building_type,
+                args.host_name,
             )
     else:
-        processes = []
-        for gap_starter in gap_values:
-            p = multiprocessing.Process(
-                target=run_multiprocessing,
-                args=(
-                    gap_starter,
-                    idx_size,
-                    idx_year_class,
-                    idx_residents,
-                    idx_azimuth,
-                    idx_tilt,
-                    setted_gap,
-                    args.gap_size,
-                    args.gap_size_saver,
-                    args.building_type,
-                ),
-            )
-            processes.append(p)
-            p.start()
+        gap_list = list(gap_values)
+        for i in range(0, len(gap_list), args.workers):
+            batch = []
+            for gap_starter in gap_list[i:i + args.workers]:
+                p = multiprocessing.Process(
+                    target=run_multiprocessing,
+                    args=(
+                        gap_starter,
+                        idx_size,
+                        idx_year_class,
+                        idx_residents,
+                        idx_azimuth,
+                        idx_tilt,
+                        setted_gap,
+                        effective_samples,
+                        args.gap_size,
+                        args.gap_size_saver,
+                        args.building_type,
+                        args.host_name,
+                    ),
+                )
+                batch.append(p)
+                p.start()
 
-        for p in processes:
-            p.join()
+            for p in batch:
+                p.join()
 
 # START 19:09
