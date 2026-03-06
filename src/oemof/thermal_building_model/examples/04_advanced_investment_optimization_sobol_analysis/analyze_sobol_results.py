@@ -50,38 +50,51 @@ directory = os.getcwd()
 print("Arbeitsverzeichnis:", directory)
 if True:
     data = None
+    output_files = []
 
-    for x in range(0, 14):
-        for y in range(0, 57001, 1000):
-            try:
-                file_path = os.path.join(directory, f"results_sobol_{x}_{y}.pkl")
-                with open(file_path, 'rb') as f:
-                    if data is None:
-
-                        data = drop_results(pickle.load(f))
-                    else:
-                        data.update(drop_results(pickle.load(f)))
-            except FileNotFoundError:
-                continue
+    for sobol_prefix in ["sobol_peak_SFH", "sobol_co2_SFH", "sobol_SFH"]:
+        data = None
+        for x in range(0, 14):
+            for y in range(0, 8500, 500):
+                try:
+                    file_path = os.path.join(directory, f"{sobol_prefix}_{x}_{y}.pkl")
+                    with open(file_path, 'rb') as f:
+                        loaded_data = drop_results(pickle.load(f))
+                        if data is None:
+                            data = loaded_data
+                        else:
+                            data.update(loaded_data)
+                except FileNotFoundError:
+                    continue
+        file_path = os.path.join(directory, f"{sobol_prefix}_8_8191.pkl")
+        with open(file_path, 'rb') as f:
+            loaded_data = drop_results(pickle.load(f))
+            if data is None:
+                data = loaded_data
+            else:
+                data.update(loaded_data)
+        if data is not None:
+            output_file = os.path.join(directory, f"sobol_{sobol_prefix}_merged_results.pkl")
+            with open(output_file, "wb") as f:
+                pickle.dump(data, f)
+            output_files.append(output_file)
+            print(f"Gespeichert unter: {output_file}")
 
     # Letzte Datei laden
-    file_path = os.path.join(directory, f"results_sobol_6_57343.pkl")
-    with open(file_path, 'rb') as f:
-        data.update(pickle.load(f))
+    if False:
+        file_path = os.path.join(directory, f"results_sobol_6_57343.pkl")
+        with open(file_path, 'rb') as f:
+            data.update(pickle.load(f))
 
     # In data_dict packen
     data_dict = data
-
-    # Ergebnis abspeichern
-    output_file = os.path.join(directory, "merged_results.pkl")
-    with open(output_file, "wb") as f:
-        pickle.dump(data_dict, f)
+    if output_files:
+        output_file = output_files[-1]
 file_path = os.path.join(directory, f"merged_results.pkl")
 data =None
 with open(file_path, 'rb') as f:
     if data is None:
         data = drop_results(pickle.load(f))
-print(f"Gespeichert unter: {output_file}")
 # Loop over the file numbers (2400, 2550, ..., 6143)
 data_dict =data
 
