@@ -20,7 +20,18 @@ import os
 import pickle
 import multiprocessing
 import argparse
+import sys
 from SALib.sample import saltelli
+
+DEFAULT_OUTPUT_DIR_REMOTE = "/jump/user/mh"
+DEFAULT_MFH_PROFILES_DIR_REMOTE = (
+    "/home/mh/thermal_building_clone/src/oemof/thermal_building_model/"
+    "examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles"
+)
+DEFAULT_SFH_PROFILES_DIR_REMOTE = (
+    "/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/"
+    "examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles"
+)
 
 def main(year_of_construction,target_residents,tabula_building_code, building_type,building_size,demand_path,floor_to_roof_area_ratio,azimuth,tilt,co2_limit,peak_new,result_key):
     target_residents = target_residents
@@ -30,7 +41,7 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
     demand_path = demand_path
     floor_to_roof_area_ratio = floor_to_roof_area_ratio
     construction_year = year_of_construction
-    solver = "scip"  # 'glpk', 'gurobi',....
+    solver = "gurobi"  # 'glpk', 'gurobi',....
     number_of_time_steps = 8760
 
 
@@ -106,7 +117,7 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
                                          )
     temp_heating_demand_building = building_dataclass.level_heating_demand
 
-    heat_carrier_temperature_levels = [temp_heating_demand_building]
+    heat_carrier_temperature_levels = [40,temp_heating_demand_building,80]
     heat_carrier_dataclass = HeatCarrier(levels = heat_carrier_temperature_levels)
     heat_carrier_dataclass.connect_buses_decreasing_levels()
 
@@ -120,8 +131,8 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
     if building_type == "SFH":
         heat_demand_dataclass = WarmWater(
             name="WarmWater",
-            level=building_dataclass.level_heating_demand,
-            bus=heat_carrier_dataclass.get_bus()[building_dataclass.level_heating_demand],
+            level=40,
+            bus=heat_carrier_bus[40],
             demand_path=demand_path + '/SumProfiles.Warm Water.csv',
         )
     elif building_type == "MFH":
@@ -145,30 +156,37 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
 
         heat_demand_dataclass = WarmWater(
             name="WarmWater",
-            level=building_dataclass.level_heating_demand,
-            bus=heat_carrier_dataclass.get_bus()[building_dataclass.level_heating_demand],
+            level=40,
+            bus=heat_carrier_bus[40],
             value_list=value_list_ww_demand,
         )
     else:
         raise ValueError(f"Unknown building_type: {building_type}")
 
-    factor = building_dataclass.level_heating_demand/80
 
-    heat_demand_dataclass.value_list = [x * factor for x in heat_demand_dataclass.value_list]
     heat_demand = heat_demand_dataclass.create_demand()
     hot_water_tank_config_building = copy.deepcopy(hot_water_tank_config)
     hot_water_tank_config_building.maximum_capacity =  4
+    hot_water_tank_input_bus = solph.buses.Bus(label=f"tank_input_bus_{building_id}")
+    hot_water_tank_output_bus = solph.buses.Bus(label=f"tank_output_bus_{building_id}")
+
     hot_water_tank_dataclass = HotWaterTank(
         name="heat_storage",
         investment=True,
-        temperature_buses=heat_carrier_dataclass.get_bus()[building_dataclass.level_heating_demand],
+        temperature_buses=heat_carrier_dataclass.get_bus(),
         max_temperature=80,
         min_temperature=40,
         investment_component=hot_water_tank_config_building,
-        input_bus=heat_carrier_dataclass.get_bus()[building_dataclass.level_heating_demand],
-        output_bus=heat_carrier_dataclass.get_bus()[building_dataclass.level_heating_demand],
+        input_bus=hot_water_tank_input_bus,
+        output_bus=hot_water_tank_output_bus,
     )
     hot_water_tank = hot_water_tank_dataclass.create_storage()
+    hot_water_tank_stratisfied_temp_levels_dict = hot_water_tank_dataclass.get_stratified_storage_temperature_levels()
+    hot_water_tank_stratisfied = hot_water_tank_dataclass.create_stratified_storage(
+        hot_water_tank_stratisfied_temp_levels_dict, heat_carrier_bus)
+    for key, value in hot_water_tank_stratisfied.items():
+        es.add(value)
+    es.add(hot_water_tank,hot_water_tank_input_bus,hot_water_tank_output_bus)
 
 
     es.add(hot_water_tank)
@@ -377,7 +395,7 @@ idx_azimuth = problem['names'].index('azimuth')
 idx_tilt = problem['names'].index('tilt')
 
 sfh_floor_area_min, sfh_floor_area_max = 105, 320
-mfh_floor_area_min, mfh_floor_area_max = 366, 528
+mfh_floor_area_min, mfh_floor_area_max = 300, 528
 
 sfh_residents_min, sfh_residents_max = 1, 6
 mfh_residents_min, mfh_residents_max = 3, 14
@@ -438,6 +456,9 @@ def run_multiprocessing(gap_starter,
                         gap_size_saver=200,
                         building_type="MFH",
                         host_name="unknown",
+                        output_dir=DEFAULT_OUTPUT_DIR_REMOTE,
+                        mfh_profiles_dir=DEFAULT_MFH_PROFILES_DIR_REMOTE,
+                        sfh_profiles_dir=DEFAULT_SFH_PROFILES_DIR_REMOTE,
                         ):
 
 
@@ -460,6 +481,8 @@ def run_multiprocessing(gap_starter,
 
     counter=  0
     status=True
+    counter_for_txt = 0
+    os.makedirs(output_dir, exist_ok=True)
     for params in param_values:
         gap_min = gap_starter * gap_size + setted_gap
         gap_max = min((gap_starter + 1) * gap_size + setted_gap, host_end_exclusive)
@@ -472,9 +495,24 @@ def run_multiprocessing(gap_starter,
         if counter >= gap_max:
             break
         status=False
-        print("setted_gap: " +str(setted_gap)+" gap_min" + str(gap_min)+" counter "+ str(counter))
+        # Erstelle den Dateipfad für die Textdatei
+        file_path = os.path.join(
+            output_dir, f"txt_{building_type}_{host_name}_{gap_min}_{gap_max}.txt"
+        )
 
+        # Öffne die Textdatei zum Anhängen oder Erstellen (falls sie nicht existiert)
 
+            # Wenn der counter_for_txt gleich 0 ist, schreibe die Startzeile in die Datei
+        if counter_for_txt == 0:
+            with open(file_path, 'a') as f:
+                f.write(f"Started for: counter_for_txt {counter_for_txt} missing: {gap_max - counter}\n")
+
+        # Schreibe alle 5 Schritte (counter_for_txt % 5) in die Datei
+        elif counter_for_txt % 5 == 0:
+            with open(file_path, 'a') as f:
+                f.write(f"Started for: counter_for_txt {counter_for_txt} missing: {gap_max - counter}\n")
+
+        counter_for_txt +=1
         # Normalisierungsfunktion
         # Rückberechnungsfunktion
         def reverse_normalize(normalized_value, min_val, max_val):
@@ -603,12 +641,10 @@ def run_multiprocessing(gap_starter,
             return result_keys
         if building_type == "SFH":
             result_key = format_household_key(chosen_household)
-            #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles\{result_key}'
-            demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
+            demand_path = os.path.join(sfh_profiles_dir, result_key)
         elif building_type == "MFH":
             result_key = format_household_key(chosen_household)
-            demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
-            demand_path = f'/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles'
+            demand_path = mfh_profiles_dir
 
 
         final_results, co2  = main(year_of_construction,
@@ -769,6 +805,7 @@ def run_multiprocessing(gap_starter,
                         "totex": None,
                         "peak": None
                     }
+
         if (
             counter % gap_size_saver == 0
             or counter == (gap_max - 1)
@@ -776,12 +813,24 @@ def run_multiprocessing(gap_starter,
             or counter == (len(param_values) - 2)
         ):
             gap_value_to_save  = setted_gap + gap_starter
-            file_path = f"sobol_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
-            file_path_co2 = f"sobol_co2_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
-            file_path_peak = f"sobol_peak_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
-            file_path_simple = f"simple_sobol_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
-            file_path_co2_simple = f"simple_sobol_co2_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
-            file_path_peak_simple = f"simple_sobol_peak_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
+            file_path = os.path.join(
+                output_dir, f"sobol_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
+            )
+            file_path_co2 = os.path.join(
+                output_dir, f"sobol_co2_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
+            )
+            file_path_peak = os.path.join(
+                output_dir, f"sobol_peak_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
+            )
+            file_path_simple = os.path.join(
+                output_dir, f"simple_sobol_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
+            )
+            file_path_co2_simple = os.path.join(
+                output_dir, f"simple_sobol_co2_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
+            )
+            file_path_peak_simple = os.path.join(
+                output_dir, f"simple_sobol_peak_{building_type}_{host_name}_{setted_gap}_{counter}.pkl"
+            )
             # If the file doesn't exist, create it and save the results
             print(f"New results created for {file_path}")
 
@@ -812,10 +861,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run sobol analysis with explicit per-host slice.")
     parser.add_argument("--host-name", type=str, default="unknown")
 
-    parser.add_argument("--setted-gap", type=int, required=True,
-                        help="Absolute start index in param_values for this host/run (required).")
-    parser.add_argument("--n-samples", type=int, required=True,
-                        help="How many samples this host should process (required).")
+    parser.add_argument("--setted-gap", type=int, default=None,
+                        help="Absolute start index in param_values for this host/run.")
+    parser.add_argument("--n-samples", type=int, default=None,
+                        help="How many samples this host should process.")
 
     parser.add_argument("--gap-size", type=int, default=5)
     parser.add_argument("--gap-size-saver", type=int, default=5)
@@ -825,7 +874,47 @@ if __name__ == "__main__":
                         help="Max number of gap processes to run in parallel on this host.")
     parser.add_argument("--serial", action="store_true",
                         help="Run gaps sequentially (no multiprocessing).")
+    parser.add_argument("--debug-local", action="store_true",
+                        help="Use local debug defaults so the script can be started directly from IDE.")
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="Output directory for pickle/txt result chunks.")
+    parser.add_argument("--mfh-profiles-dir", type=str, default=None,
+                        help="Base directory for MFH profiles.")
+    parser.add_argument("--sfh-profiles-dir", type=str, default=None,
+                        help="Base directory for SFH profiles.")
     args = parser.parse_args()
+    if len(sys.argv) == 1:
+        args.debug_local = True
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    local_profiles_dir = os.path.join(script_dir, "lpg_profiles")
+
+    if args.debug_local:
+        if args.setted_gap is None:
+            args.setted_gap = 0
+        if args.n_samples is None:
+            args.n_samples = 1
+        if args.host_name == "unknown":
+            args.host_name = "debug_local"
+        args.serial = True
+        args.workers = 1
+        args.gap_size = 1
+        args.gap_size_saver = 1
+        if args.output_dir is None:
+            args.output_dir = os.path.join(script_dir, "debug_output")
+        if args.mfh_profiles_dir is None:
+            args.mfh_profiles_dir = local_profiles_dir
+        if args.sfh_profiles_dir is None:
+            args.sfh_profiles_dir = local_profiles_dir
+    else:
+        if args.setted_gap is None or args.n_samples is None:
+            parser.error("--setted-gap und --n-samples sind erforderlich (oder --debug-local verwenden).")
+        if args.output_dir is None:
+            args.output_dir = DEFAULT_OUTPUT_DIR_REMOTE
+        if args.mfh_profiles_dir is None:
+            args.mfh_profiles_dir = DEFAULT_MFH_PROFILES_DIR_REMOTE
+        if args.sfh_profiles_dir is None:
+            args.sfh_profiles_dir = DEFAULT_SFH_PROFILES_DIR_REMOTE
 
     if args.setted_gap < 0:
         raise ValueError("--setted-gap must be >= 0")
@@ -847,7 +936,8 @@ if __name__ == "__main__":
 
     print(
         f"host={args.host_name} setted_gap={setted_gap} n_samples={effective_samples} "
-        f"gaps={number_of_gaps} gap_size={args.gap_size} workers={args.workers}"
+        f"gaps={number_of_gaps} gap_size={args.gap_size} workers={args.workers} "
+        f"output_dir={args.output_dir}"
     )
 
     if args.serial or args.workers == 1:
@@ -865,6 +955,9 @@ if __name__ == "__main__":
                 args.gap_size_saver,
                 args.building_type,
                 args.host_name,
+                args.output_dir,
+                args.mfh_profiles_dir,
+                args.sfh_profiles_dir,
             )
     else:
         gap_list = list(gap_values)
@@ -886,6 +979,9 @@ if __name__ == "__main__":
                         args.gap_size_saver,
                         args.building_type,
                         args.host_name,
+                        args.output_dir,
+                        args.mfh_profiles_dir,
+                        args.sfh_profiles_dir,
                     ),
                 )
                 batch.append(p)

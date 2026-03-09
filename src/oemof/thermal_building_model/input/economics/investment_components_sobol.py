@@ -22,8 +22,8 @@ hot_water_tank_config = InvestmentComponents(
 pv_system_config = InvestmentComponents(
                     maximum_capacity=100 * 1000 / PhysicalBaseUnit.factor,
                     minimum_capacity=0 ,
-                    cost_per_unit=1000 / 1000 * PhysicalBaseUnit.factor,
-                    cost_offset=600,
+                    cost_per_unit=1200 / 1000 * PhysicalBaseUnit.factor,
+                    cost_offset=500,
                     operational_cost_relative_to_capacity=0.01,
                     co2_per_capacity=0.91 * PhysicalBaseUnit.factor,
                     lifetime=25,
@@ -46,7 +46,7 @@ gas_heater_config=InvestmentComponents(
         cost_offset=7946.69,
         operational_cost_relative_to_capacity=0.005,
         co2_per_capacity=0.00809 * PhysicalBaseUnit.factor,
-        lifetime=30)
+        lifetime=25)
 
 
 
