@@ -150,8 +150,8 @@ class CHP(Converter): # heat ruled
     nominal_power: Optional[float] = 10000
     heat_carrier_bus: Optional[dict[Bus]] = None
     electrical_carrier_bus: Optional[dict[Bus]] = None
-    thermal_efficiency: Optional[float] = 0.605
-    electrical_efficiency: Optional[float] = 0.36
+    thermal_efficiency: Optional[float] = 0.69
+    electrical_efficiency: Optional[float] = 0.3
     investment_component: InvestmentComponents = field(default_factory=lambda: copy.deepcopy(chp_config))
 
     def create_converters(self,
@@ -169,7 +169,7 @@ class CHP(Converter): # heat ruled
                     heat_bus: solph.Flow(),
                     electricity_bus: solph.Flow(),
                 },
-                conversion_factors={gas_bus: 1 / self.thermal_efficiency,
+                conversion_factors={heat_bus: self.thermal_efficiency,
                                     electricity_bus: self.electrical_efficiency},
             ))
         return converters
