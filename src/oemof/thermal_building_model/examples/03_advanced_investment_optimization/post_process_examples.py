@@ -33,6 +33,20 @@ def scale_cleaned_data(cleaned_data):
         dict: cleaned_data with scaled values
     """
     keys_to_delete = []
+    carriers_to_scale = ("Electricity", "NaturalGas", "NautralGas", "BioGas", "Hydrogen")
+    following_single_keys = (
+        "flow_from_grid_sum",
+        "flow_into_grid_sum",
+        "flow_from_grid_cost",
+        "flow_into_grid_revenue",
+        "flow_from_grid_co2",
+        "flow_into_grid_co2",
+        "peak_into_grid",
+        "peak_from_grid",
+    )
+    following_list_keys = ("flow_from_grid_flow_into_grid",)
+    technology_keys = ("pv_system", "heat_storage", "battery", "gas_heater", "chp", "building")
+    investment_keys_to_multiply = ("investment_cost", "investment_co2")
 
     for key, entry in cleaned_data.items():
         # Skip non-dicts
@@ -50,6 +64,10 @@ def scale_cleaned_data(cleaned_data):
             continue
 
         results = entry.get("results", {})
+
+        results.pop("electricty_grid", None)
+        results.pop("electricity_grid", None)
+
         # iterate over all "buildings" inside results
         for building, b_data in results.items():
             if not isinstance(b_data, dict):
@@ -76,6 +94,46 @@ def scale_cleaned_data(cleaned_data):
                         results["totex_oemof_model"] = results["totex_oemof_model"] * scale_value
                     if "totex" in results:
                         results["totex"] = results["totex"] * scale_value
+
+                    # Scale selected keys on carrier level with the same factor
+                    for carrier in carriers_to_scale:
+                        carrier_data = results.get(carrier)
+                        if not isinstance(carrier_data, dict):
+                            continue
+
+                        for single_key in following_single_keys:
+                            value = carrier_data.get(single_key)
+                            if value is not None:
+                                carrier_data[single_key] = value * scale_value
+
+                        for list_key in following_list_keys:
+                            value_list = carrier_data.get(list_key)
+                            if isinstance(value_list, list):
+                                carrier_data[list_key] = [v * scale_value for v in value_list]
+                            elif isinstance(value_list, tuple):
+                                carrier_data[list_key] = tuple(v * scale_value for v in value_list)
+                            elif isinstance(value_list, np.ndarray):
+                                carrier_data[list_key] = value_list * scale_value
+
+                    # Scale investment values inside results[building_name][technology_building_number]
+                    building_components = results.get(building)
+                    if isinstance(building_components, dict):
+                        for component_key, component_data in building_components.items():
+                            if not isinstance(component_data, dict):
+                                continue
+
+                            # Match keys like:
+                            #   pv_system_<building>
+                            #   pv_system_<building>_1
+                            #   ...
+                            if not any(component_key.startswith(f"{tech}_{building}") for tech in technology_keys):
+                                continue
+
+                            for inv_key in investment_keys_to_multiply:
+                                inv_value = component_data.get(inv_key)
+                                if inv_value is not None:
+                                    component_data[inv_key] = inv_value * scale_value
+
     # Remove all None-entries
     for k in keys_to_delete:
         cleaned_data.pop(k, None)
@@ -229,7 +287,7 @@ def process_building_dict(building_dict_heat_grid):
 
     return result_list
 
-centralized=True
+centralized=False
 ueus = ["processed_bds_in_DENI03403000SEC5658","processed_bds_in_DENI03403000SEC5101","processed_bds_in_DENI03403000SEC4580"]
 refurbishment_strategies = ["no_refurbishment", "usual_refurbishment", "advanced_refurbishment", "GEG_standard"]
 optimization_strategies = ["co2"] #["co2","peak"]
@@ -317,7 +375,7 @@ for ueu in ueus :
             modes_each=('log', 'log', 'log'),
             eps_rel_merge=(0.008, 0.008, 0.008),
             modes_merge=('log', 'log', 'log'),
-            max_points_after_each_merge=9000 #12000
+            max_points_after_each_merge=4000 #12000
         )
         print("per building avg front size:", sum(len(v) for v in per_bldg.values()) / max(len(per_bldg), 1))
         print("combined_front size:", len(combined_front))

@@ -1,5 +1,6 @@
 from typing import Dict, Any, Iterable, List, Tuple, Optional
 import math
+import numpy as np
 
 Number = float
 
@@ -61,6 +62,76 @@ def _as_float(x) -> Optional[Number]:
         return float(x)
     except Exception:
         return None
+
+
+def _series_to_numpy(values: Any) -> Optional[np.ndarray]:
+    if values is None:
+        return None
+    if isinstance(values, np.ndarray):
+        arr = values.astype(float, copy=False)
+        return arr
+    if isinstance(values, (list, tuple)):
+        try:
+            return np.asarray(values, dtype=float)
+        except Exception:
+            return None
+    if hasattr(values, "to_numpy"):
+        try:
+            return values.to_numpy(dtype=float)
+        except Exception:
+            return None
+    return None
+
+
+def _extract_building_electricity_flows(option_record: Dict[str, Any]) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    rec = option_record.get("record") if isinstance(option_record, dict) else None
+    if not isinstance(rec, dict):
+        return None, None
+
+    results = rec.get("results")
+    if not isinstance(results, dict):
+        return None, None
+
+    electricity = results.get("Electricity")
+    if not isinstance(electricity, dict):
+        return None, None
+
+    flow_from = _series_to_numpy(electricity.get("flow_from_grid"))
+    flow_into = _series_to_numpy(electricity.get("flow_into_grid"))
+    return flow_from, flow_into
+
+
+def _compute_real_peak_from_selection(selection: Dict[str, Dict[str, Any]]) -> Tuple[Number, Number, Number]:
+    sum_from = None
+    sum_into = None
+    fallback_peak_sum = 0.0
+
+    for option_record in selection.values():
+        flow_from, flow_into = _extract_building_electricity_flows(option_record)
+        peak_val = _as_float(option_record.get("peak")) if isinstance(option_record, dict) else None
+        if peak_val is not None:
+            fallback_peak_sum += peak_val
+
+        if flow_from is not None:
+            if sum_from is None:
+                sum_from = flow_from.copy()
+            else:
+                n = min(sum_from.size, flow_from.size)
+                sum_from = sum_from[:n] + flow_from[:n]
+        if flow_into is not None:
+            if sum_into is None:
+                sum_into = flow_into.copy()
+            else:
+                n = min(sum_into.size, flow_into.size)
+                sum_into = sum_into[:n] + flow_into[:n]
+
+    if sum_from is None and sum_into is None:
+        return fallback_peak_sum, fallback_peak_sum, fallback_peak_sum
+
+    real_peak_from_grid = float(np.max(sum_from)) if sum_from is not None and sum_from.size > 0 else 0.0
+    real_peak_into_grid = float(np.max(sum_into)) if sum_into is not None and sum_into.size > 0 else 0.0
+    peak = max(real_peak_from_grid, real_peak_into_grid)
+    return real_peak_from_grid, real_peak_into_grid, peak
 
 def dominates(a: Tuple[Number,Number,Number], b: Tuple[Number,Number,Number], tau: float = 1e-9) -> bool:
     # a dominiert b (alle Ziele <=, mindestens eines <)
@@ -237,13 +308,19 @@ def combine_two_fronts(
     merged: List[Dict[str,Any]] = []
     for a in A:
         for b in B:
+            selection = {
+                **(a.get('selection', {idA: a})),
+                **(b.get('selection', {idB: b})),
+            }
+            real_peak_from_grid, real_peak_into_grid, real_peak = _compute_real_peak_from_selection(selection)
             rec = {
                 'co2':  a['co2']  + b['co2'],
-                'peak': a['peak'] + b['peak'],
+                'peak': real_peak,
                 'totex':a['totex']+ b['totex'],
+                'real_peak_from_grid': real_peak_from_grid,
+                'real_peak_into_grid': real_peak_into_grid,
                 'selection': {
-                    **(a.get('selection', {idA: a})),
-                    **(b.get('selection', {idB: b})),
+                    **selection,
                 }
             }
             merged.append(rec)
