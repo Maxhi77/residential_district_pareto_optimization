@@ -1021,10 +1021,10 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value):
             co2_reduction_factors = list(dict.fromkeys(co2_reduction_factors))
     #peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 
-    #co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
-    #peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
-    co2_reduction_factors = [1, 0.9]
-    peak_reduction_factors = [1, 0.9]
+    co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
+    peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+    #co2_reduction_factors = [1, 0.9]
+    #peak_reduction_factors = [1, 0.9]
     worker_context = {
         "data": data,
         "aggregation1": aggregation1,

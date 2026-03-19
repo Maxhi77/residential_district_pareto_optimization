@@ -1215,7 +1215,7 @@ def wrapper(args):
         print(f"[ERROR] Logged to {path}")
 
 if __name__ == "__main__":
-    if False:
+    if True:
         n_cores = os.cpu_count() or 1
         # so viele Prozesse, dass processes * threads <= cores
         n_proc = max(1, n_cores // SOLVER_THREADS)

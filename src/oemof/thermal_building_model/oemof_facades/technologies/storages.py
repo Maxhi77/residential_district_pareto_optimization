@@ -311,7 +311,7 @@ class HotWaterTank(Storage):
 @dataclass
 class Battery(Storage):
     name: str = "Battery"
-    loss_rate: float = 0.005
+    loss_rate: float = 0.00001
     fixed_losses_relative: float = 0.0
     nominal_capacity: float
     invest_relation_input_capacity: float = 0.5
