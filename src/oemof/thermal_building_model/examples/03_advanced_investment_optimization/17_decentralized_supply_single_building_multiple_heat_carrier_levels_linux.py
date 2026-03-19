@@ -576,6 +576,7 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
         building_id = building_row['building_id']
         tabula_year_class = building_row['tabula_year_class']
         building_floor_area = building_row['net_floor_area']
+        building_roof_area = building_row['roof_surface_area']
         number_of_occupants = building_row['number_of_residents']
         number_of_households = building_row['number_of_apartments']
         azimuth = building_row['azimuth']
@@ -647,7 +648,8 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
                 investment_component=pv_system_config_building
             )
             print("TODO ATTENTION PV-YIELD HARD CODED AND HAS TO BE FINED LATER BETTER")
-            pv.update_maximum_investment_pv_capacity_based_on_area(building.get_roof_area_for_pv(100))
+
+            pv.update_maximum_investment_pv_capacity_based_on_area(building.get_roof_area_for_pv(building_roof_area))
             data[pv.name] = pv.value_list
             dict_pv_systems[key] = pv
 

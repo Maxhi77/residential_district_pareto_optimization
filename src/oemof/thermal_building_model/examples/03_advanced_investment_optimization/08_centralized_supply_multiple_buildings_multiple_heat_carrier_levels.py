@@ -294,6 +294,46 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
     components["heat_grid"]["heat_grid_investment_bus"] = heat_grid_investment_bus
     components["heat_grid"]["heat_grid_investment_sink"] = heat_grid_investment_sink
     components["heat_grid"]["heat_grid_investment_source"] = heat_grid_investment_source
+
+    list_heat_demand_building = None
+    list_heat_demand_ww = None
+    list_electricity_demand_building = None
+    for index, row in combined_cluster.iterrows():
+        building_id = row['building_id']
+        buildings_in_cluster = row['buildings_in_cluster']
+
+        ww_values = np.asarray(data["ww_demand_" + str(building_id)], dtype=float) * buildings_in_cluster
+        heat_values = np.asarray(data["building_" + str(building_id)], dtype=float) * buildings_in_cluster
+        elec_values = np.asarray(data["e_demand_" + str(building_id)], dtype=float) * buildings_in_cluster
+
+        if list_heat_demand_building is None:
+            list_heat_demand_ww = ww_values
+            list_heat_demand_building = heat_values
+            list_electricity_demand_building = elec_values
+        else:
+            list_heat_demand_ww = list_heat_demand_ww + ww_values
+            list_heat_demand_building = list_heat_demand_building + heat_values
+            list_electricity_demand_building = list_electricity_demand_building + elec_values
+
+        print(building_id)
+        dataclasses[building_id]={}
+        components[building_id]={}
+        buildings_in_cluster =row['buildings_in_cluster']
+
+        heat_demand_dataclass.value_list = data["ww_demand_"+str(building_id)]
+        heat_demand_dataclass.level = heat_demand_dataclass.demand_temperature
+
+        demand = 0
+        for cluster, count in cluster_occurence.items():
+            # Hole den entsprechenden WW-Demand aus 'data' für das Cluster (erste Zahl in cluster_order entspricht dem Cluster)
+            demand = demand + data["building_" + str(building_id)][cluster].sum() * count
+
+        max(data["ww_demand_" + str(building_id)] + data["building_" + str(building_id)])
+
+
+
+
+
     for index, row in combined_cluster.iterrows():
 
 
@@ -666,6 +706,9 @@ def process_cluster(building,building_id,building_row, epw_path,building_type, d
     building_id = building_row['building_id']
     tabula_year_class = building_row['tabula_year_class']
     building_floor_area = building_row['net_floor_area']
+    building_roof_area = building_row['roof_surface_area']
+    azimuth = building_row['azimuth']
+    tilt = building_row['tilt']
     number_of_occupants = building_row['number_of_residents']
     number_of_households = building_row['number_of_apartments']
     number_of_buildings_in_cluster = building_row['buildings_in_cluster']
@@ -685,7 +728,7 @@ def process_cluster(building,building_id,building_row, epw_path,building_type, d
     electricity_cols = [col for col in demand.columns if col.startswith("Electricity")]
     demand_electricity = (demand[electricity_cols].sum(axis=1) * 1000).tolist()
     warm_water_cols = [col for col in demand.columns if col.startswith("Warm Water_")]
-    demand_warm_water = demand[warm_water_cols].sum(axis=1)
+    demand_warm_water = demand[warm_water_cols].sum(axis=1).tolist()
 
     # Datenklassen
     electricity_demand = ElectricityDemand(name=f"e_demand_{building_id}", value_list=demand_electricity)
@@ -709,7 +752,8 @@ def process_cluster(building,building_id,building_row, epw_path,building_type, d
     # PV-Ertrag pro Watt
     pv_yield_per_wp = simulate_pv_yield(
         pv_nominal_power_in_watt=1,
-        tilt=building_row['avg_roof_pitch_angle'],
+        tilt=tilt,
+        azimuth=azimuth,
         epw_path=epw_path
     )
     dict_pv_systems = {}
@@ -721,7 +765,7 @@ def process_cluster(building,building_id,building_row, epw_path,building_type, d
             value_list=pv_yield_per_wp.tolist(),
             investment_component=pv_system_config_building
         )
-        pv.update_maximum_investment_pv_capacity_based_on_area(building.get_roof_area_for_pv())
+        pv.update_maximum_investment_pv_capacity_based_on_area(building.get_roof_area_for_pv(building_roof_area))
         data[pv.name] = pv.value_list
         dict_pv_systems[key] = pv
 
@@ -1143,8 +1187,8 @@ os.makedirs(ERROR_DIR, exist_ok=True)
 
 # Deine UEU + heat_grid_length Paare (aus deiner Tabelle)
 UEU_CASES = [
-    ("processed_bds_in_DENI03403000SEC5101", 890.354),
-    ("processed_bds_in_DENI03403000SEC4580", 2723.294),   # "2.723.294" -> als int
+    #("processed_bds_in_DENI03403000SEC5101", 890.354),
+    #("processed_bds_in_DENI03403000SEC4580", 2723.294),   # "2.723.294" -> als int
     ("processed_bds_in_DENI03403000SEC5658", 1146.15),
 ]
 
@@ -1171,7 +1215,7 @@ def wrapper(args):
         print(f"[ERROR] Logged to {path}")
 
 if __name__ == "__main__":
-    if True:
+    if False:
         n_cores = os.cpu_count() or 1
         # so viele Prozesse, dass processes * threads <= cores
         n_proc = max(1, n_cores // SOLVER_THREADS)
