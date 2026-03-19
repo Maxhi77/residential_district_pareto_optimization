@@ -39,9 +39,9 @@ def plot_all_points_with_front_and_selected(
     figsize=(6, 4),
     font_size=9,
     font_family="TeX Gyre Termes",
-    xlabel=r"CO$_2$-eq (kg)",
-    ylabel=r"Totex (€)",
-    cbar_label=r"Peak load (kW)",
+    xlabel=r"Annual CO$_2$-eq in kg",
+    ylabel=r"Totex in €",
+    cbar_label=r"Peak load in kW",
     cmap="viridis",
     s_all=10,
     alpha_all=0.65,
@@ -221,7 +221,7 @@ def process_units_for_processed(
     power_capacity_divisor=1.0,      # kW -> MW: 1000
     heat_storage_name="Heat storage",
     # Heat storage is given as V [m³], convert to energy [kWh]
-    hs_delta_T_K=40.0,               # temperature gap
+    hs_delta_T_K=30.0,               # temperature gap
     hs_density_kg_per_m3=1000.0,     # water
     hs_c_Wh_per_kgK=1.163,           # specific heat
     # After conversion to kWh, optionally scale to MWh etc.
@@ -253,7 +253,13 @@ def process_units_for_processed(
             district['totex'] = _to_float(district['totex']) / (cost_divisor*floor_area)
         if 'peak' in district:
             district['peak'] = _to_float(district['peak']) / (peak_divisor*floor_area)
-
+        if 'electricity_grid' in district:
+            district['electricity_grid']["added_line_length"] = _to_float(district['electricity_grid']["added_line_length"] ) / (power_capacity_divisor*floor_area)
+            district['electricity_grid']["added_trafo_capacity"] = _to_float(district['electricity_grid']["added_trafo_capacity"]) / (power_capacity_divisor*floor_area)
+            district['electricity_grid']["added_line_cost"] = _to_float(district['electricity_grid']["added_line_cost"] ) / (cost_divisor*floor_area)
+            district['electricity_grid']["added_trafo_cost"] = _to_float(district['electricity_grid']["added_trafo_cost"]) / (cost_divisor*floor_area)
+            district['electricity_grid']["added_line_co2"] = _to_float(district['electricity_grid']["added_line_co2"] ) / (co2_divisor*floor_area)
+            district['electricity_grid']["added_trafo_co2"] = _to_float(district['electricity_grid']["added_trafo_co2"]) / (co2_divisor*floor_area)
         # Nested groups (e.g., 'DENILD1100004s6k', ...)
         for key, sub in list(district.items()):
             if key in ('co2', 'peak', 'totex'):
@@ -329,8 +335,8 @@ def plot_pareto_co2_totex(
     figsize=(6, 4),
     font_size=9,
     font_family="TeX Gyre Termes",
-    xlabel=r"CO$_2$-eq (kg)",
-    ylabel=r"Totex (€)",
+    xlabel=r"Annual CO$_2$-eq in kg",
+    ylabel=r"Totex in EUR",
     title="",
     show=True,
     dpi=600,
@@ -536,9 +542,9 @@ def plot_all_pareto_points(
     figsize=(6, 4),
     font_size=9,
     font_family="TeX Gyre Termes",
-    xlabel=r"CO$_2$-eq (kg)",
-    ylabel=r"Totex (€)",
-    cbar_label=r"Peak load (kW)",
+    xlabel=r"Annual CO$_2$-eq in kg",
+    ylabel=r"Totex in €",
+    cbar_label=r"Peak load in kW",
     cmap="viridis",
     s=8,
     alpha=0.7,
@@ -835,7 +841,7 @@ def plot_stackplot_for_pareto_solutions_with_peak(
     target_xticks=8,               # << choose ~ how many ticks you want
     x_tick_rotation=0,
     # peak styling (thinner dashed line)
-    peak_lw=0.55,                  # thinner than before
+    peak_lw=0.4,                  # thinner than before
     peak_alpha=0.9,
     peak_drawstyle="steps-mid",    # reduces visual jitter
     peak_smooth_window=0,          # 0=off; e.g. 5 for rolling mean (visual only)
@@ -845,7 +851,8 @@ def plot_stackplot_for_pareto_solutions_with_peak(
     # legend placement: above plot, multi-column
     legend_ncol=4,                 # 12 entries -> 3x4
     legend_loc="upper center",
-    legend_bbox=(0.5, 1.10),
+    legend_bbox=(0.5, 1.12),
+    control_values =False,
 ):
     """
     Journal-ready stacked area plot over Pareto-optimal solutions + peak on secondary axis.
@@ -929,8 +936,12 @@ def plot_stackplot_for_pareto_solutions_with_peak(
     elif vt in ("cost", "co2"):
         all_data_positive = []
         all_data_negative = []
-
+        co2_only = []
+        totex_only = []
         for sid in solution_ids:
+            co2_only.append(district_sums[sid]["co2"])
+            totex_only.append(district_sums[sid]["totex"])
+
             tech_data = district_sums[sid]["technologies"]
             energy_data = district_sums[sid].get("energy_types", {})
 
@@ -942,7 +953,18 @@ def plot_stackplot_for_pareto_solutions_with_peak(
 
             all_data_positive.append(tech_pos + energy_pos)
             all_data_negative.append(tech_neg + energy_neg)
-
+        # Plot the control values
+        if control_values:
+            if vt == "cost":
+                ax1.plot(x, totex_only,  # Horizontal line for totex
+                    color="red", linestyle="--", label=f"Control Total Totex in Totex for {sid}",
+                    linewidth=2, zorder=10
+                )
+            elif vt == "co2":
+                ax1.plot(x, co2_only,  # Horizontal line for co2
+                    color="blue", linestyle="--", label=f"Control CO2 Emissions for {sid}",
+                    linewidth=2, zorder=10
+                )
         all_data_positive = np.array(all_data_positive).T
         all_data_negative = np.array(all_data_negative).T
 
@@ -952,7 +974,7 @@ def plot_stackplot_for_pareto_solutions_with_peak(
         colors = list(technology_colors) + list(energy_colors)
         labels = list(technologies) + list(energy_types)
 
-        ax1.stackplot(
+        polys_pos = ax1.stackplot(
             x,
             *all_data_positive,
             alpha=0.70,
@@ -960,7 +982,7 @@ def plot_stackplot_for_pareto_solutions_with_peak(
             labels=labels,
             linewidth=0.0
         )
-        ax1.stackplot(
+        polys_neg = ax1.stackplot(
             x,
             *all_data_negative,
             alpha=0.70,
@@ -969,11 +991,22 @@ def plot_stackplot_for_pareto_solutions_with_peak(
             linewidth=0.0
         )
 
+        # --- NEW: hatch ALL energy-type areas with the SAME hatch ---
+        energy_hatch = ".."  # change if you want e.g. "//" or "xx"
+        hatch_lw = 0.04 # thin hatch stroke
+        n_tech = len(technologies)
+
+        for j in range(len(energy_types)):
+            idx = n_tech + j  # energy polys start after technology polys
+            for poly in (polys_pos[idx], polys_neg[idx]):
+                poly.set_hatch(energy_hatch)
+                poly.set_edgecolor("black")  # hatch color comes from edgecolor
+                poly.set_linewidth(hatch_lw)  # controls hatch stroke thickness
+
         if y_label_override is not None:
             ax1.set_ylabel(y_label_override)
         else:
-            ax1.set_ylabel("Cost (thousand EUR)" if vt == "cost" else r"CO$_2$-eq (t)")
-
+            ax1.set_ylabel("Totex in thousand EUR" if vt == "cost" else r"Annual CO$_2$-eq in t")
     else:
         raise ValueError("value_type must be one of {'cost','co2','capacity'}")
 
@@ -999,21 +1032,45 @@ def plot_stackplot_for_pareto_solutions_with_peak(
         linestyle="--",
         linewidth=peak_lw,
         alpha=peak_alpha,
-        label="Peak load (kW)",
+        label="Peak load in kW",
         zorder=5,
         drawstyle=peak_drawstyle if peak_drawstyle else "default",
     )
 
-    ax2.set_ylabel(peak_label_override or "Annual peak load (kW)")
+    ax2.set_ylabel(peak_label_override or "Annual peak load in kW")
 
     # -----------------------------
     # X ticks: NICE numbering (5, 10, 50, ...)
     # -----------------------------
+    # -----------------------------
+    # X ticks: NICE numbering (5, 10, 50, ...)
+    # -----------------------------
     tick_pos, tick_labels = _build_pareto_xticks(n_pts, target_ticks=target_xticks)
+
+    # remove penultimate tick label (keep the max/last tick)
+    tick_pos = list(tick_pos)
+    tick_labels = list(tick_labels)
+    if len(tick_pos) >= 2:
+        tick_pos.pop(-2)
+        tick_labels.pop(-2)
+
     ax1.set_xticks(tick_pos)
     ax1.set_xticklabels(tick_labels, rotation=x_tick_rotation, ha="center")
     ax1.set_xlabel(x_label)
 
+    # optional: give the last label more room and align it nicely
+    ax1.set_xlim(-0.5, n_pts - 0.5 + 0.02 * n_pts)  # little right padding
+    lbls = ax1.get_xticklabels()
+    if lbls:
+        lbls[-1].set_ha("right")
+
+    # --- remove penultimate tick label (keep the max/last tick) ---
+    tick_pos = list(tick_pos)
+    tick_labels = list(tick_labels)
+
+    if len(tick_pos) >= 2:
+        tick_pos.pop(-2)
+        tick_labels.pop(-2)
     # --- ensure negative contributions are visible (if present) ---
     ymin, ymax = ax1.get_ylim()
     if ymin >= 0:
@@ -1063,7 +1120,7 @@ def plot_stackplot_for_pareto_solutions_with_peak(
     )
 
     # Leave space for legend on top
-    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
 
     # -----------------------------
     # SAVE / SHOW
@@ -1114,12 +1171,10 @@ def calculate_delta(energy_type, results):
     # Falls keine Daten vorhanden sind (None), setze die Delta-Werte auf 0
     return 0, 0
 
-
-def process_district_data(matches,set_reference_to_one_building=False):
-    energy_types = ["Electricity", "BioGas","NaturalGas", "Hydrogen"]
+def process_district_data(matches, buildings, cen_or_dec, set_reference_to_one_building=False):
+    energy_types = ["Electricity", "BioGas", "NaturalGas", "Hydrogen"]
     technologies = ['pv_system', 'heat_storage', 'battery', 'gas_heater', 'chp', 'hp', 'building']
 
-    # Dictionary to map the technology names to readable names
     technology_name_map = {
         'pv_system': 'PV-System',
         'heat_storage': 'Heat storage',
@@ -1130,78 +1185,180 @@ def process_district_data(matches,set_reference_to_one_building=False):
         'building': 'Retrofit',
     }
 
-    # Liste der zu verarbeitenden Energietypen
-    district_data = {}
+    # NEW: energy naming map
+    energy_type_name_map = {
+        "Electricity": "Electricity",
+        "BioGas": "Bio gas",
+        "NaturalGas": "Natural gas",
+        "Hydrogen": "Hydrogen",
+    }
 
-    # Zähler für die Distrikt-Nummer
+    district_data = {}
     district_key = 0
 
     for district in matches:
-        # Verwende den Zähler als Schlüssel
         district_key += 1
-        district_data[district_key] = {}
-        district_data[district_key]["co2"] = district["co2"]
-        district_data[district_key]["peak"] = district["peak"]
-        district_data[district_key]["totex"] = district["totex"]
+        selection = district.get("selection", {})
 
-        # Schleife durch die Gebäude im Distrikt
-        for building_name, building_data in district['selection'].items():
-            # Überspringe 'refurbish' oder andere irrelevante Keys
-            district_data[district_key][building_name] = {}
+        district_data[district_key] = {
+            "co2": district.get("co2"),
+            "peak": district.get("peak"),
+            "totex": district.get("totex"),
+        }
+        district_data[district_key]["electricity_grid"] = {}
+        district_data[district_key]["electricity_grid"]["cost"] = district["Electricity_Grid"]["investment_cost"]
+        district_data[district_key]["electricity_grid"]["added_trafo_capacity"] = district["Electricity_Grid"]["added_trafo_capacity"]
+        district_data[district_key]["electricity_grid"]["added_line_length"] = district["Electricity_Grid"]["added_line_length"]
+        district_data[district_key]["electricity_grid"]["added_trafo_cost"] = district["Electricity_Grid"]["added_trafo_cost"]
+        district_data[district_key]["electricity_grid"]["added_line_cost"] = district["Electricity_Grid"]["added_line_cost"]
+        district_data[district_key]["electricity_grid"]["added_trafo_co2"] = district["Electricity_Grid"]["added_trafo_co2"]
+        district_data[district_key]["electricity_grid"]["added_line_co2"] = district["Electricity_Grid"]["added_line_co2"]
 
-            # Greife auf den 'record'-Schlüssel für detaillierte Ergebnisse zu
-            record = building_data.get("record", {})
-            results = record.get("results", {})
+        # -------------------------
+        # DECENTRALIZED CASE (dec)
+        # -------------------------
+        if cen_or_dec == "dec":
+            for building_name, building_wrapper in selection.items():
 
-            # Verarbeite jeden Energietyp
-            for energy_type in energy_types:
-                delta_cost, delta_co2 = calculate_delta(energy_type, results)
-                district_data[district_key][building_name][energy_type] = {}
-                if delta_cost is not None and delta_co2 is not None:
-                    if set_reference_to_one_building:
+                district_data[district_key][building_name] = {}
 
-                        buildings_in_cluster = results[building_name][
-                            "buildings_in_cluster"]
-                    else:
-                        buildings_in_cluster = 1
-                    # Gebe die berechneten Delta-Werte für jeden Energietyp aus
-                    print(f"Building: {building_name}")
-                    print(f"  Delta {energy_type} From Grid Cost: {delta_cost}")
-                    print(f"  Delta {energy_type} From Grid CO2: {delta_co2}")
+                record = building_wrapper.get("record", {})
+                results = record.get("results", {})
 
-                    district_data[district_key][building_name][energy_type]["cost"] = delta_cost / buildings_in_cluster
-                    district_data[district_key][building_name][energy_type]["co2"] = delta_co2 / buildings_in_cluster
+                if set_reference_to_one_building:
+                    buildings_in_cluster = results.get(building_name, {}).get("buildings_in_cluster", 1)
+                else:
+                    buildings_in_cluster = 1
+                    buildings_in_cluster_scale_technology = results.get(building_name, {}).get("buildings_in_cluster", 1)
+                # energy deltas (per building)
+                for energy_type in energy_types:
+                    delta_cost, delta_co2 = calculate_delta(energy_type, results)
+                    if delta_cost is None or delta_co2 is None:
+                        continue
 
-            # Verarbeite jede Technologie (z.B. pv_system, heat_storage, gas_heater)
-            for technology in technologies:
-                total_cost = 0
-                total_co2 = 0
-                total_capacity = 0
-                # Suche nach allen Technologien, die mit dem Prefix übereinstimmen und mit einer Zahl enden
-                for key in results[building_name]:
-                    if key.startswith(technology):
-                        if key == "buildings_in_cluster" or key == "buildings_in_cluster_used" :
+                    # use mapped name
+                    et_readable = energy_type_name_map.get(energy_type, energy_type)
+
+                    district_data[district_key][building_name].setdefault(et_readable, {})
+                    district_data[district_key][building_name][et_readable]["cost"] = float(delta_cost) / buildings_in_cluster
+                    district_data[district_key][building_name][et_readable]["co2"] = float(delta_co2) / buildings_in_cluster
+
+                # technologies per building
+                building_results = results.get(building_name, {})
+                for technology in technologies:
+                    total_cost = 0.0
+                    total_co2 = 0.0
+                    total_capacity = 0.0
+
+                    for key, tech_data in building_results.items():
+                        if key in ("buildings_in_cluster", "buildings_in_cluster_used"):
                             continue
-                        if technology == "building":
-                            technology_data = results[building_name][key]
-                            total_cost += technology_data.get('investment_cost', 0) / buildings_in_cluster
-                            total_co2 += technology_data.get('investment_co2', 0) / buildings_in_cluster
-                        else:
-                            # Sucht nach Technologien mit dem angegebenen Prefix
-                            technology_data = results[building_name][key]
-                            total_cost += technology_data.get('investment_cost', 0) / buildings_in_cluster
-                            total_co2 += technology_data.get('investment_co2', 0) / buildings_in_cluster
-                            total_capacity += technology_data.get('capacity', 0) / buildings_in_cluster
+                        if not key.startswith(technology):
+                            continue
 
-                # Speichere die Daten mit dem lesbaren Namen aus der 'technology_name_map'
-                readable_technology_name = technology_name_map.get(technology,
-                                                                   technology)  # Falls der Name nicht in der Map vorhanden ist, verwende den Originalnamen
-                district_data[district_key][building_name][readable_technology_name] = {
-                    "cost": total_cost,
-                    "co2": total_co2,
-                    "capacity": total_capacity
+                        total_cost += float(tech_data.get("investment_cost", 0.0)) / buildings_in_cluster
+                        total_co2 += float(tech_data.get("investment_co2", 0.0)) / buildings_in_cluster
+                        if technology != "building":
+                            total_capacity += float(tech_data.get("capacity", 0.0)) * buildings_in_cluster_scale_technology/ buildings_in_cluster
+
+                    readable = technology_name_map.get(technology, technology)
+                    district_data[district_key][building_name][readable] = {
+                        "cost": total_cost,
+                        "co2": total_co2,
+                        "capacity": total_capacity
+                    }
+
+        # ----------------------
+        # CENTRALIZED CASE (cen)
+        # ----------------------
+        elif cen_or_dec == "cen":
+            district_data[district_key]["heat_grid"] = {}
+
+            # (1) energy deltas -> directly under heat_grid
+            for energy_type in energy_types:
+                delta_cost, delta_co2 = calculate_delta(energy_type, selection)
+                if delta_cost is None or delta_co2 is None:
+                    continue
+
+                et_readable = energy_type_name_map.get(energy_type, energy_type)
+
+                district_data[district_key]["heat_grid"][et_readable] = {
+                    "cost": float(delta_cost),
+                    "co2": float(delta_co2),
                 }
+
+            # (2) heat_grid technologies -> also directly under heat_grid (flat)
+            hg_data = selection.get("heat_grid")
+            if isinstance(hg_data, dict):
+                if set_reference_to_one_building:
+                    hg_cluster = hg_data.get("buildings_in_cluster", 1)
+                else:
+                    hg_cluster = 1
+                for technology in technologies:
+                    total_cost = 0.0
+                    total_co2 = 0.0
+                    total_capacity = 0.0
+
+                    for key, tech_data in hg_data.items():
+                        if key in ("buildings_in_cluster", "buildings_in_cluster_used"):
+                            continue
+                        if not key.startswith(technology):
+                            continue
+
+                        total_cost += float(tech_data.get("investment_cost", 0.0)) / hg_cluster
+                        total_co2 += float(tech_data.get("investment_co2", 0.0)) / hg_cluster
+                        if technology != "building":
+                            total_capacity += float(tech_data.get("capacity", 0.0))  / hg_cluster
+
+                    readable = technology_name_map.get(technology, technology)
+                    district_data[district_key]["heat_grid"][readable] = {
+                        "cost": total_cost,
+                        "co2": total_co2,
+                        "capacity": total_capacity
+                    }
+
+            # (3) buildings: technologies per building
+            for building_name, building_data in selection.items():
+                if building_name not in buildings:
+                    continue
+
+                district_data[district_key][building_name] = {}
+
+                if set_reference_to_one_building:
+                    buildings_in_cluster = building_data.get("buildings_in_cluster", 1)
+                else:
+                    buildings_in_cluster = 1
+                    buildings_in_cluster_scale_technology = results.get(building_name, {}).get("buildings_in_cluster",
+                                                                                               1)
+
+                for technology in technologies:
+                    total_cost = 0.0
+                    total_co2 = 0.0
+                    total_capacity = 0.0
+
+                    for key, tech_data in building_data.items():
+                        if key in ("buildings_in_cluster", "buildings_in_cluster_used"):
+                            continue
+                        if not key.startswith(technology):
+                            continue
+
+                        total_cost += float(tech_data.get("investment_cost", 0.0)) / buildings_in_cluster
+                        total_co2 += float(tech_data.get("investment_co2", 0.0)) / buildings_in_cluster
+                        if technology != "building":
+                            total_capacity += float(tech_data.get("capacity", 0.0)) * buildings_in_cluster_scale_technology/ buildings_in_cluster
+
+                    readable = technology_name_map.get(technology, technology)
+                    district_data[district_key][building_name][readable] = {
+                        "cost": total_cost,
+                        "co2": total_co2,
+                        "capacity": total_capacity
+                    }
+
+        else:
+            raise ValueError("cen_or_dec must be 'cen' or 'dec'")
+
     return district_data
+
 
 def calculate_sums_for_technologies_and_energy_for_a_district(district_data, energy_types, technologies,building_name_map):
     """
@@ -1225,6 +1382,8 @@ def calculate_sums_for_technologies_and_energy_for_a_district(district_data, ene
             if building_name in building_name_map:
                 # Summiere für Technologien (cost und co2)
                 for tech in technologies:
+                    if tech == "Added trafo capacity" or tech == "Added line length":
+                        continue
                     district_sums[district_id]['technologies'][tech]['cost'] += building_data.get(tech, {}).get('cost', 0)
                     district_sums[district_id]['technologies'][tech]['co2'] += building_data.get(tech, {}).get('co2', 0)
                     district_sums[district_id]['technologies'][tech]['capacity'] += building_data.get(tech, {}).get('capacity', 0)
@@ -1232,7 +1391,20 @@ def calculate_sums_for_technologies_and_energy_for_a_district(district_data, ene
                 for energy in energy_types:
                     district_sums[district_id]['energy_types'][energy]['cost'] += building_data.get(energy, {}).get('cost', 0)
                     district_sums[district_id]['energy_types'][energy]['co2'] += building_data.get(energy, {}).get('co2', 0)
+        district_sums[district_id]['technologies']["Added trafo capacity"]= {}
+        district_sums[district_id]['technologies']["Added trafo capacity"]['capacity'] = district["electricity_grid"]["added_trafo_capacity"]
+        district_sums[district_id]['technologies']["Added trafo capacity"]['cost'] = district["electricity_grid"]["added_trafo_cost"]
+        district_sums[district_id]['technologies']["Added trafo capacity"]['co2'] = district["electricity_grid"]["added_trafo_co2"]
+
+        district_sums[district_id]['technologies']["Added line length"]= {}
+        district_sums[district_id]['technologies']["Added line length"]['capacity'] = district["electricity_grid"]["added_line_length"]
+        district_sums[district_id]['technologies']["Added line length"]['cost'] = district["electricity_grid"]["added_line_cost"]
+        district_sums[district_id]['technologies']["Added line length"]['co2'] = district["electricity_grid"]["added_line_co2"]
+
+
         district_sums[district_id]["peak"] = district["peak"]
+        district_sums[district_id]["co2"] = district["co2"]
+        district_sums[district_id]["totex"] = district["totex"]
     return district_sums
 def _index_to_letters(i: int) -> str:
     # 0->A, 1->B, ... 25->Z, 26->AA ...
@@ -1299,9 +1471,9 @@ def plot_all_points_with_front_and_tick_highlights(
     dpi=600,
     show=False,
     # axis labels
-    xlabel=r"CO$_2$-eq (kg)",
-    ylabel=r"Totex (EUR)",
-    cbar_label=r"Peak load (kW)",
+    xlabel=r"Annual CO$_2$-eq in kg",
+    ylabel=r"Totex in EUR",
+    cbar_label=r"Peak load in kW",
     # tick-highlight logic (matches stackplot idea)
     target_xticks=8,
     max_labels=12,                        # label at most this many highlighted tick points
@@ -1369,7 +1541,13 @@ def plot_all_points_with_front_and_tick_highlights(
         keep = np.linspace(0, len(label_idx) - 1, max_labels).round().astype(int)
         label_idx = label_idx[keep]
         label_labels = [tick_labels[i] for i in keep]
+    # --- drop penultimate label to avoid overlap, keep max label ---
+    label_idx = list(label_idx)  # falls numpy array
+    label_labels = list(label_labels)  # gleiche Länge
 
+    if len(label_idx) >= 2:
+        label_idx.pop(-2)  # vorletztes raus
+        label_labels.pop(-2)  # passendes Label auch raus
     # tick points as tuples (for later matching/selection)
     tick_points = [pf[i] for i in tick_idx]
 
@@ -1485,48 +1663,58 @@ def run_pareto_plots(
     selected_co2, selected_cost = zip(*reduced_points)
 
     # --- Plots ---
-    plot_all_pareto_points(
-        combined_front,
-        name=f"{out_prefix}_all_points",
-        figsize=(width_inch, height_inch),
-        font_size=font_size,
-        filename=rf"{out_dir}\{out_prefix}_pareto_all_points.pdf",
-        xlabel=x_label,
-        ylabel=y_label,
-        cbar_label=cbar_label,
-        show=show,
+    # Export 3 height variants for the 3 main plots:
+    # base (100%), h85 (-15%), h70 (-30%).
+    height_variants = (
+        ("", 1.00),
+        ("_h85", 0.85),
+        ("_h70", 0.70),
     )
+    for suffix, h_factor in height_variants:
+        current_figsize = (width_inch, height_inch * h_factor)
 
-    plot_pareto_co2_totex(
-        co2_all=pareto_co2,
-        totex_all=pareto_cost,
-        selected_co2=selected_co2,
-        selected_totex=selected_cost,
-        name=f"{out_prefix}_front_only",
-        figsize=(width_inch, height_inch),
-        font_size=font_size,
-        title="",
-        filename=rf"{out_dir}\{out_prefix}_pareto_front.pdf",
-        xlabel=x_label,
-        ylabel=y_label,
-        show=show,
-    )
+        plot_all_pareto_points(
+            combined_front,
+            name=f"{out_prefix}_all_points{suffix}",
+            figsize=current_figsize,
+            font_size=font_size,
+            filename=rf"{out_dir}\{out_prefix}_pareto_all_points{suffix}.pdf",
+            xlabel=x_label,
+            ylabel=y_label,
+            cbar_label=cbar_label,
+            show=show,
+        )
 
-    plot_all_points_with_front_and_selected(
-        combined_front=combined_front,
-        pareto_front=pareto_front,          # list of (co2, totex) tuples
-        selected_co2=selected_co2,
-        selected_totex=selected_cost,
-        label_every=3,
-        max_labels=10,
-        figsize=(width_inch, height_inch),
-        font_size=font_size,
-        filename=rf"{out_dir}\{out_prefix}_pareto_all_with_front_selected.pdf",
-        xlabel=x_label,
-        ylabel=y_label,
-        cbar_label=cbar_label,
-        show=show,
-    )
+        plot_pareto_co2_totex(
+            co2_all=pareto_co2,
+            totex_all=pareto_cost,
+            selected_co2=selected_co2,
+            selected_totex=selected_cost,
+            name=f"{out_prefix}_front_only{suffix}",
+            figsize=current_figsize,
+            font_size=font_size,
+            title="",
+            filename=rf"{out_dir}\{out_prefix}_pareto_front{suffix}.pdf",
+            xlabel=x_label,
+            ylabel=y_label,
+            show=show,
+        )
+
+        plot_all_points_with_front_and_selected(
+            combined_front=combined_front,
+            pareto_front=pareto_front,          # list of (co2, totex) tuples
+            selected_co2=selected_co2,
+            selected_totex=selected_cost,
+            label_every=3,
+            max_labels=10,
+            figsize=current_figsize,
+            font_size=font_size,
+            filename=rf"{out_dir}\{out_prefix}_pareto_all_with_front_selected{suffix}.pdf",
+            xlabel=x_label,
+            ylabel=y_label,
+            cbar_label=cbar_label,
+            show=show,
+        )
 
     tick_idx, tick_points = plot_all_points_with_front_and_tick_highlights(
         combined_front=combined_front,
@@ -1567,7 +1755,7 @@ def load_rep_info(pkl_path: str, kind: str, numeric: bool = False) -> Dict[str, 
         df = pickle.load(f)
 
     # falls Spaltennamen mal anders sind, hier anpassen:
-    required = {"building_id", "net_floor_area", "buildings_in_cluster"}
+    required = {"building_id", "net_floor_area", "buildings_in_cluster","number_of_residents"}
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"Missing columns in {pkl_path}: {missing}")
@@ -1586,8 +1774,10 @@ def load_rep_info(pkl_path: str, kind: str, numeric: bool = False) -> Dict[str, 
         profiles = len(ast.literal_eval(row["list_lpg_households"]))
         net_area = float(row["net_floor_area"])
         n_buildings = int(row["buildings_in_cluster"])
+        n_residents = int(row["number_of_residents"])
         total_area = net_area * n_buildings
         number_of_apartments = profiles * n_buildings
+        number_of_residents = n_residents * n_buildings
         suffix = str(rep_idx + 1) if numeric else _index_to_letters(rep_idx)
         name = f"Rep. {kind}-{suffix}"
         rep_idx += 1
@@ -1597,7 +1787,8 @@ def load_rep_info(pkl_path: str, kind: str, numeric: bool = False) -> Dict[str, 
             "net_floor_area": net_area,
             "buildings_in_cluster": n_buildings,
             "total_floor_area": total_area,
-            "number_of_households": number_of_apartments
+            "number_of_households": number_of_apartments,
+            "number_of_residents": number_of_residents,
         }
 
     return rep_info
@@ -1610,9 +1801,9 @@ def plot_compare_pareto_fronts_peak(
     figsize=(6, 4),
     font_size=9,
     font_family="TeX Gyre Termes",
-    xlabel=r"CO$_2$-eq (kg)",
-    ylabel=r"Totex (EUR)",
-    cbar_label=r"Peak load (kW)",
+    xlabel=r"Annual CO$_2$-eq in kg",
+    ylabel=r"Totex in EUR",
+    cbar_label=r"Peak load in kW",
     dpi=600,
     show=False,
 ):
@@ -1688,557 +1879,982 @@ def plot_compare_pareto_fronts_peak(
         plt.show()
     else:
         plt.close(fig)
+def maniupulate_combined_front_elect_grid(combined_front,no_electricity_grid_active):
 
+    # Iterate over the combined_front (assuming it's a list of solutions)
+    if no_electricity_grid_active:
+        for idx, solution in enumerate(combined_front):
+            combined_front[idx]["Electricity_Grid"] = {}
+            combined_front[idx]["Electricity_Grid"][
+                "added_trafo_cost"] =0
+            combined_front[idx]["Electricity_Grid"][
+                "added_line_cost"] =0
+            combined_front[idx]["Electricity_Grid"][
+                "added_line_length"] =0
+            combined_front[idx]["Electricity_Grid"][
+                "added_line_co2"] =0
+            combined_front[idx]["Electricity_Grid"][
+                "added_trafo_co2"] =0
+            combined_front[idx]["Electricity_Grid"][
+                "added_trafo_capacity"] =0
+            combined_front[idx]["Electricity_Grid"][
+                "investment_cost"] =0
+    else:
 
-import os
-import pickle
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+        for idx, solution in enumerate(combined_front):
+            combined_front[idx]["co2"] = combined_front[idx]["co2"] - combined_front[idx]["Electricity_Grid"]["added_line_co2"]
+            combined_front[idx]["Electricity_Grid"]["added_line_co2"] = combined_front[idx]["Electricity_Grid"]["added_line_co2"]/100
+            combined_front[idx]["co2"] = combined_front[idx]["co2"] + combined_front[idx]["Electricity_Grid"]["added_line_co2"]
+    return combined_front
+def maniupulate_combined_front(combined_front,value_types,building_in_cluster):
+    technologies = ["pv_system", "heat_storage", "battery", "gas_heater", "chp", "hp", "building"]
+    carriers = ["Electricity", "NaturalGas", "BioGas", "Hydrogen"]
 
-# ============================================================
-# CONFIG (your base)
-# ============================================================
-ueu_list = [
-    "processed_bds_in_DENI03403000SEC5658",
-    "processed_bds_in_DENI03403000SEC4580",
-    "processed_bds_in_DENI03403000SEC5101",
-]
+    # Iterate over the combined_front (assuming it's a list of solutions)
+    for idx, solution in enumerate(combined_front):
+        totex = 0  # Reset totex for each solution
+        totex += combined_front[idx]["Electricity_Grid"]["added_line_cost"] + combined_front[idx]["Electricity_Grid"]["added_trafo_cost"]
+        for building in building_in_cluster:
+            # Step 1: Add the totex based on carrier data (grid costs and revenues)
+            for carrier in carriers:
+                totex += solution["selection"][building]["record"]["results"][carrier]["flow_from_grid_cost"]
+                if solution["selection"][building]["record"]["results"][carrier]["flow_into_grid_revenue"] is not None:
+                    totex -= solution["selection"][building]["record"]["results"][carrier]["flow_into_grid_revenue"]
 
-base_path = r"C:\Users\hill_mx\Desktop\From Luis\Case Studies\Small New"
-out_dir   = r"C:\Users\hill_mx\Desktop\UEU testing results"
+            # Step 2: Add the totex for each technology
+            for technology in technologies:
+                # Check for multiple instances of technologies (like gas_heater_DENILD...)
+                tech_keys = [key for key in solution["selection"][building]["record"]["results"][building].keys() if
+                             key.startswith(f"{technology}_{building}")]
+                for tech_key in tech_keys:
+                    tech_data = solution["selection"][building]["record"]["results"][building][tech_key]
+                    if "investment_cost" in tech_data:
+                        totex += tech_data["investment_cost"]
 
-width_cm  = 15.11293
-height_cm = 6.5 * 1.8
-width_inch  = width_cm / 2.54
-height_inch = height_cm / 2.54
-font_size = 9
+            # Optional: If the 'building' itself has an 'investment_cost', add it as well
+            building_data = solution["selection"][building]["record"]["results"][building]
+            if "investment_cost" in building_data:
+                totex += building_data["investment_cost"]
 
-energy_types = ["Electricity", "BioGas", "NaturalGas", "Hydrogen"]
-technologies = ["PV-System", "Heat storage", "Battery", "Gas heater", "CHP", "Heat pump", "Retrofit"]
+        # Save the calculated totex back into the combined_front for the current solution
+        combined_front[idx]["totex_control"] = combined_front[idx]["totex"]
+        combined_front[idx]["totex"] = totex
+    return combined_front
+    # Now `totex` contains the total investment costs for all technologies and carriers across all buildings
+    # combined_front[idx]["totex1"] now holds the `totex` value for each solution in the list
 
-value_types = ["cost", "co2", "capacity"]
-Y_LABELS_PER_100M2 = {
-    "cost": "Cost (EUR per 100 m$^2$)",
-    "co2": r"CO$_2$-eq (kg per 100 m$^2$)",
-    "capacity": "Installed capacity (kW or kWh per 100 m$^2$)",
+def ueu_display(name_or_short: str) -> str:
+
+    return UEU_NAME_MAP.get(name_or_short, name_or_short)
+UEU_NAME_MAP = {
+    "DENI03403000SEC4580": "Low heat density",
+    "DENI03403000SEC5658": "Medium heat density",
+    "DENI03403000SEC5101": "High heat density",
 }
+if __name__ == "__main__":# ============================================================
 
-# ============================================================
-# STORAGE: collect results while looping
-# ============================================================
-ueu_results = {}  # {ueu_short: {...}} stored while looping
-
-# ============================================================
-# LOOP OVER UEUs
-# ============================================================
-for ueu in ueu_list:
-    print(ueu)
-    ueu_short = ueu.removeprefix("processed_bds_in_")
-    print(f"\n=== UEU: {ueu_short} ===")
-
-    # ---- input paths for rep info ----
-    path_mfh = os.path.join(base_path, ueu, "mfh_cluster.pkl")
-    path_sfh = os.path.join(base_path, ueu, "sfh_cluster.pkl")
-
-    sfh_rep_info = load_rep_info(path_sfh, "SFH", numeric=False)
-    mfh_rep_info = load_rep_info(path_mfh, "MFH", numeric=False)
-
-    rep_info = {**sfh_rep_info, **mfh_rep_info}
-    building_in_cluster = list(rep_info.keys())
-    total_floor_area_all = sum(info["total_floor_area"] for info in rep_info.values())
-    total_number_of_households = sum(info["number_of_households"] for info in rep_info.values())
-
-    print("Total floor area:", total_floor_area_all)
-
-    # ---- load combined front (pickle) ----
-    combined_front_path = os.path.join(
-        out_dir,
-        f"dec_processed_2026_01_16_combined_front_of_{ueu_short}.pkl"
-    )
-
-    if not os.path.exists(combined_front_path):
-        print(f"WARNING: missing combined-front file: {combined_front_path}")
-        continue
-
-    with open(combined_front_path, "rb") as f:
-        building_dict_loaded = pickle.load(f)
-
-    combined_front = building_dict_loaded[2]
-
-
-    combined_front_per100 = normalise_front_per_input_value(
-        combined_front=combined_front,
-        input_value=total_floor_area_all/100,
-    )
-    combined_front_per_household = normalise_front_per_input_value(
-        combined_front=combined_front,
-        input_value=total_number_of_households,
-    )
-    # ------------------------------------------------------------
-    # (1) Pareto plots: absolute + per 100 m²
-    # ------------------------------------------------------------
-    if True:
-        res_abs = run_pareto_plots(
-            show=False,
-            combined_front=combined_front,
-            out_prefix=f"{ueu_short}_abs",
-            width_inch=width_inch,
-            height_inch=height_inch,
-            font_size=font_size,
-            out_dir=out_dir,
-            x_label=r"CO$_2$-eq (kg)",
-            y_label=r"Totex (EUR)",
-            cbar_label=r"Peak load (kW)",
-        )
-
-
-
-        res_per100 = run_pareto_plots(
-            show=False,
-            combined_front=combined_front_per100,
-            out_prefix=f"{ueu_short}_per_100m2",
-            width_inch=width_inch,
-            height_inch=height_inch,
-            font_size=font_size,
-            out_dir=out_dir,
-            x_label=r"CO$_2$-eq (kg per 100 m$^2$)",
-            y_label=r"Totex (EUR per 100 m$^2$)",
-            cbar_label=r"Peak load (kW per 100 m$^2$)",
-        )
-        res_per_household = run_pareto_plots(
-            show=False,
-            combined_front=combined_front_per_household,
-            out_prefix=f"{ueu_short}_per_household",
-            width_inch=width_inch,
-            height_inch=height_inch,
-            font_size=font_size,
-            out_dir=out_dir,
-            x_label=r"CO$_2$-eq (kg per household)",
-            y_label=r"Totex (EUR per household)",
-            cbar_label=r"Peak load (kW per household)",
-        )
-    # ------------------------------------------------------------
-
-    pareto_front_abs = res_abs["pareto_front"]  # list[(co2, totex)]  (ABS)
-    matches_front_abs = res_abs["matches_front"]  # list[dict] matched from combined_front (ABS)
-
-    pareto_front_per100 = res_per100["pareto_front"]  # list[(co2, totex)]  (PER 100 m²)
-    matches_front_per100 = res_per100["matches_front"]  # list[dict] matched from combined_front_per100 (PER 100 m²)BS)
-
-    pareto_front_per_household = res_per_household["pareto_front"]  # list[(co2, totex)]  (PER 100 m²)
-    matches_front_per_household = res_per_household["matches_front"]  # list[dict] matched from combined_front_per100 (PER 100 m²)
-    def _rounded_key(c, t, dec=6):
-        return (round(float(c), dec), round(float(t), dec))
-
-
-    def _extract_peak_aligned(pareto_front, matches_front, lookup_records, dec=6):
-        """
-        Returns peak array aligned to pareto_front.
-        - If matches_front has same length -> assume same order and take peaks directly
-        - Else -> fallback to lookup by rounded (co2, totex)
-        """
-        if isinstance(matches_front, list) and len(matches_front) == len(pareto_front):
-            return np.array([float(m.get("peak", np.nan)) for m in matches_front], dtype=float)
-
-        lookup = {
-            _rounded_key(r["co2"], r["totex"], dec): float(r.get("peak", np.nan))
-            for r in lookup_records
-            if r is not None and "co2" in r and "totex" in r
-        }
-        return np.array([lookup.get(_rounded_key(c, t, dec), np.nan) for (c, t) in pareto_front], dtype=float)
-
-
-    # -------- ABS plot data --------
-    pf_abs_co2 = np.array([pt[0] for pt in pareto_front_abs], dtype=float)
-    pf_abs_totex = np.array([pt[1] for pt in pareto_front_abs], dtype=float)
-    pf_abs_peak = _extract_peak_aligned(
-        pareto_front=pareto_front_abs,
-        matches_front=matches_front_abs,
-        lookup_records=combined_front,  # IMPORTANT: ABS lookup uses ABS combined_front
-    )
-
-    # -------- PER 100 m² plot data --------
-    pf_per_co2 = np.array([pt[0] for pt in pareto_front_per100], dtype=float)
-    pf_per_totex = np.array([pt[1] for pt in pareto_front_per100], dtype=float)
-    pf_per_peak = _extract_peak_aligned(
-        pareto_front=pareto_front_per100,
-        matches_front=matches_front_per100,
-        lookup_records=combined_front_per100,  # IMPORTANT: per100 lookup uses per100 combined_front
-    )
-
-    # -------- PER HOUSEHOLD plot data --------
-    pf_hh_co2 = np.array([pt[0] for pt in pareto_front_per_household], dtype=float)
-    pf_hh_totex = np.array([pt[1] for pt in pareto_front_per_household], dtype=float)
-    pf_hh_peak = _extract_peak_aligned(
-        pareto_front=pareto_front_per_household,
-        matches_front=matches_front_per_household,
-        lookup_records=combined_front_per_household,
-        # IMPORTANT: per-household lookup uses per-household combined front
-    )
-
-    # -------- store --------
-    ueu_results[ueu_short] = {
-        "total_floor_area_all": total_floor_area_all,
-
-        "pareto_front_abs": pareto_front_abs,
-        "pareto_front_per100": pareto_front_per100,
-        "pareto_front_per_household": pareto_front_per_household,
-
-        "pareto_plotdata_abs": {
-            "co2": pf_abs_co2,
-            "totex": pf_abs_totex,
-            "peak": pf_abs_peak,
-        },
-        "pareto_plotdata_per100": {
-            "co2": pf_per_co2,
-            "totex": pf_per_totex,
-            "peak": pf_per_peak,
-        },
-        "pareto_plotdata_per_household": {
-            "co2": pf_hh_co2,
-            "totex": pf_hh_totex,
-            "peak": pf_hh_peak,
-        },
-
-        # keep anything else you might need
-        "res_abs": res_abs,
-        "res_per100": res_per100,
-        "res_per_household": res_per_household,
-    }
-    # ------------------------------------------------------------
-    # District sums for stackplots (per 100 m²)
-    # ------------------------------------------------------------
-    matches_whole_front = find_exact_match_in_combined_front(pareto_front_abs, combined_front)
-    if not matches_whole_front:
-        print(f"WARNING: No matches for Pareto front in combined_front for UEU {ueu_short}. Skipping stackplots.")
-        continue
-
-    processed_district_data = process_district_data(matches_whole_front)
-    processed_district_data = process_units_for_processed(
-        processed_district_data,
-        floor_area=total_floor_area_all / 100.0,
-    )
-    building_name_map = {bid: info["name"] for bid, info in rep_info.items()}
-
-    district_sums = calculate_sums_for_technologies_and_energy_for_a_district(
-        processed_district_data,
-        energy_types,
-        technologies,
-        building_name_map
-    )
-
-    # ------------------------------------------------------------
-    # (2) Stackplots (per 100 m²)
-    # ------------------------------------------------------------
-    if False:
-        for vt in value_types:
-            fig, ax1, ax2 = plot_stackplot_for_pareto_solutions_with_peak(
-                district_sums=district_sums,
-                technologies=technologies,
-                energy_types=energy_types,
-                value_type=vt,
-                figsize=(width_inch, height_inch),
-                font_size=font_size,
-                show=False,
-                filename=os.path.join(out_dir, f"{ueu_short}_stackplot_{vt}_per_100m2.pdf"),
-                x_label="Pareto-optimal solution index (sorted)",
-                sort_key=None,
-                target_xticks=8,
-                peak_lw=0.5,
-                peak_drawstyle="steps-mid",
-                legend_ncol=4,
-            )
-
-            ax1.set_ylabel(Y_LABELS_PER_100M2[vt])
-            ax2.set_ylabel("Annual peak load (kW per 100 m$^2$)")
-
-            fig.savefig(
-                os.path.join(out_dir, f"{ueu_short}_stackplot_{vt}_per_100m2.pdf"),
-                dpi=600,
-                bbox_inches="tight",
-                format="pdf",
-            )
-            plt.close(fig)
-
-        print(f"Done: {ueu_short}")
-
-# ============================================================
-# AFTER LOOP: one comparison plot across UEUs
-# (ABS Pareto fronts, points colored by peak; marker shape distinguishes UEU)
-# ============================================================
-pareto_sets_abs = {
-    ueu_short: ueu_results[ueu_short]["pareto_plotdata_abs"]
-    for ueu_short in ueu_results.keys()
-}
-
-plot_compare_pareto_fronts_peak(
-    pareto_sets=pareto_sets_abs,
-    filename=os.path.join(out_dir, "COMPARE_pareto_fronts_abs_peak_colored.pdf"),
-    figsize=(width_inch, height_inch),
-    font_size=font_size,
-    xlabel=r"CO$_2$-eq (kg)",
-    ylabel=r"Totex (EUR)",
-    cbar_label=r"Peak load (kW)",
-    show=False,
-)
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-
-
-import numpy as np
-import matplotlib.pyplot as plt
-def plot_compare_abs_per100_perhh_pareto_fronts_peak(
-    ueu_results,
-    filename,
-    figsize=(12, 4),
-    font_size=9,
-    font_family="TeX Gyre Termes",
-    # axis labels
-    xlabel_abs=r"CO$_2$-eq (kg)",
-    ylabel_abs=r"Totex (EUR)",
-    xlabel_per100=r"CO$_2$-eq (kg per 100 m$^2$)",
-    ylabel_per100=r"Totex (EUR per 100 m$^2$)",
-    xlabel_perhh=r"CO$_2$-eq (kg per household)",
-    ylabel_perhh=r"Totex (EUR per household)",
-    # colorbar labels
-    cbar_label_abs=r"Peak load (kW)",
-    cbar_label_per100=r"Peak load (kW per 100 m$^2$)",
-    cbar_label_perhh=r"Peak load (kW per household)",
-    legend_ncol=3,
-    dpi=600,
-    show=False,
-):
+    import os
+    import pickle
     import numpy as np
     import matplotlib.pyplot as plt
-    from matplotlib.lines import Line2D
-    from matplotlib.ticker import FuncFormatter
+    import seaborn as sns
 
-    # -----------------------------
-    # GLOBAL STYLE
-    # -----------------------------
-    plt.style.use("default")
-    plt.rcParams.update({
-        "font.family": font_family,
-        "font.size": font_size,
-        "axes.labelsize": font_size,
-        "xtick.labelsize": font_size,
-        "ytick.labelsize": font_size,
-        "legend.fontsize": font_size,
-        "mathtext.fontset": "cm",
-        "pdf.fonttype": 42,
-        "ps.fonttype": 42,
-    })
-
-    cmap = plt.get_cmap("viridis")
-
-    # -----------------------------
-    # STABLE MARKERS PER UEU
-    # -----------------------------
-    markers = ["o", "s", "^", "D", "P", "X", "v", "<", ">"]
-    ueu_keys = sorted(ueu_results.keys())
-    marker_map = {k: markers[i % len(markers)] for i, k in enumerate(ueu_keys)}
-
-    # -----------------------------
-    # COLLECT DATA
-    # -----------------------------
-    panels = {"abs": {}, "per100": {}, "perhh": {}}
-    peaks = {"abs": [], "per100": [], "perhh": []}
-
-    for k in ueu_keys:
-        r = ueu_results[k]
-        for key, name in [
-            ("abs", "pareto_plotdata_abs"),
-            ("per100", "pareto_plotdata_per100"),
-            ("perhh", "pareto_plotdata_per_household"),
-        ]:
-            x = np.asarray(r[name]["co2"], float)
-            y = np.asarray(r[name]["totex"], float)
-            p = np.asarray(r[name]["peak"], float)
-            panels[key][k] = (x, y, p)
-            if np.isfinite(p).any():
-                peaks[key].append(p[np.isfinite(p)])
-
-    # robust vlims for colorbars
-    vlims = {}
-    for key, arrs in peaks.items():
-        if arrs:
-            vv = np.concatenate(arrs)
-            vlims[key] = (float(np.nanmin(vv)), float(np.nanmax(vv)))
-        else:
-            vlims[key] = (0.0, 1.0)
-
-    # -----------------------------
-    # SCIENTIFIC NICE TICKS (1-2-5 * 10^n), NO SCI NOTATION, NEGATIVES ALLOWED
-    # -----------------------------
-    def _nice_125_step(span, ntarget=5):
-        if span <= 0 or not np.isfinite(span):
-            return 1.0
-        raw = span / max(ntarget - 1, 1)
-        exp = np.floor(np.log10(raw))
-        f = raw / (10 ** exp)
-        if f <= 1:
-            m = 1
-        elif f <= 2:
-            m = 2
-        elif f <= 5:
-            m = 5
-        else:
-            m = 10
-        return m * (10 ** exp)
-
-    def _nice_ticks_and_limits(vmin, vmax, ntarget=5):
-        if not (np.isfinite(vmin) and np.isfinite(vmax)):
-            vmin, vmax = 0.0, 1.0
-        if vmin == vmax:
-            dv = 1.0 if vmin == 0 else abs(vmin) * 0.1
-            vmin, vmax = vmin - dv, vmax + dv
-
-        span = vmax - vmin
-        step = _nice_125_step(span, ntarget=ntarget)
-
-        # snap outward to multiples of step (negatives allowed)
-        vmin_n = np.floor(vmin / step) * step
-        vmax_n = np.ceil(vmax / step) * step
-
-        ticks = np.arange(vmin_n, vmax_n + 0.5 * step, step)
-
-        # avoid "-0"
-        ticks[np.isclose(ticks, 0)] = 0.0
-        if np.isclose(vmin_n, 0):
-            vmin_n = 0.0
-        if np.isclose(vmax_n, 0):
-            vmax_n = 0.0
-
-        return ticks, vmin_n, vmax_n
-
-    def _int_no_sci_formatter(x, pos=None):
-        if np.isclose(x, round(x)):
-            return f"{int(round(x))}"
-        s = f"{x:.4f}".rstrip("0").rstrip(".")
-        return s
-
-    _intfmt = FuncFormatter(_int_no_sci_formatter)
-
-    def _apply_nice_axis(ax, ntarget=5):
-        xmin, xmax = ax.get_xlim()
-        xt, xmin_n, xmax_n = _nice_ticks_and_limits(xmin, xmax, ntarget=ntarget)
-        ax.set_xlim(xmin_n, xmax_n)
-        ax.set_xticks(xt)
-
-        ymin, ymax = ax.get_ylim()
-        yt, ymin_n, ymax_n = _nice_ticks_and_limits(ymin, ymax, ntarget=ntarget)
-        ax.set_ylim(ymin_n, ymax_n)
-        ax.set_yticks(yt)
-
-        ax.xaxis.set_major_formatter(_intfmt)
-        ax.yaxis.set_major_formatter(_intfmt)
-
-    def _apply_nice_cbar(cbar, ntarget=5):
-        vmin, vmax = cbar.mappable.get_clim()
-        ticks, vmin_n, vmax_n = _nice_ticks_and_limits(float(vmin), float(vmax), ntarget=ntarget)
-        cbar.set_ticks(ticks)
-        cbar.ax.yaxis.set_major_formatter(_intfmt)
-
-    # -----------------------------
-    # FIGURE
-    # -----------------------------
-    fig, axes = plt.subplots(
-        ncols=3,
-        figsize=figsize,
-        gridspec_kw={"wspace": 0.40}
-    )
-
-    def scatter(ax, data, vmin, vmax):
-        sc = None
-        for k in ueu_keys:
-            x, y, p = data[k]
-            if len(x):
-                sc = ax.scatter(
-                    x, y,
-                    c=p, cmap=cmap, vmin=vmin, vmax=vmax,
-                    s=20,
-                    marker=marker_map[k],
-                    edgecolors="black",
-                    linewidths=0.6,
-                )
-        ax.grid(True, alpha=0.25)
-        return sc
-
-    sc1 = scatter(axes[0], panels["abs"], *vlims["abs"])
-    axes[0].set_xlabel(xlabel_abs)
-    axes[0].set_ylabel(ylabel_abs)
-
-    sc2 = scatter(axes[1], panels["per100"], *vlims["per100"])
-    axes[1].set_xlabel(xlabel_per100)
-    axes[1].set_ylabel(ylabel_per100)
-
-    sc3 = scatter(axes[2], panels["perhh"], *vlims["perhh"])
-    axes[2].set_xlabel(xlabel_perhh)
-    axes[2].set_ylabel(ylabel_perhh)
-
-    # Apply nice scientific ticks AFTER data is plotted (limits are final then)
-    _apply_nice_axis(axes[0], ntarget=5)
-    _apply_nice_axis(axes[1], ntarget=5)
-    _apply_nice_axis(axes[2], ntarget=5)
-
-    # -----------------------------
-    # LEGEND (black markers)
-    # -----------------------------
-    legend_handles = [
-        Line2D(
-            [0], [0],
-            marker=marker_map[k],
-            linestyle="None",
-            markerfacecolor="none",
-            markeredgecolor="black",
-            color="black",
-            markersize=6,
-            label=k,
-        )
-        for k in ueu_keys
+    # ============================================================
+    # CONFIG (your base)
+    # ============================================================
+    ueu_list = [
+        "processed_bds_in_DENI03403000SEC5658",
+        "processed_bds_in_DENI03403000SEC4580",
+        "processed_bds_in_DENI03403000SEC5101",
     ]
-    legend_labels = [h.get_label() for h in legend_handles]
-
-    fig.legend(
-        handles=legend_handles,
-        labels=legend_labels,
-        frameon=False,
-        loc="upper center",
-        ncol=min(legend_ncol, len(legend_handles)),
-    )
-
-    fig.tight_layout(rect=[0, 0, 1, 0.90])
-
-    # -----------------------------
-    # COLORBARS
-    # -----------------------------
-    for ax, sc, label in zip(
-        axes,
-        [sc1, sc2, sc3],
-        [cbar_label_abs, cbar_label_per100, cbar_label_perhh],
-    ):
-        if sc is not None:
-            cbar = fig.colorbar(sc, ax=ax, pad=0.02, shrink=0.92)
-            cbar.set_label(label)
-            _apply_nice_cbar(cbar, ntarget=5)
-
-    fig.savefig(filename, dpi=dpi, bbox_inches="tight")
-    if show:
-        plt.show()
+    no_electricity_grid_active = True
+    base_path = r"C:\Users\hill_mx\Desktop\From Luis\Case Studies\Small New"
+    out_dir   = r"C:\Users\hill_mx\Desktop\123"
+    input_dir = r"C:\Users\hill_mx\Desktop\123"
+    if False:
+        result_name = "cen_processed_2026_01_28_combined_front_of__elect_grid_considered_"
+        cen_or_dec = "cen"
     else:
-        plt.close(fig)
+        result_name = "dec_processed_2026_03_17_combined_front_of_"  # cen
+        cen_or_dec = "dec"
+    width_cm  = 15.11293
+    height_cm = 6.5 * 1.8
+    width_inch  = width_cm / 2.54
+    height_inch = height_cm / 2.54
+    font_size = 9
 
-plot_compare_abs_per100_perhh_pareto_fronts_peak(
-     ueu_results=ueu_results,
-     filename=os.path.join(out_dir, "COMPARE_abs_vs_per100_vs_perhh_pareto_fronts_peak_colored.pdf"),
-     figsize=(width_inch * 2.2, height_inch),  # wider for 3 panels
-     font_size=font_size,
-     legend_ncol=3,
-     show=False,
+    energy_types = ["Electricity", "Bio gas", "Natural gas", "Hydrogen"]
+    technologies = ["PV-System", "Heat storage", "Battery", "Gas heater", "CHP", "Heat pump", "Added trafo capacity","Added line length","Retrofit"]
+
+    value_types = ["cost", "co2", "capacity"]
+    Y_LABELS_PER_100M2 = {
+        "cost": "Annual TOTEX in EUR per 100 m$^2$",
+        "co2": r"Annual CO$_2$-eq in kg per 100 m$^2$",
+        "capacity": "Installed capacity in kW or kWh per 100 m$^2$",
+    }
+
+    # ============================================================
+    # STORAGE: collect results while looping
+    # ============================================================
+    ueu_results = {}  # {ueu_short: {...}} stored while looping
+
+    # ============================================================
+    # LOOP OVER UEUs
+    # ============================================================
+    for ueu in ueu_list:
+        print(ueu)
+        ueu_short = ueu.removeprefix("processed_bds_in_")
+        print(f"\n=== UEU: {ueu_short} ===")
+        if ueu=="processed_bds_in_DENI03403000SEC5658":
+            print("EXTRA CASE FOR 5658 SINCE IT IS NOT CLUSTERED RESULTS")
+            path1=r"C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\03_advanced_investment_optimization"
+            import geopandas as gpd
+            import pandas as pd
+            gpkg_ueu = os.path.join(path1, ueu, f"{ueu}.gpkg")
+            gdf_ueu = gpd.read_file(gpkg_ueu)
+            sfh_cluster = gdf_ueu.loc[gdf_ueu["tabula_building_type"] == "SFH"].copy()
+            mfh_cluster = gdf_ueu.loc[gdf_ueu["tabula_building_type"] == "MFH"].copy()
+            all_buildings = pd.concat([sfh_cluster.copy(), mfh_cluster.copy()], ignore_index=True)
+            import numpy as np
+            import ast
+
+            import numpy as np
+
+
+            def get_household_count(x):
+                if isinstance(x, (list, tuple, np.ndarray)):
+                    return len(x)
+
+                if isinstance(x, str):
+                    s = x.strip()
+                    assert s.startswith("[") and s.endswith("]"), f"Kein Listen-String: {x}"
+                    inner = s[1:-1].strip()
+                    if inner == "":
+                        return 0
+                    return inner.count(",") + 1
+
+                raise TypeError(f"Unerwarteter Typ: {type(x)} mit Wert {x}")
+
+
+            all_buildings["number_of_households"] = all_buildings["list_number_of_adults"].apply(get_household_count)
+            rep_info = {
+                row["building_id"]: {
+                    "name": row["building_id"],
+                    "net_floor_area": float(row["net_floor_area"]),
+                    "buildings_in_cluster": 1,
+                    "total_floor_area": float(row["net_floor_area"]),
+                    "number_of_households": len(row["list_number_of_adults"]),
+                    "number_of_residents": int(row["number_of_residents"]) if not pd.isna(
+                        row["number_of_residents"]) else 0,
+                }
+                for _, row in all_buildings.iterrows()
+            }
+        # ---- input paths for rep info ----
+        else:
+            path_mfh = os.path.join(base_path, ueu, "mfh_cluster.pkl")
+            path_sfh = os.path.join(base_path, ueu, "sfh_cluster.pkl")
+
+            sfh_rep_info = load_rep_info(path_sfh, "SFH", numeric=False)
+            mfh_rep_info = load_rep_info(path_mfh, "MFH", numeric=False)
+
+            rep_info = {**sfh_rep_info, **mfh_rep_info}
+        building_in_cluster = list(rep_info.keys())
+        total_floor_area_all = sum(info["total_floor_area"] for info in rep_info.values())
+        total_number_of_households = sum(info["number_of_households"] for info in rep_info.values())
+
+        print("Total floor area:", total_floor_area_all)
+
+        # ---- load combined front (pickle) ----
+        combined_front_path = os.path.join(
+            input_dir,
+            f"{result_name}{ueu_short}.pkl"
+        )
+
+        if not os.path.exists(combined_front_path):
+            print(f"WARNING: missing combined-front file: {combined_front_path}")
+            continue
+
+        with open(combined_front_path, "rb") as f:
+            building_dict_loaded = pickle.load(f)
+
+        combined_front = building_dict_loaded[2]
+
+        combined_front = maniupulate_combined_front_elect_grid(combined_front,no_electricity_grid_active)
+
+        #combined_front = maniupulate_combined_front(combined_front,value_types,building_in_cluster)
+
+        combined_front_per100 = normalise_front_per_input_value(
+            combined_front=combined_front,
+            input_value=total_floor_area_all/100,
+        )
+        combined_front_per_household = normalise_front_per_input_value(
+            combined_front=combined_front,
+            input_value=total_number_of_households,
+        )
+        # ------------------------------------------------------------
+        # (1) Pareto plots: absolute + per 100 m²
+        # ------------------------------------------------------------
+        if True:
+            res_abs = run_pareto_plots(
+                show=False,
+                combined_front=combined_front,
+                out_prefix=f"{cen_or_dec}_{ueu_display(ueu_short)}_abs",
+                width_inch=width_inch,
+                height_inch=height_inch,
+                font_size=font_size,
+                out_dir=out_dir,
+                x_label=r"Annual CO$_2$-eq in kg",
+                y_label=r"Annual TOTEX in EUR",
+                cbar_label=r"Peak load in kW",
+            )
+
+            if True:
+
+                res_per100 = run_pareto_plots(
+                    show=False,
+                    combined_front=combined_front_per100,
+                    out_prefix=f"{cen_or_dec}_{ueu_display(ueu_short)}_per_100m2",
+                    width_inch=width_inch,
+                    height_inch=height_inch,
+                    font_size=font_size,
+                    out_dir=out_dir,
+                    x_label=r"Annual CO$_2$-eq in kg per 100 m$^2$",
+                    y_label=r"Annual TOTEX in EUR per 100 m$^2$",
+                    cbar_label=r"Peak load in kW per 100 m$^2$",
+                )
+                res_per_household = run_pareto_plots(
+                    show=False,
+                    combined_front=combined_front_per_household,
+                    out_prefix=f"{cen_or_dec}_{ueu_display(ueu_short)}_per_household",
+                    width_inch=width_inch,
+                    height_inch=height_inch,
+                    font_size=font_size,
+                    out_dir=out_dir,
+                    x_label=r"Annual CO$_2$-eq in kg per household",
+                    y_label=r"Totex EUR per household",
+                    cbar_label=r"Peak load in kW per household",
+                )
+        # ------------------------------------------------------------
+
+        pareto_front_abs = res_abs["pareto_front"]  # list[(co2, totex)]  (ABS)
+        matches_front_abs = res_abs["matches_front"]  # list[dict] matched from combined_front (ABS)
+        if True:
+            pareto_front_per100 = res_per100["pareto_front"]  # list[(co2, totex)]  (PER 100 m²)
+            matches_front_per100 = res_per100["matches_front"]  # list[dict] matched from combined_front_per100 (PER 100 m²)BS)
+
+            pareto_front_per_household = res_per_household["pareto_front"]  # list[(co2, totex)]  (PER 100 m²)
+            matches_front_per_household = res_per_household["matches_front"]  # list[dict] matched from combined_front_per100 (PER 100 m²)
+        def _rounded_key(c, t, dec=6):
+            return (round(float(c), dec), round(float(t), dec))
+
+
+        def _extract_peak_aligned(pareto_front, matches_front, lookup_records, dec=6):
+            """
+            Returns peak array aligned to pareto_front.
+            - If matches_front has same length -> assume same order and take peaks directly
+            - Else -> fallback to lookup by rounded (co2, totex)
+            """
+            if isinstance(matches_front, list) and len(matches_front) == len(pareto_front):
+                return np.array([float(m.get("peak", np.nan)) for m in matches_front], dtype=float)
+
+            lookup = {
+                _rounded_key(r["co2"], r["totex"], dec): float(r.get("peak", np.nan))
+                for r in lookup_records
+                if r is not None and "co2" in r and "totex" in r
+            }
+            return np.array([lookup.get(_rounded_key(c, t, dec), np.nan) for (c, t) in pareto_front], dtype=float)
+
+        if True:
+            # -------- ABS plot data --------
+            pf_abs_co2 = np.array([pt[0] for pt in pareto_front_abs], dtype=float)
+            pf_abs_totex = np.array([pt[1] for pt in pareto_front_abs], dtype=float)
+            pf_abs_peak = _extract_peak_aligned(
+                pareto_front=pareto_front_abs,
+                matches_front=matches_front_abs,
+                lookup_records=combined_front,  # IMPORTANT: ABS lookup uses ABS combined_front
+            )
+
+            # -------- PER 100 m² plot data --------
+            pf_per_co2 = np.array([pt[0] for pt in pareto_front_per100], dtype=float)
+            pf_per_totex = np.array([pt[1] for pt in pareto_front_per100], dtype=float)
+            pf_per_peak = _extract_peak_aligned(
+                pareto_front=pareto_front_per100,
+                matches_front=matches_front_per100,
+                lookup_records=combined_front_per100,  # IMPORTANT: per100 lookup uses per100 combined_front
+            )
+
+            # -------- PER HOUSEHOLD plot data --------
+            pf_hh_co2 = np.array([pt[0] for pt in pareto_front_per_household], dtype=float)
+            pf_hh_totex = np.array([pt[1] for pt in pareto_front_per_household], dtype=float)
+            pf_hh_peak = _extract_peak_aligned(
+                pareto_front=pareto_front_per_household,
+                matches_front=matches_front_per_household,
+                lookup_records=combined_front_per_household,
+                # IMPORTANT: per-household lookup uses per-household combined front
+            )
+
+            # -------- store --------
+            ueu_results[ueu_display(ueu_short)] = {
+                "total_floor_area_all": total_floor_area_all,
+
+                "pareto_front_abs": pareto_front_abs,
+                "pareto_front_per100": pareto_front_per100,
+                "pareto_front_per_household": pareto_front_per_household,
+
+                "pareto_plotdata_abs": {
+                    "co2": pf_abs_co2,
+                    "totex": pf_abs_totex,
+                    "peak": pf_abs_peak,
+                },
+                "pareto_plotdata_per100": {
+                    "co2": pf_per_co2,
+                    "totex": pf_per_totex,
+                    "peak": pf_per_peak,
+                },
+                "pareto_plotdata_per_household": {
+                    "co2": pf_hh_co2,
+                    "totex": pf_hh_totex,
+                    "peak": pf_hh_peak,
+                },
+
+                # keep anything else you might need
+                "res_abs": res_abs,
+                "res_per100": res_per100,
+                "res_per_household": res_per_household,
+            }
+        # ------------------------------------------------------------
+        # District sums for stackplots (per 100 m²)
+        # ------------------------------------------------------------
+        matches_whole_front = find_exact_match_in_combined_front(pareto_front_abs, combined_front)
+        if not matches_whole_front:
+            print(f"WARNING: No matches for Pareto front in combined_front for UEU {ueu_display(ueu_short)}. Skipping stackplots.")
+            continue
+
+        processed_district_data = process_district_data(matches_whole_front,building_in_cluster,cen_or_dec)
+        processed_district_data = process_units_for_processed(
+            processed_district_data,
+            floor_area=total_floor_area_all / 100.0,
+        )
+        building_name_map = {bid: info["name"] for bid, info in rep_info.items()}
+        if cen_or_dec == "cen":
+            building_name_map["heat_grid"] = "Heat grid"
+
+        district_sums = calculate_sums_for_technologies_and_energy_for_a_district(
+            processed_district_data,
+            energy_types,
+            technologies,
+            building_name_map
+        )
+
+        # ------------------------------------------------------------
+        # (2) Stackplots (per 100 m²)
+        # ------------------------------------------------------------
+        if True:
+            for vt in value_types:
+                fig, ax1, ax2 = plot_stackplot_for_pareto_solutions_with_peak(
+                    district_sums=district_sums,
+                    technologies=technologies,
+                    energy_types=energy_types,
+                    value_type=vt,
+                    figsize=(width_inch, height_inch),
+                    font_size=font_size,
+                    show=False,
+                    filename=os.path.join(out_dir, f"{cen_or_dec}_{ueu_display(ueu_short)}_stackplot_{vt}_per_100m2.pdf"),
+                    x_label="Pareto-optimal solution index (sorted)",
+                    sort_key=None,
+                    target_xticks=8,
+                    peak_lw=0.5,
+                    peak_drawstyle="steps-mid",
+                    legend_ncol=4,
+                )
+
+                ax1.set_ylabel(Y_LABELS_PER_100M2[vt])
+                ax2.set_ylabel("Annual peak load in kW per 100 m$^2$")
+
+                fig.savefig(
+                    os.path.join(out_dir, f"{cen_or_dec}_{ueu_display(ueu_short)}_stackplot_{vt}_per_100m2.pdf"),
+                    dpi=600,
+                    bbox_inches="tight",
+                    format="pdf",
+                )
+                plt.close(fig)
+
+            print(f"Done: {ueu_display(ueu_short)}")
+
+    # AFTER LOOP: one comparison plot across UEUs
+    # (ABS Pareto fronts, points colored by peak; marker shape distinguishes UEU)
+    # ============================================================
+    pareto_sets_abs = {
+        ueu_display(ueu_short): ueu_results[ueu_display(ueu_short)]["pareto_plotdata_abs"]
+        for ueu_short in ueu_results.keys()
+    }
+
+    plot_compare_pareto_fronts_peak(
+        pareto_sets=pareto_sets_abs,
+        filename=os.path.join(out_dir, "COMPARE_pareto_fronts_abs_peak_colored.pdf"),
+        figsize=(width_inch, height_inch),
+        font_size=font_size,
+        xlabel=r"Annual CO$_2$-eq in kg",
+        ylabel=r"Annual TOTEX in EUR",
+        cbar_label=r"Peak load in kW",
+        show=False,
+    )
+    import os
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    import os
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+
+    def plot_compare_per100_perhh_pareto_fronts_peak(
+            ueu_results,
+            filename,
+            figsize=(8, 4),
+            font_size=9,
+            font_family="TeX Gyre Termes",
+            # axis labels
+            xlabel_per100=r"Annual CO$_2$-eq in kg per 100 m$^2$",
+            ylabel_per100=r"Annual TOTEX in EUR per 100 m$^2$",
+            xlabel_perhh=r"Annual CO$_2$-eq in kg per household",
+            ylabel_perhh=r"Totex EUR per household",
+            # colorbar labels
+            cbar_label_per100=r"Peak load in kW per 100 m$^2$",
+            cbar_label_perhh=r"Peak load in kW per household",
+            legend_ncol=3,
+            dpi=600,
+            show=False,
+            debug_print=False,
+    ):
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from matplotlib.lines import Line2D
+        from matplotlib.ticker import FuncFormatter
+
+        # -----------------------------
+        # GLOBAL STYLE
+        # -----------------------------
+        plt.style.use("default")
+        plt.rcParams.update({
+            "font.family": font_family,
+            "font.size": font_size,
+            "axes.labelsize": font_size,
+            "xtick.labelsize": font_size,
+            "ytick.labelsize": font_size,
+            "legend.fontsize": font_size,
+            "mathtext.fontset": "cm",
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+        })
+
+        # Make sure no weird white "under/over/bad" behavior
+        cmap = plt.get_cmap("viridis").copy()
+        cmap.set_under(cmap(0.0))
+        cmap.set_over(cmap(1.0))
+        cmap.set_bad(cmap(0.0))
+
+        # -----------------------------
+        # STABLE MARKERS PER UEU
+        # -----------------------------
+        markers = ["o", "s", "^", "D", "P", "X", "v", "<", ">"]
+        ueu_keys = sorted(ueu_results.keys())
+        marker_map = {k: markers[i % len(markers)] for i, k in enumerate(ueu_keys)}
+
+        # -----------------------------
+        # COLLECT DATA (only per100 + perhh)
+        # -----------------------------
+        panels = {"per100": {}, "perhh": {}}
+        peaks = {"per100": [], "perhh": []}
+
+        for k in ueu_keys:
+            r = ueu_results[k]
+            for key, name in [
+                ("per100", "pareto_plotdata_per100"),
+                ("perhh", "pareto_plotdata_per_household"),
+            ]:
+                x = np.asarray(r[name]["co2"], float)
+                y = np.asarray(r[name]["totex"], float)
+                p = np.asarray(r[name]["peak"], float)
+                panels[key][k] = (x, y, p)
+                if np.isfinite(p).any():
+                    peaks[key].append(p[np.isfinite(p)])
+
+        # robust vlims for colorbars
+        vlims = {}
+        for key, arrs in peaks.items():
+            if arrs:
+                vv = np.concatenate(arrs)
+                vlims[key] = (float(np.nanmin(vv)), float(np.nanmax(vv)))
+            else:
+                vlims[key] = (0.0, 1.0)
+
+        # -----------------------------
+        # TRUE DATA RANGES (NO MATPLOTLIB MARGINS)
+        # -----------------------------
+        def _finite_minmax(arr):
+            arr = np.asarray(arr, float)
+            arr = arr[np.isfinite(arr)]
+            if arr.size == 0:
+                return (0.0, 1.0)
+            return (float(arr.min()), float(arr.max()))
+
+        panel_ranges = {}
+        for panel_key in ["per100", "perhh"]:
+            allx, ally = [], []
+            for k in ueu_keys:
+                x, y, _ = panels[panel_key][k]
+                if x is not None and len(x):
+                    allx.append(np.asarray(x, float))
+                if y is not None and len(y):
+                    ally.append(np.asarray(y, float))
+            x_min, x_max = _finite_minmax(np.concatenate(allx) if allx else np.array([0.0, 1.0]))
+            y_min, y_max = _finite_minmax(np.concatenate(ally) if ally else np.array([0.0, 1.0]))
+            panel_ranges[panel_key] = {"x": (x_min, x_max), "y": (y_min, y_max)}
+
+        if debug_print:
+            print("---- DATA MIN/MAX (true, before snapping) ----")
+            for pk in ["per100", "perhh"]:
+                print(f"{pk:6s}  x_min={panel_ranges[pk]['x'][0]:.6g}, x_max={panel_ranges[pk]['x'][1]:.6g}   "
+                      f"y_min={panel_ranges[pk]['y'][0]:.6g}, y_max={panel_ranges[pk]['y'][1]:.6g}")
+
+        # -----------------------------
+        # NICE TICKS (1-2-5 * 10^n), NO SCI NOTATION
+        # -----------------------------
+        def _nice_125_step(span, ntarget=5):
+            if span <= 0 or not np.isfinite(span):
+                return 1.0
+            raw = span / max(ntarget - 1, 1)
+            exp = np.floor(np.log10(raw))
+            f = raw / (10 ** exp)
+            if f <= 1:
+                m = 1
+            elif f <= 2:
+                m = 2
+            elif f <= 5:
+                m = 5
+            else:
+                m = 10
+            return m * (10 ** exp)
+
+        def _nice_ticks_and_limits(vmin, vmax, ntarget=5):
+            if not (np.isfinite(vmin) and np.isfinite(vmax)):
+                vmin, vmax = 0.0, 1.0
+            if vmin == vmax:
+                dv = 1.0 if vmin == 0 else abs(vmin) * 0.1
+                vmin, vmax = vmin - dv, vmax + dv
+
+            span = vmax - vmin
+            step = _nice_125_step(span, ntarget=ntarget)
+
+            vmin_n = np.floor(vmin / step) * step
+            vmax_n = np.ceil(vmax / step) * step
+            ticks = np.arange(vmin_n, vmax_n + 0.5 * step, step)
+
+            ticks[np.isclose(ticks, 0)] = 0.0
+            if np.isclose(vmin_n, 0):
+                vmin_n = 0.0
+            if np.isclose(vmax_n, 0):
+                vmax_n = 0.0
+
+            return ticks, vmin_n, vmax_n
+
+        def _int_no_sci_formatter(x, pos=None):
+            if np.isclose(x, round(x)):
+                return f"{int(round(x))}"
+            s = f"{x:.4f}".rstrip("0").rstrip(".")
+            return s
+
+        _intfmt = FuncFormatter(_int_no_sci_formatter)
+
+        def _apply_nice_axis_using_data(ax, x_minmax, y_minmax, ntarget=5):
+            xt, xmin_n, xmax_n = _nice_ticks_and_limits(x_minmax[0], x_minmax[1], ntarget=ntarget)
+            yt, ymin_n, ymax_n = _nice_ticks_and_limits(y_minmax[0], y_minmax[1], ntarget=ntarget)
+
+            ax.set_xlim(xmin_n, xmax_n)
+            ax.set_ylim(ymin_n, ymax_n)
+            ax.set_xticks(xt)
+            ax.set_yticks(yt)
+
+            ax.xaxis.set_major_formatter(_intfmt)
+            ax.yaxis.set_major_formatter(_intfmt)
+
+            if debug_print:
+                print(f"AXIS set -> xlim=({xmin_n:.6g},{xmax_n:.6g}) ylim=({ymin_n:.6g},{ymax_n:.6g})")
+
+        # -----------------------------
+        # FIGURE (2 panels)
+        # -----------------------------
+        fig, axes = plt.subplots(
+            ncols=2,
+            figsize=figsize,
+            gridspec_kw={"wspace": 0.40}
+        )
+
+        def scatter(ax, data, vmin, vmax):
+            sc = None
+            for k in ueu_keys:
+                x, y, p = data[k]
+                if len(x):
+                    sc = ax.scatter(
+                        x, y,
+                        c=p, cmap=cmap, vmin=vmin, vmax=vmax,
+                        s=20,
+                        marker=marker_map[k],
+                        edgecolors="none",  # <- no black outline
+                        linewidths=0.0,
+                    )
+            ax.grid(True, alpha=0.25)
+            ax.margins(x=0.0, y=0.0)
+            return sc
+
+        sc_per100 = scatter(axes[0], panels["per100"], *vlims["per100"])
+        axes[0].set_xlabel(xlabel_per100)
+        axes[0].set_ylabel(ylabel_per100)
+
+        sc_perhh = scatter(axes[1], panels["perhh"], *vlims["perhh"])
+        axes[1].set_xlabel(xlabel_perhh)
+        axes[1].set_ylabel(ylabel_perhh)
+
+        if debug_print:
+            print("---- AXIS LIMITS AFTER SNAPPING ----")
+
+        _apply_nice_axis_using_data(axes[0], panel_ranges["per100"]["x"], panel_ranges["per100"]["y"], ntarget=5)
+        _apply_nice_axis_using_data(axes[1], panel_ranges["perhh"]["x"], panel_ranges["perhh"]["y"], ntarget=5)
+
+        # -----------------------------
+        # LEGEND (markers, black)
+        # -----------------------------
+        legend_handles = [
+            Line2D(
+                [0], [0],
+                marker=marker_map[k],
+                linestyle="None",
+                markerfacecolor="none",
+                markeredgecolor="black",
+                color="black",
+                markersize=6,
+                label=k,
+            )
+            for k in ueu_keys
+        ]
+
+        fig.legend(
+            handles=legend_handles,
+            frameon=False,
+            loc="upper center",
+            ncol=min(legend_ncol, len(legend_handles)),
+        )
+
+        fig.tight_layout(rect=[0, 0, 1, 0.90])
+
+        # -----------------------------
+        # COLORBARS (default ticks, no "nice ending")
+        # -----------------------------
+        for ax, sc, label in zip(
+                axes,
+                [sc_per100, sc_perhh],
+                [cbar_label_per100, cbar_label_perhh],
+        ):
+            if sc is not None:
+                cbar = fig.colorbar(sc, ax=ax, pad=0.02, shrink=0.92)
+                cbar.set_label(label)
+                cbar.ax.tick_params(labelsize=font_size)
+
+        fig.savefig(filename, dpi=dpi, bbox_inches="tight")
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
+    def plot_compare_abs_per100_perhh_pareto_fronts_peak(
+        ueu_results,
+        filename,
+        figsize=(12, 4),
+        font_size=9,
+        font_family="TeX Gyre Termes",
+        # axis labels
+        xlabel_abs=r"Annual CO$_2$-eq in kg",
+        ylabel_abs=r"Annual TOTEX in EUR",
+        xlabel_per100=r"Annual CO$_2$-eq in kg per 100 m$^2$",
+        ylabel_per100=r"Annual TOTEX in EUR per 100 m$^2$",
+        xlabel_perhh=r"Annual CO$_2$-eq in kg per household",
+        ylabel_perhh=r"Totex EUR per household",
+        # colorbar labels
+        cbar_label_abs=r"Peak load in kW",
+        cbar_label_per100=r"Peak load in kW per 100 m$^2$",
+        cbar_label_perhh=r"Peak load in kW per household",
+        legend_ncol=3,
+        dpi=600,
+        show=False,
+        debug_print=True,   # <- Kontroll-Prints AN/AUS
+    ):
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from matplotlib.lines import Line2D
+        from matplotlib.ticker import FuncFormatter
+
+        # -----------------------------
+        # GLOBAL STYLE
+        # -----------------------------
+        plt.style.use("default")
+        plt.rcParams.update({
+            "font.family": font_family,
+            "font.size": font_size,
+            "axes.labelsize": font_size,
+            "xtick.labelsize": font_size,
+            "ytick.labelsize": font_size,
+            "legend.fontsize": font_size,
+            "mathtext.fontset": "cm",
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+        })
+
+        cmap = plt.get_cmap("viridis")
+
+        # -----------------------------
+        # STABLE MARKERS PER UEU
+        # -----------------------------
+        markers = ["o", "s", "^", "D", "P", "X", "v", "<", ">"]
+        ueu_keys = sorted(ueu_results.keys())
+        marker_map = {k: markers[i % len(markers)] for i, k in enumerate(ueu_keys)}
+
+        # -----------------------------
+        # COLLECT DATA
+        # -----------------------------
+        panels = {"abs": {}, "per100": {}, "perhh": {}}
+        peaks = {"abs": [], "per100": [], "perhh": []}
+
+        for k in ueu_keys:
+            r = ueu_results[k]
+            for key, name in [
+                ("abs", "pareto_plotdata_abs"),
+                ("per100", "pareto_plotdata_per100"),
+                ("perhh", "pareto_plotdata_per_household"),
+            ]:
+                x = np.asarray(r[name]["co2"], float)
+                y = np.asarray(r[name]["totex"], float)
+                p = np.asarray(r[name]["peak"], float)
+                panels[key][k] = (x, y, p)
+                if np.isfinite(p).any():
+                    peaks[key].append(p[np.isfinite(p)])
+
+        # robust vlims for colorbars
+        vlims = {}
+        for key, arrs in peaks.items():
+            if arrs:
+                vv = np.concatenate(arrs)
+                vlims[key] = (float(np.nanmin(vv)), float(np.nanmax(vv)))
+            else:
+                vlims[key] = (0.0, 1.0)
+
+        # -----------------------------
+        # TRUE DATA RANGES (NO MATPLOTLIB MARGINS)
+        # -----------------------------
+        def _finite_minmax(arr):
+            arr = np.asarray(arr, float)
+            arr = arr[np.isfinite(arr)]
+            if arr.size == 0:
+                return (0.0, 1.0)
+            return (float(arr.min()), float(arr.max()))
+
+        panel_ranges = {}
+        for panel_key in ["abs", "per100", "perhh"]:
+            allx, ally = [], []
+            for k in ueu_keys:
+                x, y, _ = panels[panel_key][k]
+                if x is not None and len(x):
+                    allx.append(np.asarray(x, float))
+                if y is not None and len(y):
+                    ally.append(np.asarray(y, float))
+            x_min, x_max = _finite_minmax(np.concatenate(allx) if allx else np.array([0.0, 1.0]))
+            y_min, y_max = _finite_minmax(np.concatenate(ally) if ally else np.array([0.0, 1.0]))
+            panel_ranges[panel_key] = {"x": (x_min, x_max), "y": (y_min, y_max)}
+
+        if debug_print:
+            print("---- DATA MIN/MAX (true, before snapping) ----")
+            for pk in ["abs", "per100", "perhh"]:
+                print(f"{pk:6s}  x_min={panel_ranges[pk]['x'][0]:.6g}, x_max={panel_ranges[pk]['x'][1]:.6g}   "
+                      f"y_min={panel_ranges[pk]['y'][0]:.6g}, y_max={panel_ranges[pk]['y'][1]:.6g}")
+
+        # -----------------------------
+        # SCIENTIFIC NICE TICKS (1-2-5 * 10^n), NO SCI NOTATION
+        # -----------------------------
+        def _nice_125_step(span, ntarget=5):
+            if span <= 0 or not np.isfinite(span):
+                return 1.0
+            raw = span / max(ntarget - 1, 1)
+            exp = np.floor(np.log10(raw))
+            f = raw / (10 ** exp)
+            if f <= 1:
+                m = 1
+            elif f <= 2:
+                m = 2
+            elif f <= 5:
+                m = 5
+            else:
+                m = 10
+            return m * (10 ** exp)
+
+        def _nice_ticks_and_limits(vmin, vmax, ntarget=5):
+            if not (np.isfinite(vmin) and np.isfinite(vmax)):
+                vmin, vmax = 0.0, 1.0
+            if vmin == vmax:
+                dv = 1.0 if vmin == 0 else abs(vmin) * 0.1
+                vmin, vmax = vmin - dv, vmax + dv
+
+            span = vmax - vmin
+            step = _nice_125_step(span, ntarget=ntarget)
+
+            vmin_n = np.floor(vmin / step) * step
+            vmax_n = np.ceil(vmax / step) * step
+
+            ticks = np.arange(vmin_n, vmax_n + 0.5 * step, step)
+
+            # avoid "-0"
+            ticks[np.isclose(ticks, 0)] = 0.0
+            if np.isclose(vmin_n, 0):
+                vmin_n = 0.0
+            if np.isclose(vmax_n, 0):
+                vmax_n = 0.0
+
+            return ticks, vmin_n, vmax_n
+
+        def _int_no_sci_formatter(x, pos=None):
+            if np.isclose(x, round(x)):
+                return f"{int(round(x))}"
+            s = f"{x:.4f}".rstrip("0").rstrip(".")
+            return s
+
+        _intfmt = FuncFormatter(_int_no_sci_formatter)
+
+        def _apply_nice_axis_using_data(ax, x_minmax, y_minmax, ntarget=5):
+            xt, xmin_n, xmax_n = _nice_ticks_and_limits(x_minmax[0], x_minmax[1], ntarget=ntarget)
+            yt, ymin_n, ymax_n = _nice_ticks_and_limits(y_minmax[0], y_minmax[1], ntarget=ntarget)
+
+            ax.set_xlim(xmin_n, xmax_n)
+            ax.set_ylim(ymin_n, ymax_n)
+            ax.set_xticks(xt)
+            ax.set_yticks(yt)
+
+            ax.xaxis.set_major_formatter(_intfmt)
+            ax.yaxis.set_major_formatter(_intfmt)
+
+            if debug_print:
+                print(f"AXIS set -> xlim=({xmin_n:.6g},{xmax_n:.6g}) ylim=({ymin_n:.6g},{ymax_n:.6g})")
+
+        def _apply_nice_cbar(cbar, ntarget=5):
+            vmin, vmax = cbar.mappable.get_clim()
+            ticks, _, _ = _nice_ticks_and_limits(float(vmin), float(vmax), ntarget=ntarget)
+            cbar.set_ticks(ticks)
+            cbar.ax.yaxis.set_major_formatter(_intfmt)
+
+        # -----------------------------
+        # FIGURE
+        # -----------------------------
+        fig, axes = plt.subplots(
+            ncols=3,
+            figsize=figsize,
+            gridspec_kw={"wspace": 0.40}
+        )
+
+        def scatter(ax, data, vmin, vmax):
+            sc = None
+            for k in ueu_keys:
+                x, y, p = data[k]
+                if len(x):
+                    sc = ax.scatter(
+                        x, y,
+                        c=p, cmap=cmap, vmin=vmin, vmax=vmax,
+                        s=20,
+                        marker=marker_map[k],
+                        #edgecolors="black",
+                        linewidths=0.1,
+                    )
+            ax.grid(True, alpha=0.25)
+            ax.margins(x=0.0, y=0.0)  # extra safety: no autoscale padding
+            return sc
+
+        sc1 = scatter(axes[0], panels["abs"], *vlims["abs"])
+        axes[0].set_xlabel(xlabel_abs)
+        axes[0].set_ylabel(ylabel_abs)
+
+        sc2 = scatter(axes[1], panels["per100"], *vlims["per100"])
+        axes[1].set_xlabel(xlabel_per100)
+        axes[1].set_ylabel(ylabel_per100)
+
+        sc3 = scatter(axes[2], panels["perhh"], *vlims["perhh"])
+        axes[2].set_xlabel(xlabel_perhh)
+        axes[2].set_ylabel(ylabel_perhh)
+
+        if debug_print:
+            print("---- AXIS LIMITS AFTER SNAPPING (using true data min/max) ----")
+
+        _apply_nice_axis_using_data(axes[0], panel_ranges["abs"]["x"], panel_ranges["abs"]["y"], ntarget=5)
+        _apply_nice_axis_using_data(axes[1], panel_ranges["per100"]["x"], panel_ranges["per100"]["y"], ntarget=5)
+        _apply_nice_axis_using_data(axes[2], panel_ranges["perhh"]["x"], panel_ranges["perhh"]["y"], ntarget=5)
+
+        # -----------------------------
+        # LEGEND (black markers)
+        # -----------------------------
+        legend_handles = [
+            Line2D(
+                [0], [0],
+                marker=marker_map[k],
+                linestyle="None",
+                markerfacecolor="none",
+                markeredgecolor="black",
+                color="black",
+                markersize=6,
+                label=k,
+            )
+            for k in ueu_keys
+        ]
+        legend_labels = [h.get_label() for h in legend_handles]
+
+        fig.legend(
+            handles=legend_handles,
+            labels=legend_labels,
+            frameon=False,
+            loc="upper center",
+            ncol=min(legend_ncol, len(legend_handles)),
+        )
+
+        fig.tight_layout(rect=[0, 0, 1, 0.90])
+
+        # -----------------------------
+        # COLORBARS
+        # -----------------------------
+        for ax, sc, label in zip(
+            axes,
+            [sc1, sc2, sc3],
+            [cbar_label_abs, cbar_label_per100, cbar_label_perhh],
+        ):
+            if sc is not None:
+                cbar = fig.colorbar(sc, ax=ax, pad=0.02, shrink=0.92)
+                cbar.set_label(label)
+                if False:
+                    _apply_nice_cbar(cbar, ntarget=5)
+
+        fig.savefig(filename, dpi=dpi, bbox_inches="tight")
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
+
+
+    plot_compare_abs_per100_perhh_pareto_fronts_peak(
+         ueu_results=ueu_results,
+         filename=os.path.join(out_dir, "COMPARE_abs_vs_per100_vs_perhh_pareto_fronts_peak_colored.pdf"),
+         figsize=(width_inch * 2.2, height_inch),  # wider for 3 panels
+         font_size=font_size,
+         legend_ncol=3,
+         show=False,
  )
+    plot_compare_per100_perhh_pareto_fronts_peak(
+        ueu_results=ueu_results,
+        filename=os.path.join(out_dir, "COMPARE_per100_vs_perhh_pareto_fronts_peak_colored.pdf"),
+        figsize=(width_inch * 1.6, height_inch),  # z.B. etwas breiter als 1 Panel
+        font_size=font_size,
+        legend_ncol=3,
+        show=False,
+    )

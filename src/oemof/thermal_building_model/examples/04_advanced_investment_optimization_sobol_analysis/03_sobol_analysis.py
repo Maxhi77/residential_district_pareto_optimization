@@ -291,8 +291,17 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
         print("__________")
         print("start for:")
 
-
-        model.solve(solver=solver, solve_kwargs={"tee": True})
+        model.solve(
+            solver="scip",
+            solve_kwargs={"tee": True},
+        )
+        model.solve(
+            solver="scip",
+            solve_kwargs={"tee": True},
+            options={
+                "parallel/maxnthreads": 8
+            }
+        )
         meta_results = solph.processing.meta_results(model)
         results = solph.processing.results(model)
         print(meta_results["objective"])
@@ -589,9 +598,9 @@ def run_multiprocessing(gap_starter,
         elif building_type == "MFH":
             result_key = format_household_key(chosen_household)
 
-            #demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
-            #demand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
-            demand_path = f'/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/'
+            demand_path = fr'C:\Users\hill_mx\PycharmeProjects\thermal_building_model\src\oemof\thermal_building_model\examples\04_advanced_investment_optimization_sobol_analysis\lpg_profiles'
+            #emand_path = f'/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/{result_key}'
+            #demand_path = f'/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles/'
 
         final_results, co2  = main(year_of_construction,
              target_residents,

@@ -135,7 +135,8 @@ class PVSystem(RenewableEnergySource):
             )["AC System Output (W)"] / 1000 / PhysicalBaseUnit.factor
 
     def calculate_max_pv_size_based_area(self, area):
-        installable_power_per_module_area_wp_per_m2 = 0.205 * 1000 / PhysicalBaseUnit.factor
+        #Photovoltaics Report —Fraunhofer Institute for Solar Energy Systems ISE with the support of PSE Projects GmbH, 2025
+        installable_power_per_module_area_wp_per_m2 = 0.22 * 1000 / PhysicalBaseUnit.factor
         return installable_power_per_module_area_wp_per_m2 *area
     def update_maximum_investment_pv_capacity_based_on_area(self,area):
         self.investment_component.maximum_capacity=self.calculate_max_pv_size_based_area(area)

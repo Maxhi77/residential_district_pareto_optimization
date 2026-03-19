@@ -630,7 +630,6 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
         )
         heat_demand_worst_case = max(heat_demand_worst_case_building.value_list) + max(heat_demand.value_list)
         # PV-Ertrag pro Watt
-        print("TODO ATTENTION PV-YIELD HARD CODED AND HAS TO BE FINED LATER BETTER")
         pv_yield_per_wp = simulate_pv_yield(
             pv_nominal_power_in_watt=1,
             tilt=tilt,
@@ -647,7 +646,6 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
                 value_list=pv_yield_per_wp.tolist(),
                 investment_component=pv_system_config_building
             )
-            print("TODO ATTENTION PV-YIELD HARD CODED AND HAS TO BE FINED LATER BETTER")
 
             pv.update_maximum_investment_pv_capacity_based_on_area(building.get_roof_area_for_pv(building_roof_area))
             data[pv.name] = pv.value_list
@@ -961,12 +959,10 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value):
     date_time_index = solph.create_time_index(2025, number=number_of_time_steps - 1)
     data.index = date_time_index
     heat_demand_worst_case = None
-    #todo
-    blocker=0
+
     for _, building_row in sfh_cluster.iterrows():
 
         if building_id_in_cluster == building_row["building_id"]:
-            blocker = blocker + 1
             data, data_classes_comp, heat_demand_worst_case = process_cluster(
                 building_row=building_row,
                 building_type="SFH",
@@ -979,13 +975,10 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value):
                 ev=ev,
                 time_index=date_time_index,
             )
-            if blocker==4:
-                break
-    #todo
-    blocker=0
+
+
     for _, building_row in mfh_cluster.iterrows():
         if building_id_in_cluster == building_row["building_id"]:
-            blocker = blocker + 1
             data, data_classes_comp, heat_demand_worst_case = process_cluster(
                 building_row=building_row,
                 building_type="MFH",
@@ -998,8 +991,7 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value):
                 ev=ev,
                 time_index=date_time_index,
             )
-            if blocker==4:
-                break
+
     if heat_demand_worst_case is None:
         raise ValueError(f"No matching building_id '{building_id_in_cluster}' in cluster '{ueu}'.")
 
@@ -1048,11 +1040,9 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value):
             co2_reduction_factors = list(dict.fromkeys(co2_reduction_factors))
     #peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 
-    #co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
-    #peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
-    #TODO
-    co2_reduction_factors = [1]
-    peak_reduction_factors = [1]
+    co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
+    peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+
     worker_context = {
         "data": data,
         "aggregation1": aggregation1,
@@ -1222,19 +1212,19 @@ building_in_cluster = [
     "DENILD1100004slM"#mfh
 ]
 '''#
-#todo
+
 refurbishment = [
     "no_refurbishment",
-    #"usual_refurbishment",
-    #"advanced_refurbishment",
-    #"GEG_standard"
+    "usual_refurbishment",
+    "advanced_refurbishment",
+    "GEG_standard"
 ]
 cluster_list = ["processed_bds_in_DENI03403000SEC5658","processed_bds_in_DENI03403000SEC4580","processed_bds_in_DENI03403000SEC5101"]
 cluster_list = ["processed_bds_in_DENI03403000SEC5658"]
-k_values_to_optimize_sfh = [1,2,4,6,8,10,14,18]
-k_values_to_optimize_mfh = [1,2,3,4,5,6]
-k_values_to_optimize_sfh = [2,"reference"]
-k_values_to_optimize_mfh = [2,"reference"] #todo
+k_values_to_optimize_sfh = ["reference",1,2,4,6,8,10,14,18]
+k_values_to_optimize_mfh = ["reference",1,2,3,4,5,6]
+#k_values_to_optimize_sfh = [2,"reference"]
+#k_values_to_optimize_mfh = [2,"reference"] #todo
 if __name__ == "__main__":
     for cluster_name in cluster_list:
         if True:

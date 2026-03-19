@@ -516,7 +516,7 @@ def process_cluster(cluster_df, building_type, epw_path, directory_path, data, r
         demand_electricity = (demand[electricity_cols].sum(axis=1) * 1000).tolist()
         print("HIER IST DER FEHLER DER STROMBEDARF FÜR EIN MFH IST VIEEEL ZU KLEIN")
         warm_water_cols = [col for col in demand.columns if col.startswith("Warm Water_")]
-        demand_warm_water = demand[warm_water_cols].sum(axis=1)
+        demand_warm_water = demand[warm_water_cols].sum(axis=1).tolist()
 
         # Datenklassen
         electricity_demand = ElectricityDemand(name=f"e_demand_{building_id}", value_list=demand_electricity)

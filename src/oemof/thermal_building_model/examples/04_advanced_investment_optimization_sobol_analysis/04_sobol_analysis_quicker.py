@@ -23,7 +23,7 @@ import argparse
 import sys
 from SALib.sample import saltelli
 
-DEFAULT_OUTPUT_DIR_REMOTE = "/jump/user/mh"
+DEFAULT_OUTPUT_DIR_REMOTE = "/jump/mh"
 DEFAULT_MFH_PROFILES_DIR_REMOTE = (
     "/home/mh/thermal_building_clone/src/oemof/thermal_building_model/"
     "examples/04_advanced_investment_optimization_sobol_analysis/lpg_profiles"
@@ -41,7 +41,7 @@ def main(year_of_construction,target_residents,tabula_building_code, building_ty
     demand_path = demand_path
     floor_to_roof_area_ratio = floor_to_roof_area_ratio
     construction_year = year_of_construction
-    solver = "gurobi"  # 'glpk', 'gurobi',....
+    solver = "scip"  # 'glpk', 'gurobi',....
     number_of_time_steps = 8760
 
 

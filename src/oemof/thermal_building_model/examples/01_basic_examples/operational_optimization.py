@@ -38,6 +38,8 @@ def main():
     #  create solver
     solver = "gurobi"  # 'glpk', 'gurobi',....
     number_of_time_steps = 8760
+    date_time_index = solph.create_time_index(
+        2012, number=number_of_time_steps)
     main_path = get_project_root()
 
     pv_data = pd.read_csv(
@@ -55,7 +57,7 @@ def main():
         construction_year=1980,
         class_building="average",
         building_type="SFH",
-        refurbishment_status="GEG",
+        refurbishment_status="advanced_refurbishment",
         number_of_time_steps=number_of_time_steps,
     )
     building_example.calculate_all_parameters()
@@ -73,7 +75,7 @@ def main():
     t_outside = location.weather_data["drybulb_C"].to_list()
     solar_gains = building_example.calc_solar_gaings_through_windows(
         object_location_of_building=location,
-        t_outside=t_outside
+        time_index=date_time_index
     )
 
     # Internal gains of residents, machines (f.e. fridge, computer,...) and lights have to be added manually
@@ -93,8 +95,7 @@ def main():
     )
 
     logging.info("Initialize the energy system")
-    date_time_index = solph.create_time_index(
-        2012, number=number_of_time_steps)
+
     es = solph.EnergySystem(timeindex=date_time_index,
                             infer_last_interval=False)
 
@@ -120,7 +121,7 @@ def main():
         )
     )
     es.add(
-        solph.components.Transformer(
+        solph.components.Converter(
             label="ElectricalHeater",
             inputs={b_elect: solph.flows.Flow()},
             outputs={b_heat: solph.flows.Flow(nominal_value=20000)},
@@ -128,7 +129,7 @@ def main():
         )
     )
     es.add(
-        solph.components.Transformer(
+        solph.components.Converter(
             label="ElectricalCooler",
             inputs={
                 b_cool: solph.flows.Flow(nominal_value=20000),

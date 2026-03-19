@@ -1,284 +1,669 @@
-from SALib.analyze import sobol
+#!/usr/bin/env python3
+"""Analyze merged Sobol result files for simple, co2 and peak datasets."""
+
+from __future__ import annotations
+
+import argparse
+import csv
 import pickle
-from SALib.sample import saltelli
-import seaborn as sns
-import numpy as np
-import matplotlib.pyplot as plt
-import os
-def map_tabula_class_to_year(tabula_class):
+from pathlib import Path
+from typing import Any
+
+try:
+    import numpy as np
+except ModuleNotFoundError:
+    np = None
+
+try:
+    from SALib.analyze import sobol
+    from SALib.sample import saltelli
+except ModuleNotFoundError:
+    sobol = None
+    saltelli = None
+
+try:
+    import matplotlib.pyplot as plt
+except ModuleNotFoundError:
+    plt = None
+
+
+DEFAULT_INPUT_DIR = Path(
+    r"C:\Users\hill_mx\Desktop\Paper UEC UEU\Ergebnisse und Präsentationen\Sobol_MFH_Simple_rresults"
+)
+
+DEFAULT_DATASET_FILES = {
+    "simple": "simple_sobol_simple_merged.pkl",
+    "co2": "simple_sobol_co2_merged.pkl",
+    "peak": "simple_sobol_peak_merged.pkl",
+}
+
+DATASET_TITLES = {
+    "simple": "Scenario A:\nReference case",
+    "co2": "Scenario B:\n50% CO$_2$-eq. reduction",
+    "peak": "Scenario C:\n50% CO$_2$-eq. and total peak reduction",
+}
+
+PLOT_PARAMETER_NAMES = [
+    "Floor area",
+    "Floor to roof area ratio",
+    "Tabula construction period",
+    "Number of Residents",
+    "Azimuth",
+    "Tilt",
+]
+
+DEFAULT_FONT_FAMILY = "TeX Gyre Termes"
+DEFAULT_FONT_SIZE = 9
+DEFAULT_WIDTH_CM = 15.11293
+DEFAULT_HEIGHT_CM = 6.5 * 1.8
+
+
+def apply_plot_style(font_family: str, font_size: float) -> None:
+    if plt is None:
+        return
+    plt.style.use("default")
+    plt.rcParams.update(
+        {
+            "font.family": font_family,
+            "font.size": font_size,
+            "axes.titlesize": font_size,
+            "axes.labelsize": font_size,
+            "xtick.labelsize": font_size,
+            "ytick.labelsize": font_size,
+            "legend.fontsize": font_size,
+            "mathtext.fontset": "cm",
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+        }
+    )
+
+
+def build_problem() -> dict[str, Any]:
     return {
-        1: 1850, 2: 1910, 3: 1930, 4: 1950, 5: 1960, 6: 1970,
-        7: 1980, 8: 1990, 9: 2000, 10: 2005, 11: 2010, 12: 2020
-    }.get(tabula_class, None)
-def plot_sobol_indices(sobol_result, title, param_names):
-    s1 = sobol_result['S1']
-    st = sobol_result['ST']
-    s1_conf = sobol_result['S1_conf']
-    st_conf = sobol_result['ST_conf']
-
-    x = np.arange(len(param_names))
-    width = 0.35
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.bar(x - width/2, s1, width, yerr=s1_conf, capsize=5, label='S1 (First-order)')
-    ax.bar(x + width/2, st, width, yerr=st_conf, capsize=5, label='ST (Total-order)')
-
-    ax.set_ylabel('Sobol index')
-    ax.set_title(title)
-    ax.set_xticks(x)
-    ax.set_xticklabels(param_names, rotation=45)
-    ax.legend()
-    plt.tight_layout()
-    plt.show()
-
-
-# Initialize an empty dictionary to hold the data
-
-def drop_results(data):
-    """
-    Remove the 'results' key from all entries in data, if present.
-    """
-    for key in list(data.keys()):
-        if isinstance(data[key], dict) and "results" in data[key]:
-            del data[key]["results"]
-    return data
-import os
-import pickle
-
-# Aktuelles Verzeichnis nehmen
-directory = os.getcwd()
-print("Arbeitsverzeichnis:", directory)
-if True:
-    data = None
-    output_files = []
-
-    for sobol_prefix in ["sobol_peak_SFH", "sobol_co2_SFH", "sobol_SFH"]:
-        data = None
-        for x in range(0, 14):
-            for y in range(0, 8500, 500):
-                try:
-                    file_path = os.path.join(directory, f"{sobol_prefix}_{x}_{y}.pkl")
-                    with open(file_path, 'rb') as f:
-                        loaded_data = drop_results(pickle.load(f))
-                        if data is None:
-                            data = loaded_data
-                        else:
-                            data.update(loaded_data)
-                except FileNotFoundError:
-                    continue
-        file_path = os.path.join(directory, f"{sobol_prefix}_8_8191.pkl")
-        with open(file_path, 'rb') as f:
-            loaded_data = drop_results(pickle.load(f))
-            if data is None:
-                data = loaded_data
-            else:
-                data.update(loaded_data)
-        if data is not None:
-            output_file = os.path.join(directory, f"sobol_{sobol_prefix}_merged_results.pkl")
-            with open(output_file, "wb") as f:
-                pickle.dump(data, f)
-            output_files.append(output_file)
-            print(f"Gespeichert unter: {output_file}")
-
-    # Letzte Datei laden
-    if False:
-        file_path = os.path.join(directory, f"results_sobol_6_57343.pkl")
-        with open(file_path, 'rb') as f:
-            data.update(pickle.load(f))
-
-    # In data_dict packen
-    data_dict = data
-    if output_files:
-        output_file = output_files[-1]
-file_path = os.path.join(directory, f"merged_results.pkl")
-data =None
-with open(file_path, 'rb') as f:
-    if data is None:
-        data = drop_results(pickle.load(f))
-# Loop over the file numbers (2400, 2550, ..., 6143)
-data_dict =data
-
-if True:
-
-    # 1. Problem definieren
-
-    # 1. Problem definieren
-    problem = {
-        'num_vars': 6,
-        'names': ['net_floor_area', 'tabula_year_class', 'number_of_residents',
-                  'household_type', "refurbishment_status", "heating_system"],
-        'bounds': [
-            [80, 360],  # Wohnfläche in m²
-            [1, 11],  # tabula_year_class (1-11 Klassen)
-            [0, 1],  # Bewohner
-            [0, 2],  # household type
-            [0, 2],  # Sanierungsstand 0 = nicht, 1 = normal, 2 = advanced
-            [0, 1]  # Heizung: 0 = HP, 1 = Burning
-        ]
+        "num_vars": 6,
+        "names": [
+            "net_floor_area",
+            "floor_to_roof_area_ratio",
+            "tabula_year_class",
+            "number_of_residents",
+            "azimuth",
+            "tilt",
+        ],
+        "bounds": [
+            [0, 1],
+            [0, 1],
+            [1, 11],
+            [0, 1],
+            [0, 180],
+            [30, 60],
+        ],
     }
-    # Sampling (kleine Anzahl für Test)
-    param_values = saltelli.sample(problem, int(128 * 2 ** 5), calc_second_order=True)
-    # Sampling (kleine Anzahl für Test)
-    calc_second_order=True
-    param_values = saltelli.sample(problem, int(128 *32), calc_second_order=calc_second_order)
-    # laut chat gpt bei 6 params sollte man n=	2048+ für gute Ergebnisse, das wären 16.000 Durchläufe
-    # Spaltenindex merken
-    idx_size = problem['names'].index('net_floor_area')
-    idx_year_class = problem['names'].index('tabula_year_class')
-    idx_residents = problem['names'].index('number_of_residents')
-    idx_household_type = problem['names'].index('household_type')
-    idx_refurbishment_status = problem['names'].index('refurbishment_status')
-    idx_heating_system = problem['names'].index('heating_system')
 
-    peak_list = []
-    co2_list = []
-    totex_list = []
 
-    for key in data_dict:
-        entry = data_dict[key]
-        if "peak" in entry and "co2" in entry and "totex" in entry:
-            if False:
-                peak_list.append(entry["peak_from_grid"]/param_values[key[0]][0])
-                co2_list.append(entry["co2"]/param_values[key[0]][0])
-                totex_list.append(entry["totex"]/param_values[key[0]][0])
-            if True:
-                peak_list.append(entry["peak"][1])
-                co2_list.append(entry["co2"])
-                totex_list.append(entry["totex"])
+def load_pickle_dict(path: Path) -> dict[Any, Any]:
+    with path.open("rb") as f:
+        loaded = pickle.load(f)
+    if not isinstance(loaded, dict):
+        raise TypeError(f"{path.name}: expected dict, got {type(loaded).__name__}")
+    return loaded
+
+
+def as_counter(key: Any) -> int | None:
+    if isinstance(key, bool):
+        return None
+    if isinstance(key, int):
+        return key
+    if isinstance(key, str) and key.isdigit():
+        return int(key)
+    return None
+
+
+def as_peak_pair(value: Any) -> tuple[float | None, float | None]:
+    if value is None:
+        return None, None
+    if isinstance(value, (int, float)):
+        # Legacy fallback: only one peak value known -> interpreted as from-grid.
+        return None, float(value)
+    if isinstance(value, (tuple, list)):
+        if len(value) == 0:
+            return None, None
+        peak_into = float(value[0]) if value[0] is not None else None
+        peak_from = float(value[1]) if len(value) > 1 and value[1] is not None else None
+        return peak_into, peak_from
+    return None, None
+
+
+def extract_arrays(
+    data: dict[Any, Any], max_counter: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int, int]:
+    co2_array = np.full(max_counter, np.nan, dtype=float)
+    totex_array = np.full(max_counter, np.nan, dtype=float)
+    peak_into_array = np.full(max_counter, np.nan, dtype=float)
+    peak_from_array = np.full(max_counter, np.nan, dtype=float)
+
+    skipped_invalid = 0
+    skipped_out_of_range = 0
+
+    for raw_key, entry in data.items():
+        counter = as_counter(raw_key)
+        if counter is None:
+            skipped_invalid += 1
+            continue
+        if counter < 0 or counter >= max_counter:
+            skipped_out_of_range += 1
+            continue
+        if not isinstance(entry, dict):
+            skipped_invalid += 1
+            continue
+
+        co2 = entry.get("co2")
+        totex = entry.get("totex")
+        peak_into, peak_from = as_peak_pair(entry.get("peak"))
+
+        if co2 is not None:
+            co2_array[counter] = float(co2)
+        if totex is not None:
+            totex_array[counter] = float(totex)
+        if peak_into is not None:
+            peak_into_array[counter] = float(peak_into)
+        if peak_from is not None:
+            peak_from_array[counter] = float(peak_from)
+
+    return (
+        co2_array,
+        totex_array,
+        peak_into_array,
+        peak_from_array,
+        skipped_invalid,
+        skipped_out_of_range,
+    )
+
+
+def impute_with_mean(array: np.ndarray) -> tuple[np.ndarray, int]:
+    missing_mask = np.isnan(array)
+    missing_count = int(np.sum(missing_mask))
+    if missing_count == 0:
+        return array, 0
+
+    observed_mask = ~missing_mask
+    if not np.any(observed_mask):
+        raise ValueError("Cannot impute array: all values are missing.")
+
+    mean_value = float(np.mean(array[observed_mask]))
+    filled = array.copy()
+    filled[missing_mask] = mean_value
+    return filled, missing_count
+
+
+def save_indices_csv(
+    output_csv: Path,
+    parameter_names: list[str],
+    sobol_result: dict[str, np.ndarray],
+) -> None:
+    with output_csv.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["parameter", "S1", "S1_conf", "ST", "ST_conf"])
+        for i, name in enumerate(parameter_names):
+            writer.writerow(
+                [
+                    name,
+                    sobol_result["S1"][i],
+                    sobol_result["S1_conf"][i],
+                    sobol_result["ST"][i],
+                    sobol_result["ST_conf"][i],
+                ]
+            )
+
+
+def plot_bars_with_ci(
+    sobol_result: dict[str, np.ndarray],
+    title: str,
+    parameter_names: list[str],
+    output_path: Path,
+    figsize: tuple[float, float],
+    font_size: float,
+) -> None:
+    if plt is None:
+        return
+    x = np.arange(len(parameter_names))
+    width = 0.38
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.bar(
+        x - width / 2,
+        sobol_result["S1"],
+        width=width,
+        yerr=sobol_result["S1_conf"],
+        capsize=4,
+        label="S1",
+    )
+    ax.bar(
+        x + width / 2,
+        sobol_result["ST"],
+        width=width,
+        yerr=sobol_result["ST_conf"],
+        capsize=4,
+        label="ST",
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(parameter_names, rotation=30, ha="right", rotation_mode="anchor")
+    ax.set_ylabel("Sobol index")
+    ax.set_title(title)
+    ax.set_ylim(bottom=0)
+    ax.legend()
+    ax.tick_params(axis="x", labelsize=font_size)
+    ax.tick_params(axis="y", labelsize=font_size)
+    fig.subplots_adjust(bottom=0.34)
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+
+
+def plot_heatmap(
+    sobol_co2: dict[str, np.ndarray],
+    sobol_totex: dict[str, np.ndarray],
+    sobol_peak_into: dict[str, np.ndarray],
+    sobol_peak_from: dict[str, np.ndarray],
+    parameter_names: list[str],
+    title: str,
+    output_path: Path,
+    figsize: tuple[float, float],
+    font_size: float,
+) -> None:
+    if plt is None:
+        return
+    matrix = np.vstack(
+        [
+            sobol_co2["S1"],
+            sobol_co2["ST"],
+            sobol_totex["S1"],
+            sobol_totex["ST"],
+            sobol_peak_into["S1"],
+            sobol_peak_into["ST"],
+            sobol_peak_from["S1"],
+            sobol_peak_from["ST"],
+        ]
+    )
+    row_labels = [
+        "CO$_2$-eq. S1",
+        "CO$_2$-eq. ST",
+        "TOTEX S1",
+        "TOTEX ST",
+        "Peak grid export S1",
+        "Peak grid export ST",
+        "Peak grid import S1",
+        "Peak grid import ST",
+    ]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    im = ax.imshow(matrix, cmap="coolwarm", vmin=0, vmax=1, aspect="auto")
+    ax.set_xticks(np.arange(len(parameter_names)))
+    ax.set_xticklabels(parameter_names, rotation=30, ha="right", rotation_mode="anchor")
+    ax.set_yticks(np.arange(len(row_labels)))
+    ax.set_yticklabels(row_labels)
+    ax.set_title(title)
+
+    for i in range(matrix.shape[0]):
+        for j in range(matrix.shape[1]):
+            ax.text(
+                j,
+                i,
+                f"{matrix[i, j]:.2f}",
+                ha="center",
+                va="center",
+                color="black",
+                fontsize=max(font_size - 1, 6),
+            )
+
+    cbar = fig.colorbar(im, ax=ax, pad=0.02, fraction=0.04)
+    cbar.set_ticks(np.linspace(0, 1, 6))
+    cbar.set_label("Sobol index")
+    cbar.ax.tick_params(labelsize=font_size)
+    fig.subplots_adjust(bottom=0.34, right=0.90)
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+
+
+def plot_compare_scenarios_st(
+    scenario_results: dict[str, dict[str, dict[str, np.ndarray]]],
+    parameter_names: list[str],
+    output_path: Path,
+    figsize: tuple[float, float],
+    font_size: float,
+    index_key: str = "ST",
+) -> None:
+    if plt is None or not scenario_results:
+        return
+    if index_key not in ("S1", "ST"):
+        raise ValueError(f"Unsupported Sobol index key: {index_key}")
+
+    order = [k for k in ("simple", "co2", "peak") if k in scenario_results]
+    if not order:
+        return
+
+    row_labels = ["CO$_2$-eq.", "TOTEX", "Peak grid export", "Peak grid import"]
+    fig, axes = plt.subplots(
+        1,
+        len(order),
+        figsize=figsize,
+        squeeze=False,
+        gridspec_kw={"wspace": 0.05},
+    )
+    axes = axes[0]
+    im = None
+
+    for idx, dataset_key in enumerate(order):
+        res = scenario_results[dataset_key]
+        matrix = np.vstack(
+            [
+                res["co2"][index_key],
+                res["totex"][index_key],
+                res["peak_into"][index_key],
+                res["peak_from"][index_key],
+            ]
+        )
+
+        ax = axes[idx]
+        im = ax.imshow(matrix, cmap="coolwarm", vmin=0, vmax=1, aspect="auto")
+        ax.set_title(DATASET_TITLES.get(dataset_key, dataset_key), fontsize=font_size)
+        ax.set_xticks(np.arange(len(parameter_names)))
+        ax.set_xticklabels(parameter_names, rotation=30, ha="right", rotation_mode="anchor")
+        if idx == 0:
+            ax.set_yticks(np.arange(len(row_labels)))
+            ax.set_yticklabels(row_labels)
         else:
-            print(f"Key {key} fehlt in param_values oder in einem der Einträge 'peak_from_grid', 'co2', 'totex'")
+            ax.set_yticks(np.arange(len(row_labels)))
+            ax.set_yticklabels([])
 
-    # Convert lists to numpy arrays
-    co2_array = np.array(co2_list)
-    totex_array = np.array(totex_list)
-    peak_array = np.array(peak_list)
+        for i in range(matrix.shape[0]):
+            for j in range(matrix.shape[1]):
+                ax.text(
+                    j,
+                    i,
+                    f"{matrix[i, j]:.2f}",
+                    ha="center",
+                    va="center",
+                    color="black",
+                    fontsize=max(font_size - 1, 6),
+                )
+
+    fig.subplots_adjust(left=0.11, right=0.88, bottom=0.34, top=0.89, wspace=0.05)
+    if im is not None:
+        pos = axes[0].get_position()
+        cax = fig.add_axes([0.895, pos.y0, 0.015, pos.height])
+        cbar = fig.colorbar(im, cax=cax)
+        cbar.set_ticks(np.linspace(0, 1, 6))
+        if index_key == "ST":
+            cbar.set_label("Total-order Sobol index (ST)")
+        else:
+            cbar.set_label("First-order Sobol index (S1)")
+        cbar.ax.tick_params(labelsize=font_size)
+
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+
+
+def analyze_one_dataset(
+    dataset_key: str,
+    file_path: Path,
+    output_dir: Path,
+    problem: dict[str, Any],
+    parameter_plot_names: list[str],
+    base_sample_size: int,
+    calc_second_order: bool,
+    write_plots: bool,
+    figsize: tuple[float, float],
+    font_size: float,
+) -> dict[str, dict[str, np.ndarray]] | None:
+    scenario_title = DATASET_TITLES.get(dataset_key, dataset_key)
+
+    print(f"\n=== Start analysis: {dataset_key} ===")
+    print(f"Scenario: {scenario_title}")
+    print(f"Input file: {file_path}")
+
+    data = load_pickle_dict(file_path)
+    param_values = saltelli.sample(problem, base_sample_size, calc_second_order=calc_second_order)
+    max_counter = len(param_values)
+
+    (
+        co2_array,
+        totex_array,
+        peak_into_array,
+        peak_from_array,
+        skipped_invalid,
+        skipped_out_of_range,
+    ) = extract_arrays(data, max_counter=max_counter)
+
+    try:
+        co2_array, imputed_co2 = impute_with_mean(co2_array)
+        totex_array, imputed_totex = impute_with_mean(totex_array)
+        peak_into_array, imputed_peak_into = impute_with_mean(peak_into_array)
+        peak_from_array, imputed_peak_from = impute_with_mean(peak_from_array)
+    except ValueError as err:
+        print(f"Skipped: {err}")
+        return None
 
     sobol_co2 = sobol.analyze(problem, co2_array, calc_second_order=calc_second_order)
     sobol_totex = sobol.analyze(problem, totex_array, calc_second_order=calc_second_order)
-    sobol_peak = sobol.analyze(problem, peak_array, calc_second_order=calc_second_order)
+    sobol_peak_into = sobol.analyze(
+        problem, peak_into_array, calc_second_order=calc_second_order
+    )
+    sobol_peak_from = sobol.analyze(
+        problem, peak_from_array, calc_second_order=calc_second_order
+    )
 
-    def plot_sobol_indices(sobol_result, title, problem_names):
-        # Extract the first-order and total indices
-        first_order = sobol_result['S1']  # First-order Sobol indices
-        total_order = sobol_result['ST']  # Total-order Sobol indices
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Plot first-order Sobol indices
-        plt.figure(figsize=(10, 6))
-        plt.bar(problem_names, first_order)
-        plt.title(f'{title} - First-Order Sobol Indices')
-        plt.xlabel('Parameters')
-        plt.ylabel('First-Order Sobol Index')
-        plt.xticks(rotation=45, ha='right')
-        plt.tight_layout()
-        plt.show()
+    save_indices_csv(output_dir / f"sobol_{dataset_key}_co2_indices.csv", problem["names"], sobol_co2)
+    save_indices_csv(
+        output_dir / f"sobol_{dataset_key}_totex_indices.csv", problem["names"], sobol_totex
+    )
+    save_indices_csv(
+        output_dir / f"sobol_{dataset_key}_peak_into_indices.csv", problem["names"], sobol_peak_into
+    )
+    save_indices_csv(
+        output_dir / f"sobol_{dataset_key}_peak_from_indices.csv", problem["names"], sobol_peak_from
+    )
 
-        # Plot total-order Sobol indices
-        plt.figure(figsize=(10, 6))
-        plt.bar(problem_names, total_order)
-        plt.title(f'{title} - Total Sobol Indices')
-        plt.xlabel('Parameters')
-        plt.ylabel('Total Sobol Index')
-        plt.xticks(rotation=45, ha='right')
-        plt.tight_layout()
-        plt.show()
+    if write_plots:
+        plot_bars_with_ci(
+            sobol_co2,
+            f"{scenario_title} - CO₂-eq. emissions",
+            parameter_plot_names,
+            output_dir / f"sobol_{dataset_key}_co2_bars.pdf",
+            figsize,
+            font_size,
+        )
+        plot_bars_with_ci(
+            sobol_totex,
+            f"{scenario_title} - Total expenditure (TOTEX)",
+            parameter_plot_names,
+            output_dir / f"sobol_{dataset_key}_totex_bars.pdf",
+            figsize,
+            font_size,
+        )
+        plot_bars_with_ci(
+            sobol_peak_into,
+            f"{scenario_title} - Peak grid export",
+            parameter_plot_names,
+            output_dir / f"sobol_{dataset_key}_peak_into_bars.pdf",
+            figsize,
+            font_size,
+        )
+        plot_bars_with_ci(
+            sobol_peak_from,
+            f"{scenario_title} - Peak grid import",
+            parameter_plot_names,
+            output_dir / f"sobol_{dataset_key}_peak_from_bars.pdf",
+            figsize,
+            font_size,
+        )
+        plot_heatmap(
+            sobol_co2,
+            sobol_totex,
+            sobol_peak_into,
+            sobol_peak_from,
+            parameter_plot_names,
+            f"{scenario_title} - First- and total-order Sobol indices",
+            output_dir / f"sobol_{dataset_key}_heatmap.pdf",
+            figsize,
+            font_size,
+        )
 
-
-    import numpy as np
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-
-
-    def plot_sobol_heatmap_with_total_index(sobol_results, title, problem_names):
-        # Combine the Sobol indices into a matrix (rows: outputs, columns: parameters)
-        # Prepare the Sobol indices for both first-order and total for each output
-        sobol_alternating_matrix = []
-        total_index_matrix = []
-
-        # Loop over the Sobol results and extract the first-order and total Sobol indices for each output
-        for sobol_result in sobol_results:
-            sobol_alternating_matrix.append(sobol_result['S1'])  # First-order Sobol indices
-            sobol_alternating_matrix.append(sobol_result['ST'])  # Total Sobol indices
-
-        # Convert the list to a numpy array (combined_matrix now stacks first and total Sobol indices vertically)
-        combined_matrix = np.array(sobol_alternating_matrix)
-
-        # Create a custom y-tick label that represents both first and total indices for each output
-        output_names = ['CO₂ (First) \n/ floor area', 'CO₂ (Total) \n/ floor area',
-                        'TOTEX (First) \n/ floor area', 'TOTEX (Total) \n/ floor area',
-                        'PEAK (First) \n/ floor area', 'PEAK (Total) \n/ floor area']
-
-        # Create a new figure for the plot
-        fig, ax = plt.subplots(figsize=(16, 8))
-
-        # Plotting the heatmap with color bar limits from 0 to 1
-        sns.heatmap(combined_matrix, annot=True, cmap='coolwarm', xticklabels=problem_names, yticklabels=output_names,
-                    cbar_kws={'label': 'Sobol Index', 'ticks': [0, 0.25, 0.5, 0.75, 1]},
-                    center=0, ax=ax, vmin=0, vmax=1)  # Set the color bar to go from 0 to 1
-        ax.set_title(f'{title} - Sobol Indices Heatmap')
-        plt.yticks(rotation=0)
-        # Return the figure object so it can be saved later
-        return fig
-    # Funktion für Sobol-Indizes mit Fehlerbalken
-    import matplotlib.pyplot as plt
-
-
-    def plot_sobol_indices_with_error_bars(sobol_result, title, problem_names):
-        # Extract Sobol indices and their confidence intervals
-        first_order = sobol_result['S1']
-        total_order = sobol_result['ST']
-        first_order_conf = sobol_result['S1_conf']
-        total_order_conf = sobol_result['ST_conf']
-
-        # Create a figure with 2 subplots (1 row, 2 columns)
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 6))  # Set the figure size and subplots
-
-        # Plot first-order Sobol indices with error bars in the first subplot
-        ax1.bar(problem_names, first_order, yerr=first_order_conf, capsize=5, label='First-Order')
-        ax1.set_title(f'{title} - First-Order Sobol Indices')
-        ax1.set_xlabel('Parameters')
-        ax1.set_ylabel('Sobol Index')
-        ax1.tick_params(axis='x', rotation=45)
-        ax1.legend()
-
-        # Plot total-order Sobol indices with error bars in the second subplot
-        ax2.bar(problem_names, total_order, yerr=total_order_conf, capsize=5, label='Total')
-        ax2.set_title(f'{title} - Total Sobol Indices')
-        ax2.set_xlabel('Parameters')
-        ax2.set_ylabel('Sobol Index')
-        ax2.tick_params(axis='x', rotation=45)
-        ax2.legend()
-
-        # Adjust layout to make it more readable
-        plt.tight_layout()
-
-        # Return the figure object for saving
-        return fig
+    print(f"Valid samples used: {len(co2_array)} / {max_counter}")
+    print(f"Skipped invalid records: {skipped_invalid}")
+    print(f"Skipped out-of-range counters: {skipped_out_of_range}")
+    print(
+        f"Imputed missing values with mean: "
+        f"co2={imputed_co2}, totex={imputed_totex}, "
+        f"peak_into={imputed_peak_into}, peak_from={imputed_peak_from}"
+    )
+    print(f"Saved outputs in: {output_dir}")
+    return {
+        "co2": sobol_co2,
+        "totex": sobol_totex,
+        "peak_into": sobol_peak_into,
+        "peak_from": sobol_peak_from,
+    }
 
 
-    #### 2. Speichern der Plot-Funktion:
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run Sobol analysis for merged simple/co2/peak result files."
+    )
+    parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=DEFAULT_INPUT_DIR,
+        help=f"Directory containing merged pickle files (default: {DEFAULT_INPUT_DIR})",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Output directory for plots and CSVs (default: <input-dir>/sobol_analysis_outputs).",
+    )
+    parser.add_argument(
+        "--base-sample-size",
+        type=int,
+        default=1024,
+        help="Base Saltelli sample size used during simulation (default: 1024).",
+    )
+    parser.add_argument(
+        "--calc-second-order",
+        action="store_true",
+        help="Use second-order Sobol indices. Must match simulation setup.",
+    )
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        choices=("simple", "co2", "peak"),
+        default=("simple", "co2", "peak"),
+        help="Which merged datasets to analyze (default: all three).",
+    )
+    parser.add_argument(
+        "--no-plots",
+        action="store_true",
+        help="Only write Sobol index CSV files (skip PDF plots).",
+    )
+    parser.add_argument(
+        "--font-family",
+        type=str,
+        default=DEFAULT_FONT_FAMILY,
+        help=f"Matplotlib font family (default: {DEFAULT_FONT_FAMILY}).",
+    )
+    parser.add_argument(
+        "--font-size",
+        type=float,
+        default=DEFAULT_FONT_SIZE,
+        help=f"Base font size (default: {DEFAULT_FONT_SIZE}).",
+    )
+    parser.add_argument(
+        "--fig-width-cm",
+        type=float,
+        default=DEFAULT_WIDTH_CM,
+        help=f"Figure width in cm (default: {DEFAULT_WIDTH_CM}).",
+    )
+    parser.add_argument(
+        "--fig-height-cm",
+        type=float,
+        default=DEFAULT_HEIGHT_CM,
+        help=f"Figure height in cm (default: {DEFAULT_HEIGHT_CM}).",
+    )
+    return parser.parse_args()
 
-    def save_plot_as_pdf(fig, plot_name, path_to_save):
-        # Speichern des Plots im angegebenen Verzeichnis als PDF
-        plot_path = os.path.join(path_to_save, plot_name + "_non_relative.pdf")
-        fig.savefig(plot_path, format='pdf', dpi=300)  # Speichern des Plots mit 300 DPI
-        plt.close(fig)  # Schließt den Plot, um den nächsten zu erzeugen
+
+def main() -> int:
+    args = parse_args()
+    input_dir: Path = args.input_dir
+    output_dir = args.output_dir or (input_dir / "sobol_analysis_outputs")
+
+    if np is None or sobol is None or saltelli is None:
+        print("Missing dependencies. Please install/activate: numpy, SALib")
+        return 5
+
+    if not input_dir.exists() or not input_dir.is_dir():
+        print(f"Input directory does not exist: {input_dir}")
+        return 2
+
+    problem = build_problem()
+
+    write_plots = not args.no_plots
+    if plt is None and write_plots:
+        print("matplotlib not found -> plots disabled, CSV files only.")
+        write_plots = False
+    if write_plots:
+        apply_plot_style(font_family=args.font_family, font_size=args.font_size)
+
+    figsize = (args.fig_width_cm / 2.54, args.fig_height_cm / 2.54)
+    comparison_figsize = (figsize[0] * 1.52, figsize[1] * 0.95)
+    parameter_plot_names = PLOT_PARAMETER_NAMES if len(PLOT_PARAMETER_NAMES) == len(problem["names"]) else problem["names"]
+
+    scenario_results: dict[str, dict[str, dict[str, np.ndarray]]] = {}
+
+    total = len(args.datasets)
+    for i, dataset in enumerate(args.datasets, start=1):
+        merged_file = input_dir / DEFAULT_DATASET_FILES[dataset]
+        print(f"\n[{i}/{total}] Dataset '{dataset}'")
+        if not merged_file.exists():
+            print(f"File missing, skipped: {merged_file}")
+            continue
+        result = analyze_one_dataset(
+            dataset_key=dataset,
+            file_path=merged_file,
+            output_dir=output_dir,
+            problem=problem,
+            parameter_plot_names=parameter_plot_names,
+            base_sample_size=args.base_sample_size,
+            calc_second_order=args.calc_second_order,
+            write_plots=write_plots,
+            figsize=figsize,
+            font_size=args.font_size,
+        )
+        if result is not None:
+            scenario_results[dataset] = result
+
+    if write_plots and len(scenario_results) >= 2:
+        plot_compare_scenarios_st(
+            scenario_results=scenario_results,
+            parameter_names=parameter_plot_names,
+            output_path=output_dir / "sobol_scenarios_st_comparison_heatmap.pdf",
+            figsize=comparison_figsize,
+            font_size=args.font_size,
+            index_key="ST",
+        )
+        plot_compare_scenarios_st(
+            scenario_results=scenario_results,
+            parameter_names=parameter_plot_names,
+            output_path=output_dir / "sobol_scenarios_s1_comparison_heatmap.pdf",
+            figsize=comparison_figsize,
+            font_size=args.font_size,
+            index_key="S1",
+        )
+        print(f"Saved cross-scenario comparison plots (ST and S1) in: {output_dir}")
+
+    print("\nDone.")
+    return 0
 
 
-    path_to_save = r"C:\Users\hill_mx\Desktop\Paper UEC UEU\Ergebnisse\Sobol"
-
-    # Plot Sobol indices for each output (CO2, TOTEX, PEAK)
-    fig_co2 = plot_sobol_indices_with_error_bars(sobol_co2, 'Sobol Sensitivity for CO₂', problem['names'])
-    save_plot_as_pdf(fig_co2, "Sobol_Sensitivity_CO2_non", path_to_save)
-
-    fig_totex = plot_sobol_indices_with_error_bars(sobol_totex, 'Sobol Sensitivity for TOTEX', problem['names'])
-    save_plot_as_pdf(fig_totex, "Sobol_Sensitivity_TOTEX", path_to_save)
-
-    fig_peak = plot_sobol_indices_with_error_bars(sobol_peak, 'Sobol Sensitivity for PEAK', problem['names'])
-    save_plot_as_pdf(fig_peak, "Sobol_Sensitivity_PEAK", path_to_save)
-
-    # Plot Sobol indices for CO2, TOTEX, and PEAK (including total indices)
-    sobol_results = [sobol_co2, sobol_totex, sobol_peak]
-    fig_sensitivity_analysis = plot_sobol_heatmap_with_total_index(sobol_results, 'Sobol Sensitivity Analysis',
-                                                                   problem['names'])
-    save_plot_as_pdf(fig_sensitivity_analysis, "Sobol_Sensitivity_Analysis", path_to_save)
-
+if __name__ == "__main__":
+    raise SystemExit(main())

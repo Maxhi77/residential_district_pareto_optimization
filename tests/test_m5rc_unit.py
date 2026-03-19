@@ -19,28 +19,6 @@ from oemof.thermal_building_model.tabula.tabula_reader import (
 _TRANSFORMER_CLS = getattr(solph.components, "Transformer", solph.components.Converter)
 
 
-def _find_available_solver():
-    for solver_name in ("gurobi", "cbc", "glpk", "highs"):
-        solver = po.SolverFactory(solver_name, solver_io="lp")
-        try:
-            if solver.available(exception_flag=False):
-                return solver_name
-        except Exception:
-            continue
-    return None
-
-
-@pytest.fixture(scope="module")
-def available_solver():
-    solver = _find_available_solver()
-    if solver is None:
-        pytest.skip(
-            "No MILP solver available (checked: gurobi, cbc, glpk, highs). "
-            "Install one of them to run solver-backed tests."
-        )
-    return solver
-
-
 @pytest.fixture
 def building_config():
     return BuildingConfig5RC(

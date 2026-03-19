@@ -584,7 +584,7 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
         electricity_cols = [col for col in demand.columns if col.startswith("Electricity")]
         demand_electricity = (demand[electricity_cols].sum(axis=1) * 1000).tolist()
         warm_water_cols = [col for col in demand.columns if col.startswith("Warm Water_")]
-        demand_warm_water = demand[warm_water_cols].sum(axis=1)
+        demand_warm_water = demand[warm_water_cols].sum(axis=1).tolist()
 
         # Datenklassen
         electricity_demand = ElectricityDemand(name=f"e_demand_{building_id}", value_list=demand_electricity)
@@ -632,7 +632,7 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
                 value_list=pv_yield_per_wp.tolist(),
                 investment_component=pv_system_config_building
             )
-            pv.update_maximum_investment_pv_capacity_based_on_area(building.get_roof_area_for_pv())
+            pv.update_maximum_investment_pv_capacity_based_on_area(building.get_roof_area_for_pv(building_row['avg_roof_surface_area']))
             data[pv.name] = pv.value_list
             dict_pv_systems[key] = pv
 
@@ -994,7 +994,7 @@ refurbishment = [
 ueus = ["processed_bds_in_DENI03403000SEC5658","processed_bds_in_DENI03403000SEC4580","processed_bds_in_DENI03403000SEC5101"]
 if __name__ == "__main__":
     for ueu in ueus:
-        if True:
+        if False:
             import pickle
             building_in_cluster = []
             base_path = os.path.dirname(os.path.abspath(__file__))

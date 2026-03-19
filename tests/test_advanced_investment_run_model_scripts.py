@@ -8,7 +8,6 @@ import pandas as pd
 import pytest
 
 solph = pytest.importorskip("oemof.solph")
-po = pytest.importorskip("pyomo.environ")
 
 from oemof.thermal_building_model.oemof_facades.helper_functions import connect_buses
 from oemof.thermal_building_model.oemof_facades.infrastructure.carriers import (
@@ -42,36 +41,6 @@ from oemof.thermal_building_model.oemof_facades.technologies.storages import (
     Battery,
     HotWaterTank,
 )
-
-
-def _find_available_solver():
-    for solver_name in ("gurobi", "cbc", "glpk", "highs"):
-        solver = po.SolverFactory(solver_name)
-        try:
-            if solver.available(exception_flag=False):
-                return solver_name
-        except Exception:
-            continue
-    return None
-
-
-@pytest.fixture(scope="module")
-def available_solver():
-    solver = _find_available_solver()
-    if solver is None:
-        pytest.skip(
-            "No MILP solver available (checked: gurobi, cbc, glpk, highs)."
-        )
-    return solver
-
-
-def _sum_node_flow(results, node_label):
-    sequences = solph.views.node(results, node_label)["sequences"]
-    flow_cols = [col for col in sequences.columns if col[1] == "flow"]
-    if not flow_cols:
-        return 0.0
-    return float(sequences[flow_cols].sum().sum())
-
 
 def _build_decentralized_es(n=4, peak_new=None):
     t1_agg = pd.date_range("2020-01-01", periods=n, freq="h")
@@ -511,23 +480,6 @@ def _build_centralized_es(n=4, peak_new=None):
     return es
 
 
-def _solve_objective_and_results(es, solver):
-    model = solph.Model(es)
-    cmdline_options = {}
-    if solver == "gurobi":
-        cmdline_options = {"MIPGap": 0, "Threads": 1, "Seed": 0}
-    solve_result = model.solve(
-        solver=solver,
-        solve_kwargs={"tee": False},
-        cmdline_options=cmdline_options,
-    )
-    termination = str(solve_result.solver.termination_condition).lower()
-    assert termination in {"optimal", "feasible"}
-    meta = solph.processing.meta_results(model)
-    results = solph.processing.results(model)
-    return float(meta["objective"]), results
-
-
 _EXPECTED_PATH = Path(__file__).with_name("advanced_investment_expected_values.json")
 
 
@@ -561,9 +513,9 @@ def _assert_or_update_expected(case_name, solver_name, metrics):
         assert float(value) == pytest.approx(float(expected[metric_name]), abs=1e-6)
 
 
-def test_decentralized_facade_toy_system_solves(available_solver):
+def test_decentralized_facade_toy_system_solves(available_solver, sum_node_flow, solve_solph_model):
     es = _build_decentralized_es(n=4)
-    objective, results = _solve_objective_and_results(es, available_solver)
+    _, results, objective = solve_solph_model(es, available_solver)
     assert math.isfinite(objective)
 
     labels = {node.label for node in es.nodes}
@@ -575,17 +527,17 @@ def test_decentralized_facade_toy_system_solves(available_solver):
     assert "heat_storage_b1" in labels
     assert "pv_system_b1_source" in labels
 
-    assert _sum_node_flow(results, "conv_e_from_grid_b1") > 0
-    assert _sum_node_flow(results, "conv_e_from_grid_b2") > 0
+    assert sum_node_flow(results, "conv_e_from_grid_b1") > 0
+    assert sum_node_flow(results, "conv_e_from_grid_b2") > 0
 
     es_repeat = _build_decentralized_es(n=4)
-    objective_repeat, _ = _solve_objective_and_results(es_repeat, available_solver)
+    _, _, objective_repeat = solve_solph_model(es_repeat, available_solver)
     assert objective == pytest.approx(objective_repeat, abs=1e-6)
 
 
-def test_centralized_facade_toy_system_solves(available_solver):
+def test_centralized_facade_toy_system_solves(available_solver, sum_node_flow, solve_solph_model):
     es = _build_centralized_es(n=4)
-    objective, results = _solve_objective_and_results(es, available_solver)
+    _, results, objective = solve_solph_model(es, available_solver)
     assert math.isfinite(objective)
 
     labels = {node.label for node in es.nodes}
@@ -597,17 +549,17 @@ def test_centralized_facade_toy_system_solves(available_solver):
     assert "conv_h_from_grid_50_b2" in labels
     assert "gas_heater_b1_source" not in labels
 
-    conv_h_from_grid_50_b1_sum = _sum_node_flow(results, "conv_h_from_grid_50_b1")
-    conv_h_from_grid_50_b2_sum = _sum_node_flow(results, "conv_h_from_grid_50_b2")
-    heat_grid_sink_sum = _sum_node_flow(results, "heat_grid_investment_sink")
-    heat_grid_source_sum = _sum_node_flow(results, "heat_grid_investment_source")
+    conv_h_from_grid_50_b1_sum = sum_node_flow(results, "conv_h_from_grid_50_b1")
+    conv_h_from_grid_50_b2_sum = sum_node_flow(results, "conv_h_from_grid_50_b2")
+    heat_grid_sink_sum = sum_node_flow(results, "heat_grid_investment_sink")
+    heat_grid_source_sum = sum_node_flow(results, "heat_grid_investment_source")
     assert conv_h_from_grid_50_b1_sum > 0
     assert conv_h_from_grid_50_b2_sum > 0
     assert heat_grid_sink_sum > 0
     assert heat_grid_source_sum > 0
 
     es_repeat = _build_centralized_es(n=4)
-    objective_repeat, _ = _solve_objective_and_results(es_repeat, available_solver)
+    _, _, objective_repeat = solve_solph_model(es_repeat, available_solver)
     assert objective == pytest.approx(objective_repeat, abs=1e-6)
     _assert_or_update_expected(
         "centralized_facade_toy_system",

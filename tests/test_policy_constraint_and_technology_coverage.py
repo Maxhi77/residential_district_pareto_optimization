@@ -4,7 +4,6 @@ import pandas as pd
 import pytest
 
 solph = pytest.importorskip("oemof.solph")
-po = pytest.importorskip("pyomo.environ")
 
 from oemof.solph import Flow
 from oemof.thermal_building_model.oemof_facades.helper_functions import connect_buses
@@ -42,29 +41,6 @@ from oemof.thermal_building_model.oemof_facades.technologies.storages import (
     Battery,
     HotWaterTank,
 )
-
-
-def _find_available_solver():
-    for solver_name in ("gurobi", "cbc", "glpk", "highs"):
-        solver = po.SolverFactory(solver_name)
-        try:
-            if solver.available(exception_flag=False):
-                return solver_name
-        except Exception:
-            continue
-    return None
-
-
-@pytest.fixture(scope="module")
-def available_solver():
-    solver = _find_available_solver()
-    if solver is None:
-        pytest.skip(
-            "No MILP solver available (checked: gurobi, cbc, glpk, highs). "
-            "Install one of them to run solver-backed tests."
-        )
-    return solver
-
 
 def _safe_add(es, component):
     if isinstance(component, dict):
@@ -165,18 +141,15 @@ def _build_policy_system(max_peak_from_grid=None):
     }
 
 
-def _solve_and_collect(es, components, solver, co2_limit=None):
+def _solve_and_collect(es, components, solver, solver_cmdline_options, co2_limit=None):
     model = solph.Model(es)
     if co2_limit is not None:
         model = solph.constraints.additional_total_limit(model, "co2", limit=co2_limit)
 
-    cmdline_options = {}
-    if solver == "gurobi":
-        cmdline_options = {"MIPGap": 0, "Threads": 1, "Seed": 0}
     solve_result = model.solve(
         solver=solver,
         solve_kwargs={"tee": False},
-        cmdline_options=cmdline_options,
+        cmdline_options=solver_cmdline_options(solver),
     )
     termination = str(solve_result.solver.termination_condition).lower()
     assert termination in {"optimal", "feasible"}
@@ -206,9 +179,11 @@ def _solve_and_collect(es, components, solver, co2_limit=None):
     }
 
 
-def test_co2_constraint_regression_reduces_emissions(available_solver):
+def test_co2_constraint_regression_reduces_emissions(available_solver, solver_cmdline_options):
     es_base, comp_base = _build_policy_system(max_peak_from_grid=None)
-    base = _solve_and_collect(es_base, comp_base, solver=available_solver)
+    base = _solve_and_collect(
+        es_base, comp_base, solver=available_solver, solver_cmdline_options=solver_cmdline_options
+    )
 
     assert math.isfinite(base["objective"])
     assert base["total_co2"] > 0
@@ -216,7 +191,11 @@ def test_co2_constraint_regression_reduces_emissions(available_solver):
     co2_cap = base["total_co2"] * 0.80
     es_cap, comp_cap = _build_policy_system(max_peak_from_grid=None)
     constrained = _solve_and_collect(
-        es_cap, comp_cap, solver=available_solver, co2_limit=co2_cap
+        es_cap,
+        comp_cap,
+        solver=available_solver,
+        solver_cmdline_options=solver_cmdline_options,
+        co2_limit=co2_cap,
     )
 
     assert math.isfinite(constrained["objective"])
@@ -224,22 +203,28 @@ def test_co2_constraint_regression_reduces_emissions(available_solver):
     assert constrained["total_co2"] < base["total_co2"] - 1e-6
 
 
-def test_peak_constraint_regression_reduces_grid_peak(available_solver):
+def test_peak_constraint_regression_reduces_grid_peak(available_solver, solver_cmdline_options):
     es_base, comp_base = _build_policy_system(max_peak_from_grid=None)
-    base = _solve_and_collect(es_base, comp_base, solver=available_solver)
+    base = _solve_and_collect(
+        es_base, comp_base, solver=available_solver, solver_cmdline_options=solver_cmdline_options
+    )
     assert base["peak_from_grid"] > 0
 
     peak_cap = base["peak_from_grid"] * 0.80
     es_peak, comp_peak = _build_policy_system(max_peak_from_grid=peak_cap)
-    constrained = _solve_and_collect(es_peak, comp_peak, solver=available_solver)
+    constrained = _solve_and_collect(
+        es_peak, comp_peak, solver=available_solver, solver_cmdline_options=solver_cmdline_options
+    )
 
     assert constrained["peak_from_grid"] <= peak_cap + 1e-6
     assert constrained["peak_from_grid"] < base["peak_from_grid"] - 1e-6
 
 
-def test_co2_and_peak_50_percent_reduction(available_solver):
+def test_co2_and_peak_50_percent_reduction(available_solver, solver_cmdline_options):
     es_base, comp_base = _build_policy_system(max_peak_from_grid=None)
-    base = _solve_and_collect(es_base, comp_base, solver=available_solver)
+    base = _solve_and_collect(
+        es_base, comp_base, solver=available_solver, solver_cmdline_options=solver_cmdline_options
+    )
 
     assert math.isfinite(base["objective"])
     assert base["total_co2"] > 0
@@ -253,6 +238,7 @@ def test_co2_and_peak_50_percent_reduction(available_solver):
         es_reduced,
         comp_reduced,
         solver=available_solver,
+        solver_cmdline_options=solver_cmdline_options,
         co2_limit=co2_cap_50,
     )
 
@@ -263,7 +249,7 @@ def test_co2_and_peak_50_percent_reduction(available_solver):
     assert reduced["peak_from_grid"] < base["peak_from_grid"] - 1e-6
 
 
-def test_technology_and_refurbishment_object_coverage_solve_path(available_solver):
+def test_technology_and_refurbishment_object_coverage_solve_path(available_solver, solver_cmdline_options):
     n = 4
     timeindex = pd.date_range("2022-01-01", periods=n, freq="h")
     es = solph.EnergySystem(timeindex=timeindex, infer_last_interval=False)
@@ -432,7 +418,11 @@ def test_technology_and_refurbishment_object_coverage_solve_path(available_solve
     )
 
     model = solph.Model(es)
-    solve_result = model.solve(solver=available_solver, solve_kwargs={"tee": False})
+    solve_result = model.solve(
+        solver=available_solver,
+        solve_kwargs={"tee": False},
+        cmdline_options=solver_cmdline_options(available_solver),
+    )
     termination = str(solve_result.solver.termination_condition).lower()
     assert termination in {"optimal", "feasible"}
 

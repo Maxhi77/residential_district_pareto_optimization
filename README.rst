@@ -47,6 +47,19 @@ Contributing
 Everybody is welcome to contribute to the development of oemof.thermal. Find here the `developer
 guidelines of oemof <https://oemof.readthedocs.io/en/latest/developing_oemof.html>`_.
 
+Running Tests Locally
+=====================
+
+Run the unit test suite with:
+
+.. code:: bash
+
+    python -m pytest -q
+
+Solver-backed unit tests require at least one MILP solver available to Pyomo.
+The test suite checks for ``cbc``, ``glpk``, or ``highs`` and skips solver-backed
+tests with an explicit reason when none is installed.
+
 License
 =======
 

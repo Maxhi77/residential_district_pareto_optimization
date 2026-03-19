@@ -8,7 +8,6 @@ import pandas as pd
 import pytest
 
 solph = pytest.importorskip("oemof.solph")
-po = pytest.importorskip("pyomo.environ")
 
 from oemof.solph import Flow
 from oemof.thermal_building_model.oemof_facades.base_component import InvestmentComponents
@@ -44,48 +43,9 @@ from oemof.thermal_building_model.oemof_facades.technologies.storages import (
     HotWaterTank,
 )
 
-
-def _find_available_solver():
-    for solver_name in ("gurobi", "cbc", "glpk", "highs"):
-        solver = po.SolverFactory(solver_name)
-        try:
-            if solver.available(exception_flag=False):
-                return solver_name
-        except Exception:
-            continue
-    return None
-
-
-@pytest.fixture(scope="module")
-def available_solver():
-    solver = _find_available_solver()
-    if solver is None:
-        pytest.skip(
-            "No MILP solver available (checked: gurobi, cbc, glpk, highs)."
-        )
-    return solver
-
-
 def _new_es(n=4):
     tindex = pd.date_range("2020-01-01", periods=n, freq="h")
     return solph.EnergySystem(timeindex=tindex, infer_last_interval=False)
-
-
-def _solve(es, solver):
-    model = solph.Model(es)
-    cmdline_options = {}
-    if solver == "gurobi":
-        cmdline_options = {"MIPGap": 0, "Threads": 1, "Seed": 0}
-    solve_result = model.solve(
-        solver=solver,
-        solve_kwargs={"tee": False},
-        cmdline_options=cmdline_options,
-    )
-    termination = str(solve_result.solver.termination_condition).lower()
-    assert termination in {"optimal", "feasible"}
-    meta = solph.processing.meta_results(model)
-    results = solph.processing.results(model)
-    return model, results, float(meta["objective"])
 
 
 def _inv(
@@ -152,14 +112,6 @@ def _add_hydrogen_infrastructure(es, grid_name="Hydrogen", carrier_name="hydroge
     connect_buses(input=bus_from, target=carrier_bus)
     es.add(bus_from, source, carrier_bus)
     return {"grid": grid, "bus": carrier_bus, "source": source}
-
-
-def _sum_node_flow(results, node_label):
-    sequences = solph.views.node(results, node_label)["sequences"]
-    flow_cols = [col for col in sequences.columns if col[1] == "flow"]
-    if not flow_cols:
-        return 0.0
-    return float(sequences[flow_cols].sum().sum())
 
 
 def _build_gas_heater_case():
@@ -462,9 +414,9 @@ def _assert_or_update_expected(case_name, solver_name, metrics):
         assert float(value) == pytest.approx(float(expected[metric_name]), abs=1e-6)
 
 
-def test_gas_heater_investment_and_operation_stable(available_solver):
+def test_gas_heater_investment_and_operation_stable(available_solver, solve_solph_model):
     es, tech_dc, source, converters, heat_bus, gas_bus = _build_gas_heater_case()
-    _, results, obj = _solve(es, available_solver)
+    _, results, obj = solve_solph_model(es, available_solver)
     post = tech_dc.post_process(results, source, converters, heat_bus, gas_bus)
     assert math.isfinite(obj)
     assert post["capacity"] > 0
@@ -472,7 +424,7 @@ def test_gas_heater_investment_and_operation_stable(available_solver):
     assert post["flow_from_converter_sum"] > 0
 
     es2, tech_dc2, source2, converters2, heat_bus2, gas_bus2 = _build_gas_heater_case()
-    _, results2, _ = _solve(es2, available_solver)
+    _, results2, _ = solve_solph_model(es2, available_solver)
     post2 = tech_dc2.post_process(results2, source2, converters2, heat_bus2, gas_bus2)
     _assert_stable(float(post["investment_cost"]), float(post2["investment_cost"]))
     _assert_or_update_expected(
@@ -487,9 +439,9 @@ def test_gas_heater_investment_and_operation_stable(available_solver):
     )
 
 
-def test_air_heat_pump_investment_and_operation_stable(available_solver):
+def test_air_heat_pump_investment_and_operation_stable(available_solver, solve_solph_model):
     es, tech_dc, source, converters, heat_bus, electricity_bus = _build_air_heat_pump_case()
-    _, results, obj = _solve(es, available_solver)
+    _, results, obj = solve_solph_model(es, available_solver)
     post = tech_dc.post_process(results, source, converters, heat_bus, electricity_bus)
     assert math.isfinite(obj)
     assert post["capacity"] > 0
@@ -497,7 +449,7 @@ def test_air_heat_pump_investment_and_operation_stable(available_solver):
     assert post["flow_from_converter_sum"] > 0
 
     es2, tech_dc2, source2, converters2, heat_bus2, electricity_bus2 = _build_air_heat_pump_case()
-    _, results2, _ = _solve(es2, available_solver)
+    _, results2, _ = solve_solph_model(es2, available_solver)
     post2 = tech_dc2.post_process(results2, source2, converters2, heat_bus2, electricity_bus2)
     _assert_stable(float(post["investment_cost"]), float(post2["investment_cost"]))
     _assert_or_update_expected(
@@ -512,9 +464,9 @@ def test_air_heat_pump_investment_and_operation_stable(available_solver):
     )
 
 
-def test_chp_investment_and_operation_stable(available_solver):
+def test_chp_investment_and_operation_stable(available_solver, solve_solph_model):
     es, tech_dc, source, converters, heat_bus, fuel_bus = _build_chp_case()
-    _, results, obj = _solve(es, available_solver)
+    _, results, obj = solve_solph_model(es, available_solver)
     post = tech_dc.post_process(results, source, converters, heat_bus, fuel_bus)
     assert math.isfinite(obj)
     assert post["capacity"] > 0
@@ -522,7 +474,7 @@ def test_chp_investment_and_operation_stable(available_solver):
     assert post["flow_from_converter_sum"] > 0
 
     es2, tech_dc2, source2, converters2, heat_bus2, fuel_bus2 = _build_chp_case()
-    _, results2, _ = _solve(es2, available_solver)
+    _, results2, _ = solve_solph_model(es2, available_solver)
     post2 = tech_dc2.post_process(results2, source2, converters2, heat_bus2, fuel_bus2)
     _assert_stable(float(post["investment_cost"]), float(post2["investment_cost"]))
     _assert_or_update_expected(
@@ -537,9 +489,9 @@ def test_chp_investment_and_operation_stable(available_solver):
     )
 
 
-def test_pv_investment_and_operation_stable(available_solver):
+def test_pv_investment_and_operation_stable(available_solver, solve_solph_model):
     es, electricity, tech_dc, source, sink = _build_pv_case()
-    _, results, obj = _solve(es, available_solver)
+    _, results, obj = solve_solph_model(es, available_solver)
     post = tech_dc.post_process(results, source, sink)
     grid_post = electricity["grid"].post_process(results, electricity["source"], electricity["sink"])
     assert math.isfinite(obj)
@@ -552,7 +504,7 @@ def test_pv_investment_and_operation_stable(available_solver):
     assert float(flow_from_grid_sum) == pytest.approx(0.0, abs=1e-6)
 
     es2, _, tech_dc2, source2, sink2 = _build_pv_case()
-    _, results2, _ = _solve(es2, available_solver)
+    _, results2, _ = solve_solph_model(es2, available_solver)
     post2 = tech_dc2.post_process(results2, source2, sink2)
     _assert_stable(float(post["investment_cost"]), float(post2["investment_cost"]))
     _assert_or_update_expected(
@@ -568,9 +520,9 @@ def test_pv_investment_and_operation_stable(available_solver):
     )
 
 
-def test_battery_investment_and_operation_stable(available_solver):
+def test_battery_investment_and_operation_stable(available_solver, solve_solph_model):
     es, tech_dc, storage = _build_battery_case()
-    _, results, obj = _solve(es, available_solver)
+    _, results, obj = solve_solph_model(es, available_solver)
     post = tech_dc.post_process(results, storage)
     assert math.isfinite(obj)
     assert post["capacity"] > 0
@@ -578,7 +530,7 @@ def test_battery_investment_and_operation_stable(available_solver):
     assert float(post["flow_into"].sum()) > 0
 
     es2, tech_dc2, storage2 = _build_battery_case()
-    _, results2, _ = _solve(es2, available_solver)
+    _, results2, _ = solve_solph_model(es2, available_solver)
     post2 = tech_dc2.post_process(results2, storage2)
     _assert_stable(float(post["investment_cost"]), float(post2["investment_cost"]))
     _assert_or_update_expected(
@@ -594,9 +546,9 @@ def test_battery_investment_and_operation_stable(available_solver):
     )
 
 
-def test_hot_water_tank_investment_and_operation_stable(available_solver):
+def test_hot_water_tank_investment_and_operation_stable(available_solver, solve_solph_model):
     es, tech_dc, storage = _build_hot_water_tank_case()
-    _, results, obj = _solve(es, available_solver)
+    _, results, obj = solve_solph_model(es, available_solver)
     post = tech_dc.post_process(results, storage)
     assert math.isfinite(obj)
     assert post["capacity"] > 0
@@ -604,7 +556,7 @@ def test_hot_water_tank_investment_and_operation_stable(available_solver):
     assert float(post["flow_into"].sum()) > 0
 
     es2, tech_dc2, storage2 = _build_hot_water_tank_case()
-    _, results2, _ = _solve(es2, available_solver)
+    _, results2, _ = solve_solph_model(es2, available_solver)
     post2 = tech_dc2.post_process(results2, storage2)
     _assert_stable(float(post["investment_cost"]), float(post2["investment_cost"]))
     _assert_or_update_expected(
@@ -620,18 +572,18 @@ def test_hot_water_tank_investment_and_operation_stable(available_solver):
     )
 
 
-def test_heat_grid_investment_and_operation_stable(available_solver):
+def test_heat_grid_investment_and_operation_stable(available_solver, solve_solph_model, sum_node_flow):
     es, tech_dc, source, sink = _build_heat_grid_case()
-    _, results, obj = _solve(es, available_solver)
+    _, results, obj = solve_solph_model(es, available_solver)
     post = tech_dc.post_process()
-    sink_flow = _sum_node_flow(results, sink.label)
+    sink_flow = sum_node_flow(results, sink.label)
     assert math.isfinite(obj)
     assert post["investment_cost"] > 0
     assert post["investment_co2"] > 0
     assert sink_flow > 0
 
     es2, tech_dc2, source2, _ = _build_heat_grid_case()
-    _, _, _ = _solve(es2, available_solver)
+    _, _, _ = solve_solph_model(es2, available_solver)
     post2 = tech_dc2.post_process()
     _assert_stable(float(post["investment_cost"]), float(post2["investment_cost"]))
     _assert_or_update_expected(
