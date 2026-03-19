@@ -674,14 +674,12 @@ def compute_co2_target(co2_ref, factor):
 def compute_peak_target(peak_ref, factor):
     return peak_ref * factor
 
-def _factor_to_token(value):
-    return str(value).replace("-", "m").replace(".", "p")
-
 def _atomic_pickle_dump(path, payload):
-    tmp_path = f"{path}.tmp_{os.getpid()}"
-    with open(tmp_path, "wb") as fh:
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(path, "wb") as fh:
         pickle.dump(payload, fh)
-    os.replace(tmp_path, path)
 
 def _load_pickle_if_exists(path):
     if not os.path.exists(path):
@@ -753,8 +751,6 @@ def run_co2_factor_worker(args):
     refurbish = context["refurbish"]
     peak_reduction_factors = context["peak_reduction_factors"]
     co2_reference = context["co2_reference"]
-    output_dir = context["output_dir"]
-    base_filename = context["base_filename"]
 
     ref = "co2"
     co2_new = compute_co2_target(co2_reference, co2_reduction_factor)
@@ -763,10 +759,6 @@ def run_co2_factor_worker(args):
 
     worker_results = {}
     worker_simple_results = {}
-
-    factor_token = _factor_to_token(co2_reduction_factor)
-    worker_file_path = os.path.join(output_dir, f"{base_filename}_co2_{factor_token}.pkl")
-    worker_simple_file_path = os.path.join(output_dir, f"simple_{base_filename}_co2_{factor_token}.pkl")
 
     for peak_reduction_factor in peak_reduction_factors:
         if first_co2_run_in_peak_loop:
@@ -799,9 +791,6 @@ def run_co2_factor_worker(args):
         worker_results[key] = full_entry
         worker_simple_results[key] = simple_entry
 
-        _atomic_pickle_dump(worker_file_path, worker_results)
-        _atomic_pickle_dump(worker_simple_file_path, worker_simple_results)
-
         if final_results is None:
             if first_co2_run_in_peak_loop:
                 first_co2_run_in_peak_loop = False
@@ -812,51 +801,93 @@ def run_co2_factor_worker(args):
             first_co2_run_in_peak_loop = False
             peak_reference = full_entry["peak"]
 
-    return group_key, worker_file_path, worker_simple_file_path
+    return group_key, worker_results, worker_simple_results
 
-def _collect_building_ids_for_cluster(base_path, cluster_name):
+def _safe_load_cluster_pickle(path):
+    if not os.path.exists(path):
+        return pd.DataFrame()
+    with open(path, "rb") as f:
+        data = pickle.load(f)
+    if isinstance(data, pd.DataFrame):
+        return data
+    return pd.DataFrame(data)
+
+
+def _discover_available_k_values(base_path, cluster_name, building_type=None):
+    cluster_root = os.path.join(base_path, cluster_name)
+    if not os.path.isdir(cluster_root):
+        return []
+
+    if building_type == "SFH":
+        prefixes = ("sfh_cluster_k",)
+    elif building_type == "MFH":
+        prefixes = ("mfh_cluster_k",)
+    else:
+        prefixes = ("sfh_cluster_k", "mfh_cluster_k")
+
+    k_values = set()
+    for name in os.listdir(cluster_root):
+        folder_path = os.path.join(cluster_root, name)
+        if not os.path.isdir(folder_path):
+            continue
+        for prefix in prefixes:
+            if name.startswith(prefix):
+                suffix = name[len(prefix):]
+                if suffix.isdigit():
+                    k_values.add(int(suffix))
+    return sorted(k_values)
+
+
+def _load_clusters_for_k(base_path, cluster_name, k_value):
+    cluster_root = os.path.join(base_path, cluster_name)
+    k_token = f"k{int(k_value):02d}"
+    sfh_dir = os.path.join(cluster_root, f"sfh_cluster_{k_token}")
+    mfh_dir = os.path.join(cluster_root, f"mfh_cluster_{k_token}")
+
+    sfh_cluster = _safe_load_cluster_pickle(os.path.join(sfh_dir, "sfh_cluster.pkl"))
+    mfh_cluster = _safe_load_cluster_pickle(os.path.join(mfh_dir, "mfh_cluster.pkl"))
+    return sfh_cluster, mfh_cluster, sfh_dir, mfh_dir
+
+
+def _collect_building_ids_for_k(base_path, cluster_name, k_value, building_type=None):
+    sfh_cluster, mfh_cluster, _, _ = _load_clusters_for_k(base_path, cluster_name, k_value)
     building_in_cluster = []
-    path_mfh = os.path.join(base_path, cluster_name, "mfh_cluster.pkl")
-    with open(path_mfh, "rb") as f:
-        data = pickle.load(f)
-    for _, row in data.iterrows():
-        building_in_cluster.append(row["building_id"])
+    if building_type in (None, "SFH") and not sfh_cluster.empty and "building_id" in sfh_cluster.columns:
+        building_in_cluster.extend(sfh_cluster["building_id"].tolist())
+    if building_type in (None, "MFH") and not mfh_cluster.empty and "building_id" in mfh_cluster.columns:
+        building_in_cluster.extend(mfh_cluster["building_id"].tolist())
+    return list(dict.fromkeys(building_in_cluster))
 
-    path_sfh = os.path.join(base_path, cluster_name, "sfh_cluster.pkl")
-    with open(path_sfh, "rb") as f:
-        data = pickle.load(f)
-    for _, row in data.iterrows():
-        building_in_cluster.append(row["building_id"])
 
-    return building_in_cluster
-
-def _prepare_group_context(refurbish, building_id_in_cluster, ueu):
+def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value):
     base_path = os.path.dirname(os.path.abspath(__file__))
     directory_path = os.path.join(base_path, ueu)
 
     number_of_time_steps = 8760
-    all_building_and_not_clusters =  True
-    if all_building_and_not_clusters:
-        gpkg_ueu = os.path.join(base_path,cluster_name, f"{cluster_name}.gpkg")
-        gdf_ueu = gpd.read_file(gpkg_ueu)
-        sfh_cluster = gdf_ueu.loc[gdf_ueu["tabula_building_type"] == "SFH"].copy()
-        mfh_cluster = gdf_ueu.loc[gdf_ueu["tabula_building_type"] == "MFH"].copy()
-    else:
-        sfh_cluster_path = os.path.join(base_path, ueu, "sfh_cluster.pkl")
-        with open(sfh_cluster_path, "rb") as f:
-            sfh_cluster = pickle.load(f)
-        mfh_cluster_path = os.path.join(base_path, ueu, "mfh_cluster.pkl")
-        with open(mfh_cluster_path, "rb") as f:
-            mfh_cluster = pickle.load(f)
-    combined_cluster = pd.concat([sfh_cluster, mfh_cluster])
+    sfh_cluster, mfh_cluster, sfh_dir, mfh_dir = _load_clusters_for_k(base_path, ueu, k_value)
+    if sfh_cluster.empty and mfh_cluster.empty:
+        raise ValueError(f"No cluster files found for cluster='{ueu}', k={k_value}.")
+
+    combined_frames = [df for df in (sfh_cluster, mfh_cluster) if not df.empty]
+    combined_cluster = pd.concat(combined_frames, ignore_index=True)
 
     ev = "no_EV"
-    file_path = "results_dec_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) + "_" + str(
-        building_id_in_cluster) + ".pkl"
-    simple_file_path = "simple_results_dec_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) + "_" + str(
-        building_id_in_cluster) + ".pkl"
-    base_filename = "results_dec_" + str(ueu) + "_" + str(refurbish) + "_" + str(ev) + "_" + str(
-        building_id_in_cluster)
+    is_sfh = not sfh_cluster.empty and bool((sfh_cluster["building_id"] == building_id_in_cluster).any())
+    is_mfh = not mfh_cluster.empty and bool((mfh_cluster["building_id"] == building_id_in_cluster).any())
+    if not is_sfh and not is_mfh:
+        raise ValueError(
+            f"building_id '{building_id_in_cluster}' not found in k={k_value} for cluster '{ueu}'."
+        )
+
+    output_dir = sfh_dir if is_sfh else mfh_dir
+    os.makedirs(output_dir, exist_ok=True)
+    # Keep filenames short for Windows path-length limits; UEU/k are already encoded in folder path.
+    base_filename = "results_dec_" + str(refurbish) + "_" + str(ev) + "_" + str(building_id_in_cluster)
+    file_path = os.path.join(output_dir, base_filename + ".pkl")
+    simple_file_path = os.path.join(
+        output_dir,
+        "simple_results_dec_" + str(refurbish) + "_" + str(ev) + "_" + str(building_id_in_cluster) + ".pkl",
+    )
 
     main_path = get_project_root()
     data = pd.DataFrame()
@@ -987,8 +1018,11 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu):
             co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
             co2_reduction_factors = list(dict.fromkeys(co2_reduction_factors))
     #peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
-    co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
-    peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+
+    #co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
+    #peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+    co2_reduction_factors = [1, 0.9]
+    peak_reduction_factors = [1, 0.9]
     worker_context = {
         "data": data,
         "aggregation1": aggregation1,
@@ -1001,8 +1035,6 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu):
         "refurbish": refurbish,
         "peak_reduction_factors": peak_reduction_factors,
         "co2_reference": co2_ref,
-        "output_dir": os.getcwd(),
-        "base_filename": base_filename,
     }
 
     return {
@@ -1014,68 +1046,107 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu):
         "worker_context": worker_context,
     }
 
-def _merge_group_results(file_path, simple_file_path, worker_files, worker_simple_files):
+def _merge_group_results(file_path, simple_file_path, worker_results_list, worker_simple_results_list):
     merged_results = _load_pickle_if_exists(file_path)
     merged_simple_results = _load_pickle_if_exists(simple_file_path)
-    for worker_file in worker_files:
-        merged_results.update(_load_pickle_if_exists(worker_file))
-    for worker_simple_file in worker_simple_files:
-        merged_simple_results.update(_load_pickle_if_exists(worker_simple_file))
+    for worker_results in worker_results_list:
+        merged_results.update(worker_results)
+    for worker_simple_results in worker_simple_results_list:
+        merged_simple_results.update(worker_simple_results)
 
     _atomic_pickle_dump(file_path, merged_results)
     _atomic_pickle_dump(simple_file_path, merged_simple_results)
 
-def run_main(refurbish, building_id_in_cluster, ueu):
-    prepared = _prepare_group_context(refurbish, building_id_in_cluster, ueu)
+def run_main(refurbish, building_id_in_cluster, ueu, k_value):
+    prepared = _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value)
     file_path = prepared["file_path"]
     simple_file_path = prepared["simple_file_path"]
     _atomic_pickle_dump(file_path, prepared["ref_results"])
     _atomic_pickle_dump(simple_file_path, prepared["simple_ref_results"])
 
-    group_key = (ueu, building_id_in_cluster, refurbish)
+    group_key = (ueu, int(k_value), building_id_in_cluster, refurbish)
     _set_co2_worker_context({group_key: prepared["worker_context"]})
     worker_outputs = [run_co2_factor_worker((group_key, factor)) for factor in prepared["co2_reduction_factors"]]
     _CO2_WORKER_CONTEXT.clear()
 
-    worker_files = [item[1] for item in worker_outputs]
-    worker_simple_files = [item[2] for item in worker_outputs]
-    _merge_group_results(file_path, simple_file_path, worker_files, worker_simple_files)
+    worker_results_list = [item[1] for item in worker_outputs]
+    worker_simple_results_list = [item[2] for item in worker_outputs]
+    _merge_group_results(file_path, simple_file_path, worker_results_list, worker_simple_results_list)
 
-def run_cluster_refurbish_co2_parallel(cluster_name, processes):
+def run_cluster_refurbish_co2_parallel(
+    cluster_name,
+    processes,
+    selected_k_values=None,
+    selected_k_values_sfh=None,
+    selected_k_values_mfh=None,
+):
     base_path = os.path.dirname(os.path.abspath(__file__))
-    all_building_and_not_clusters =  True
-    if all_building_and_not_clusters:
-        gpkg_ueu = os.path.join(base_path,cluster_name, f"{cluster_name}.gpkg")
-        gdf_ueu = gpd.read_file(gpkg_ueu)
-        building_in_cluster = gdf_ueu["building_id"].tolist()
-    else:
-        building_in_cluster = _collect_building_ids_for_cluster(base_path, cluster_name)
+
+    # Backward compatibility: one list for both SFH/MFH
+    if selected_k_values is not None:
+        if selected_k_values_sfh is None:
+            selected_k_values_sfh = selected_k_values
+        if selected_k_values_mfh is None:
+            selected_k_values_mfh = selected_k_values
+
+    available_k_values_sfh = _discover_available_k_values(base_path, cluster_name, building_type="SFH")
+    available_k_values_mfh = _discover_available_k_values(base_path, cluster_name, building_type="MFH")
+    if not available_k_values_sfh and not available_k_values_mfh:
+        print(f"No SFH/MFH k-folders found for cluster {cluster_name}")
+        return
+
+    def _resolve_k_values(selected_k_values_local, available_k_values_local, label):
+        if selected_k_values_local is None:
+            return available_k_values_local
+        selected_set = {int(k) for k in selected_k_values_local}
+        chosen = [k for k in available_k_values_local if k in selected_set]
+        missing = sorted(selected_set.difference(set(available_k_values_local)))
+        if missing:
+            print(f"Skipped missing {label} k values for {cluster_name}: {missing}")
+        return chosen
+
+    k_values_to_run_sfh = _resolve_k_values(selected_k_values_sfh, available_k_values_sfh, "SFH")
+    k_values_to_run_mfh = _resolve_k_values(selected_k_values_mfh, available_k_values_mfh, "MFH")
+
+    if not k_values_to_run_sfh and not k_values_to_run_mfh:
+        print(f"No runnable SFH/MFH k values for cluster {cluster_name}")
+        return
+
     task_list = []
     group_contexts = {}
     group_outputs = {}
 
-    for refurbish in refurbishment:
-        for building_id_in_cluster in building_in_cluster:
-            try:
-                prepared = _prepare_group_context(refurbish, building_id_in_cluster, cluster_name)
-            except Exception as exc:
-                print(f"skip failed prepare: {cluster_name} | {building_id_in_cluster} | {refurbish} | {exc}")
-                continue
+    for building_type, k_values_to_run in (("SFH", k_values_to_run_sfh), ("MFH", k_values_to_run_mfh)):
+        for k_value in k_values_to_run:
+            building_in_cluster = _collect_building_ids_for_k(
+                base_path,
+                cluster_name,
+                k_value,
+                building_type=building_type,
+            )
+            for refurbish in refurbishment:
+                for building_id_in_cluster in building_in_cluster:
+                    try:
+                        prepared = _prepare_group_context(refurbish, building_id_in_cluster, cluster_name, k_value)
+                    except Exception as exc:
+                        print(
+                            f"skip failed prepare: {cluster_name} | {building_type} | k={k_value:02d} | {building_id_in_cluster} | {refurbish} | {exc}"
+                        )
+                        continue
 
-            group_key = (cluster_name, building_id_in_cluster, refurbish)
-            group_contexts[group_key] = prepared["worker_context"]
-            group_outputs[group_key] = {
-                "file_path": prepared["file_path"],
-                "simple_file_path": prepared["simple_file_path"],
-                "worker_files": [],
-                "worker_simple_files": [],
-            }
-            _atomic_pickle_dump(prepared["file_path"], prepared["ref_results"])
-            _atomic_pickle_dump(prepared["simple_file_path"], prepared["simple_ref_results"])
+                    group_key = (cluster_name, building_type, int(k_value), building_id_in_cluster, refurbish)
+                    group_contexts[group_key] = prepared["worker_context"]
+                    group_outputs[group_key] = {
+                        "file_path": prepared["file_path"],
+                        "simple_file_path": prepared["simple_file_path"],
+                        "worker_results": [],
+                        "worker_simple_results": [],
+                    }
+                    _atomic_pickle_dump(prepared["file_path"], prepared["ref_results"])
+                    _atomic_pickle_dump(prepared["simple_file_path"], prepared["simple_ref_results"])
 
-            for co2_reduction_factor in prepared["co2_reduction_factors"]:
-                task_list.append((group_key, co2_reduction_factor))
-
+                    for co2_reduction_factor in prepared["co2_reduction_factors"]:
+                        task_list.append((group_key, co2_reduction_factor))
     if not task_list:
         print(f"No runnable tasks for cluster {cluster_name}")
         return
@@ -1086,24 +1157,24 @@ def run_cluster_refurbish_co2_parallel(cluster_name, processes):
     if "fork" in multiprocessing.get_all_start_methods():
         mp_ctx = multiprocessing.get_context("fork")
         with mp_ctx.Pool(processes=processes, initializer=_set_co2_worker_context, initargs=(group_contexts,)) as pool:
-            for group_key, worker_file, worker_simple_file in pool.imap_unordered(run_co2_factor_worker, task_list):
-                group_outputs[group_key]["worker_files"].append(worker_file)
-                group_outputs[group_key]["worker_simple_files"].append(worker_simple_file)
+            for group_key, worker_results, worker_simple_results in pool.imap_unordered(run_co2_factor_worker, task_list):
+                group_outputs[group_key]["worker_results"].append(worker_results)
+                group_outputs[group_key]["worker_simple_results"].append(worker_simple_results)
     else:
         print("No 'fork' start method available. Falling back to serial co2/refurbish task execution.")
         _set_co2_worker_context(group_contexts)
         for task in task_list:
-            group_key, worker_file, worker_simple_file = run_co2_factor_worker(task)
-            group_outputs[group_key]["worker_files"].append(worker_file)
-            group_outputs[group_key]["worker_simple_files"].append(worker_simple_file)
+            group_key, worker_results, worker_simple_results = run_co2_factor_worker(task)
+            group_outputs[group_key]["worker_results"].append(worker_results)
+            group_outputs[group_key]["worker_simple_results"].append(worker_simple_results)
         _CO2_WORKER_CONTEXT.clear()
 
     for group_key, paths in group_outputs.items():
         _merge_group_results(
             paths["file_path"],
             paths["simple_file_path"],
-            paths["worker_files"],
-            paths["worker_simple_files"],
+            paths["worker_results"],
+            paths["worker_simple_results"],
         )
 
 
@@ -1131,6 +1202,8 @@ refurbishment = [
 ]
 cluster_list = ["processed_bds_in_DENI03403000SEC5658","processed_bds_in_DENI03403000SEC4580","processed_bds_in_DENI03403000SEC5101"]
 cluster_list = ["processed_bds_in_DENI03403000SEC5658"]
+k_values_to_optimize_sfh = [1,2,4,6,8,10,14,18]
+k_values_to_optimize_mfh = [1,2,3,4,5,6]
 
 if __name__ == "__main__":
     for cluster_name in cluster_list:
@@ -1139,6 +1212,8 @@ if __name__ == "__main__":
             run_cluster_refurbish_co2_parallel(
                 cluster_name,
                 processes=max(1, multiprocessing.cpu_count() // 2),
+                selected_k_values_sfh=k_values_to_optimize_sfh,
+                selected_k_values_mfh=k_values_to_optimize_mfh,
             )
         else:
-            run_main("no_refurbishment", "DENILD1100004rNW", cluster_name)
+            run_main("advanced_refurbishment", "DENILD1100004rNW", cluster_name, k_value=k_values_to_optimize_sfh[0])
