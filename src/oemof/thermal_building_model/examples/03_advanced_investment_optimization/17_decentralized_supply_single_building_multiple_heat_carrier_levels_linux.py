@@ -1223,17 +1223,27 @@ cluster_list = ["processed_bds_in_DENI03403000SEC5658","processed_bds_in_DENI034
 cluster_list = ["processed_bds_in_DENI03403000SEC5658"]
 k_values_to_optimize_sfh = ["reference",1,2,4,6,8,10,14,18]
 k_values_to_optimize_mfh = ["reference",1,2,3,4,5,6]
-#k_values_to_optimize_sfh = [2,"reference"]
-#k_values_to_optimize_mfh = [2,"reference"] #todo
+
+# Manuell und uebersichtlich: (batch_name, sfh_k_values, mfh_k_values)
+k_value_batches = [
+    ("reference_only", ["reference"], ["reference"]),
+    ("1", [1, 2, 4, 6,8], [1, 2, 3,4]),
+    ("2", [10, 14], [5]),
+    ("3", [18], [6]),
+]
+
 if __name__ == "__main__":
+    processes = max(1, multiprocessing.cpu_count() // 2)
+    print(f"processes={processes}")
     for cluster_name in cluster_list:
-        if True:
-            processes = print(multiprocessing.cpu_count() // 2)
+        for idx, (batch_name, sfh_batch, mfh_batch) in enumerate(k_value_batches, start=1):
+            print(
+                f"cluster={cluster_name} | batch={idx}/{len(k_value_batches)} ({batch_name}) "
+                f"| sfh={sfh_batch} | mfh={mfh_batch}"
+            )
             run_cluster_refurbish_co2_parallel(
                 cluster_name,
-                processes=max(1, multiprocessing.cpu_count() // 2),
-                selected_k_values_sfh=k_values_to_optimize_sfh,
-                selected_k_values_mfh=k_values_to_optimize_mfh,
+                processes=processes,
+                selected_k_values_sfh=sfh_batch,
+                selected_k_values_mfh=mfh_batch,
             )
-        else:
-            run_main("advanced_refurbishment", "DENILD1100004rNW", cluster_name, k_value=k_values_to_optimize_sfh[0])
