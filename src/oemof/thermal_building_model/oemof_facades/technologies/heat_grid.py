@@ -76,7 +76,6 @@ class HeatGridInvestmentCosts(BaseComponent):
         return {"investment_cost": investment_cost,
                 "investment_co2": investment_co2,
                 "main_line":{"cost":self.main_line.cost_offset, "co2":self.main_line.co2_offset},
-                "distribution_network": {"cost": self.distribution_network.cost_offset, "co2": self.distribution_network.co2_offset},
                 "house_service_line": {"cost": self.house_service_line.cost_offset, "co2": self.house_service_line.co2_offset},
                 "house_station": {"cost": self.house_station.cost_offset, "co2": self.house_station.co2_offset},
                 "central_transfer_station": {"cost": self.central_transfer_station.cost_offset, "co2": self.central_transfer_station.co2_offset},
@@ -115,16 +114,6 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
             cost_offset=main_line_costs,
             lifetime=pipe_lifetime,
             co2_offset=main_line_co2,
-            maximum_capacity=1,
-        )
-
-        distribution_network_costs = self.calculate_distribution_network_costs(
-            self.total_heat_demand,
-            self.flow_temperature,
-        )
-        self.distribution_network = InvestmentComponents(
-            cost_offset=distribution_network_costs,
-            lifetime=pipe_lifetime,
             maximum_capacity=1,
         )
 
@@ -170,7 +159,6 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
 
         self.total_capex = (
                 self.main_line.cost_offset
-                + self.distribution_network.cost_offset
                 + self.house_service_line.cost_offset
                 + self.house_station.cost_offset
                 + self.central_transfer_station.cost_offset
@@ -179,7 +167,6 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
 
         self.total_co2 = (
                 self._get_component_co2(self.main_line)
-                + self._get_component_co2(self.distribution_network)
                 + self._get_component_co2(self.house_service_line)
                 + self._get_component_co2(self.house_station)
                 + self._get_component_co2(self.central_transfer_station)
@@ -257,8 +244,6 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
         rows = sorted(table.items(), key=lambda x: x[1]["capacity_kw"])
 
         for nominal_size, row in rows:
-            if house_connection and row.get("house_unpaved_avg") is None:
-                continue
             if required_capacity_kw <= row["capacity_kw"]:
                 return nominal_size, row
 
@@ -376,17 +361,6 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
 
         return pipe_length_in_meter * total_cost_per_m
 
-    def calculate_distribution_network_costs(
-            self,
-            total_heat_demand: Optional[float],
-            flow_temperature: float,
-    ) -> float:
-        """
-        Set to zero to avoid double counting.
-        Network costs are already derived directly from the converted KWW tables.
-        """
-        return 0.0
-
     def calculate_service_line_costs(
             self,
             heat_transfer_station_max_kW: List[Tuple[float, int]],
@@ -492,7 +466,7 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
     # -------------------------------------------------------------------------
     # Grid loss
     # -------------------------------------------------------------------------
-    def calculate_heat_grid_loss_for_flow_temperature(self) -> float:
+    def calculate_heat_grid_loss_for_flow_temperature(self,network_supply_temperature) -> float:
         """
         Heat-grid losses as a function of network supply temperature.
         """
@@ -507,7 +481,7 @@ class HeatGridInvestment(HeatGridInvestmentCosts):
             90: 0.100,
         }
 
-        temperature = self.network_supply_temperature
+        temperature = network_supply_temperature
         temps = sorted(support_points.keys())
 
         if temperature <= temps[0]:
