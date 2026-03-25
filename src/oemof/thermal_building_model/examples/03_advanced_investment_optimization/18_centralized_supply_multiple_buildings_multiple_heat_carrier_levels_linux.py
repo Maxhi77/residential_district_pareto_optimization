@@ -610,14 +610,16 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         final_results["co2_investment"] = co2_investment
         final_results["totex"] = meta_results["objective"]
         final_results["totex_oemof_model"] = meta_results["objective"]
-        return final_results, co2_oemof_model, meta_results["solver"]["Wall time"]
+        if solver == "gurobi":
+            return final_results, co2_oemof_model, meta_results["solver"]["Wall time"]
+        else:
+            return final_results, co2_oemof_model, None
     except Exception as e:
         print(e)
         return None, None, None
 
 
 def check_possible_buildings_for_heat_grid_temp(building_row, building_type, epw_path, directory_path, data, number_of_time_steps,data_classes_comp,ev,time_index,heat_grid_temperature):
-
         building_id = building_row['building_id']
         tabula_year_class = building_row['tabula_year_class']
         building_floor_area = building_row['net_floor_area']
