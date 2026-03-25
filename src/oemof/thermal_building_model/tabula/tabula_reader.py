@@ -402,16 +402,16 @@ class Building:
         print("DEBUG n_air_infiltration type:", type(row["n_air_infiltration"]))
         print("DEBUG n_air_infiltration value:\n", row["n_air_infiltration"])
         self.total_air_change_rate = float(
-            row["n_air_use"] + row["n_air_infiltration"]
+            row["n_air_use"].values[0] + row["n_air_infiltration"].values[0]
         )  # [1/h]
-        self.room_height = float(row["h_room"])  # [m]
-        self.q_total_losses = float(row["q_ht"] * self.floor_area)  # [kWh/a]
+        self.room_height = float(row["h_room"].values[0])  # [m]
+        self.q_total_losses = float(row["q_ht"].values[0] * self.floor_area)  # [kWh/a]
         self.q_heating_demand_annual = float(
-            row["q_h_nd"] * self.floor_area)  # [kWh/a]
+            row["q_h_nd"].values[0] * self.floor_area)  # [kWh/a]
         self.h_transmission = float(
-            row["h_Transmission"] * self.floor_area)  # [W/K]
+            row["h_Transmission"].values[0] * self.floor_area)  # [W/K]
         self.h_ventilation = float(
-            row["h_Ventilation"] * self.floor_area)  # [W/K]
+            row["h_Ventilation"].values[0] * self.floor_area)  # [W/K]
         if self.refurbishment_status == "GEG_standard":
             self.adjust_U_values_to_GEG()
     def adjust_U_values_to_GEG(self):
