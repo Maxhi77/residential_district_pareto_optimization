@@ -1,4 +1,4 @@
-
+import argparse
 from oemof.thermal_building_model.oemof_facades.base_component import  PhysicalBaseUnit
 from oemof.solph.components import Converter
 import copy
@@ -32,8 +32,11 @@ import geopandas as gpd
 import tsam.timeseriesaggregation as tsam
 
 import pandas as pd
+import multiprocessing
 
 _CO2_WORKER_CONTEXT = {}
+DEFAULT_SOLVER_THREADS = 1
+SOLVER_THREADS = DEFAULT_SOLVER_THREADS
 
 def _set_co2_worker_context(context):
     global _CO2_WORKER_CONTEXT
@@ -461,7 +464,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
         model.solve(solver=solver, solve_kwargs={"tee": True},
                                               cmdline_options={"mipgap": 0.005,
-                                                               "threads": 1},
+                                                               "threads": SOLVER_THREADS},
         )
         meta_results = solph.processing.meta_results(model)
         results = solph.processing.results(model)
@@ -850,6 +853,57 @@ def _format_k_for_log(k_value):
     return f"k{int(k_value):02d}"
 
 
+def _dedupe_keep_order(items):
+    out = []
+    seen = set()
+    for item in items:
+        marker = item.lower() if isinstance(item, str) else item
+        if marker in seen:
+            continue
+        seen.add(marker)
+        out.append(item)
+    return out
+
+
+def _parse_k_values(raw_csv):
+    if raw_csv is None:
+        return []
+
+    out = []
+    for token in str(raw_csv).split(","):
+        value = token.strip()
+        if not value:
+            continue
+        if value.lower() == "reference":
+            out.append("reference")
+        else:
+            out.append(int(value))
+    return _dedupe_keep_order(out)
+
+
+def _parse_ueu_cases(raw_csv):
+    if raw_csv is None:
+        return []
+
+    out = []
+    for token in str(raw_csv).split(","):
+        value = token.strip()
+        if not value:
+            continue
+        if ":" in value:
+            value = value.split(":", 1)[0].strip()
+        if value:
+            out.append(value)
+    return _dedupe_keep_order(out)
+
+
+def _parse_refurbishments(raw_csv):
+    if raw_csv is None:
+        return []
+    values = [x.strip() for x in str(raw_csv).split(",") if x.strip()]
+    return _dedupe_keep_order(values)
+
+
 def _discover_available_k_values(base_path, cluster_name, building_type=None):
     cluster_root = os.path.join(base_path, cluster_name)
     if not os.path.isdir(cluster_root):
@@ -1006,7 +1060,7 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value):
     aggregation1.createTypicalPeriods()
     cluster_occurence = aggregation1.clusterPeriodNoOccur
     data = aggregation1.typicalPeriods
-    t1_agg = pd.date_range("2025-01-01", periods=typical_periods * hours_per_period, freq="H")
+    t1_agg = pd.date_range("2025-01-01", periods=typical_periods * hours_per_period, freq="h")
 
     final_results_ref, co2_ref, time = run_model(
         None,
@@ -1196,54 +1250,136 @@ def run_cluster_refurbish_co2_parallel(
         _CO2_WORKER_CONTEXT.clear()
 
 
-import multiprocessing
-'''
-first_cluster
-ueu = "processed_bds_in_DENI03403000SEC5658"
-building_in_cluster = [
-    "DENILD1100004rD3",
-    "DENILD1100004rNW",
-    "DENILD1100004tAY",
-    "DENILD1100004vpn",
-    "DENILD1100004qZL",
-    "DENILD1100004s6k",#mfh
-    "DENILD1100004vNp",#mfh
-    "DENILD1100004rSr",#mfh
-    "DENILD1100004slM"#mfh
-]
-'''#
-
-refurbishment = [
+DEFAULT_REFURBISHMENT = [
     "no_refurbishment",
     "usual_refurbishment",
     "advanced_refurbishment",
-    "GEG_standard"
+    "GEG_standard",
 ]
-cluster_list = ["processed_bds_in_DENI03403000SEC5658","processed_bds_in_DENI03403000SEC4580","processed_bds_in_DENI03403000SEC5101"]
-cluster_list = ["processed_bds_in_DENI03403000SEC5658"]
-k_values_to_optimize_sfh = ["reference",1,2,4,6,8,10,14,18]
-k_values_to_optimize_mfh = ["reference",1,2,3,4,5,6]
+DEFAULT_CLUSTER_LIST = [
+    "processed_bds_in_DENI03403000SEC5658",
+]
+DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference", 1, 2, 4, 6, 8, 10, 14, 18]
+DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference", 1, 2, 3, 4, 5, 6]
 
-# Manuell und uebersichtlich: (batch_name, sfh_k_values, mfh_k_values)
-k_value_batches = [
+# Legacy batches (alter Ablauf):
+# (batch_name, sfh_k_values, mfh_k_values)
+LEGACY_K_VALUE_BATCHES = [
     ("reference_only", ["reference"], ["reference"]),
-    ("1", [1, 2, 4, 6,8], [1, 2, 3,4]),
+    ("1", [1, 2, 4, 6, 8], [1, 2, 3, 4]),
     ("2", [10, 14], [5]),
     ("3", [18], [6]),
 ]
 
-if __name__ == "__main__":
-    processes = max(1, multiprocessing.cpu_count() // 2)
-    print(f"processes={processes}")
+refurbishment = list(DEFAULT_REFURBISHMENT)
+
+
+def _run_legacy_batches(cluster_list, workers):
+    print(f"run_mode=legacy_batches workers={workers} clusters={cluster_list}")
     for cluster_name in cluster_list:
-        for idx, (batch_name, sfh_batch, mfh_batch) in enumerate(k_value_batches, start=1):
+        for idx, (batch_name, sfh_batch, mfh_batch) in enumerate(LEGACY_K_VALUE_BATCHES, start=1):
             print(
-                f"cluster={cluster_name} | batch={idx}/{len(k_value_batches)} ({batch_name}) "
+                f"cluster={cluster_name} | batch={idx}/{len(LEGACY_K_VALUE_BATCHES)} ({batch_name}) "
                 f"| sfh={sfh_batch} | mfh={mfh_batch}"
             )
             run_cluster_refurbish_co2_parallel(
                 cluster_name,
-                processes=processes,
+                processes=workers,
                 selected_k_values_sfh=sfh_batch,
                 selected_k_values_mfh=mfh_batch,
             )
+
+
+def _run_cli_mode(args, workers):
+    cluster_list = _parse_ueu_cases(args.ueu_cases)
+    sfh_requested = _parse_k_values(args.sfh_k)
+    mfh_requested = _parse_k_values(args.mfh_k)
+    selected_refurbishments = _parse_refurbishments(args.refurbishments)
+
+    if not cluster_list:
+        raise ValueError("No UEU cases provided via --ueu-cases.")
+    if not sfh_requested and not mfh_requested:
+        raise ValueError("Both --sfh-k and --mfh-k are empty.")
+    if not selected_refurbishments:
+        raise ValueError("No refurbishments provided via --refurbishments.")
+
+    global refurbishment
+    refurbishment = selected_refurbishments
+
+    print(
+        f"host={args.host_name} run_mode=cli clusters={cluster_list} workers={workers} "
+        f"solver_threads={SOLVER_THREADS} sfh_k={sfh_requested} mfh_k={mfh_requested} "
+        f"refurbishments={refurbishment}"
+    )
+
+    for cluster_name in cluster_list:
+        print(f"cluster={cluster_name} start")
+        run_cluster_refurbish_co2_parallel(
+            cluster_name,
+            processes=workers,
+            selected_k_values_sfh=sfh_requested,
+            selected_k_values_mfh=mfh_requested,
+        )
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run decentralized optimization with host-specific settings.")
+    parser.add_argument("--host-name", type=str, default="unknown")
+    parser.add_argument("--run-mode", type=str, default="cli", choices=["cli", "legacy_batches"])
+    parser.add_argument(
+        "--workers",
+        type=str,
+        default="auto",
+        help="Parallel worker processes. Use an integer, or False/auto for automatic sizing.",
+    )
+    parser.add_argument("--serial", action="store_true", help="Run selected jobs sequentially.")
+    parser.add_argument("--solver-threads", type=int, default=DEFAULT_SOLVER_THREADS, help="Solver threads per job.")
+    parser.add_argument(
+        "--sfh-k",
+        type=str,
+        default=",".join(str(x) for x in DEFAULT_K_VALUES_TO_OPTIMIZE_SFH),
+        help="Comma-separated SFH k values, e.g. reference,1,2,4",
+    )
+    parser.add_argument(
+        "--mfh-k",
+        type=str,
+        default=",".join(str(x) for x in DEFAULT_K_VALUES_TO_OPTIMIZE_MFH),
+        help="Comma-separated MFH k values, e.g. reference,1,2,3",
+    )
+    parser.add_argument(
+        "--ueu-cases",
+        type=str,
+        default=",".join(DEFAULT_CLUSTER_LIST),
+        help="Comma-separated UEU names. Optional ':value' suffix is accepted and ignored.",
+    )
+    parser.add_argument(
+        "--refurbishments",
+        type=str,
+        default=",".join(DEFAULT_REFURBISHMENT),
+        help="Comma-separated refurbishment cases.",
+    )
+    args = parser.parse_args()
+
+    if args.solver_threads <= 0:
+        raise ValueError("--solver-threads must be > 0")
+
+    SOLVER_THREADS = args.solver_threads
+    workers_raw = str(args.workers).strip().lower()
+    if workers_raw in {"false", "auto", "none"}:
+        n_cores = os.cpu_count() or 1
+        workers = max(1, n_cores // SOLVER_THREADS)
+    else:
+        try:
+            workers = int(args.workers)
+        except ValueError as exc:
+            raise ValueError("--workers must be an integer or one of: False, auto, none") from exc
+        if workers <= 0:
+            raise ValueError("--workers must be > 0, or use False/auto for automatic sizing")
+    if args.serial:
+        workers = 1
+    workers = max(1, workers)
+
+    if args.run_mode == "legacy_batches":
+        _run_legacy_batches(_parse_ueu_cases(args.ueu_cases), workers)
+    else:
+        _run_cli_mode(args, workers)
