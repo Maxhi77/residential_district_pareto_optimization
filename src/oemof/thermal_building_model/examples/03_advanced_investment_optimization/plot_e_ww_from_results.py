@@ -654,7 +654,7 @@ def plot_ueu_cumulative_over_year_3modes(
     # Time axis (hourly) + strict x-limits
     # -----------------------------
     start = pd.Timestamp(f"{year}-01-01 00:00:00")
-    time_index = pd.date_range(start=start, periods=series_len, freq="H")
+    time_index = pd.date_range(start=start, periods=series_len, freq="h")
 
     # strict end for xlim (last timestamp in data)
     x_min = time_index[0]

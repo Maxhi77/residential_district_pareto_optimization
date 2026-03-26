@@ -207,7 +207,6 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
         air_heat_pump_bus = air_heat_pump_dataclass.get_bus()
         air_heat_pump= air_heat_pump_dataclass.create_source()
-        new_key = int((80 + heat_grid_temperature) / 2)
         air_heat_pump_converters= air_heat_pump_dataclass.create_converters(heat_pump_bus = air_heat_pump_bus,
                                                                          electricity_bus = electricity_carrier_bus,
                                                                          heat_carrier_bus= heat_carrier_bus)
@@ -343,8 +342,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         components[building_id]={}
         buildings_in_cluster =row['buildings_in_cluster']
         building_dataclass = copy.deepcopy(data_classes_comp.loc["building", building_id])
-
-        temp_heating_demand_building = building_dataclass.level_heating_demand
+        building_dataclass.level_heating_demand = heat_grid_temperature
         heat_carrier_temperature_levels_building = [50, heat_grid_temperature]
         heat_carrier_dataclass_building = HeatCarrier(name="h_carrier_" + str(building_id),
                                              levels=heat_carrier_temperature_levels_building)
@@ -629,7 +627,7 @@ def check_possible_buildings_for_heat_grid_temp(building_row, building_type, epw
         year_of_construction = year_map.get(tabula_year_class, 2000)  # fallback
 
         buildung_dict={}
-
+        flow_temperature_arriving_at_building = heat_grid_temperature - 10
         for refurbishment in ["no_refurbishment","usual_refurbishment","advanced_refurbishment","GEG_standard"]:
             building_in_loop = ThermalBuilding(
                 name=f"building_{building_id}",
@@ -644,13 +642,13 @@ def check_possible_buildings_for_heat_grid_temp(building_row, building_type, epw
                 heat_level_calculation=True,
                 time_index=time_index,
             )
-            if building_in_loop.level_heating_demand < heat_grid_temperature:
-                building_in_loop.level_heating_demand = heat_grid_temperature
+            if building_in_loop.level_heating_demand < flow_temperature_arriving_at_building:
+                building_in_loop.level_heating_demand = flow_temperature_arriving_at_building
             buildung_dict[refurbishment] = building_in_loop
         matching_buildings = {key: value for key, value in buildung_dict.items() if
-                              value.level_heating_demand <= heat_grid_temperature}
+                              value.level_heating_demand <= flow_temperature_arriving_at_building}
 
-        if len(matching_buildings) == 0 and heat_grid_temperature ==40:
+        if len(matching_buildings) == 0 and flow_temperature_arriving_at_building ==40:
             buildung_dict = {}
             building = ThermalBuilding(
                     name=f"building_{building_id}",
@@ -937,7 +935,7 @@ def run_main(heat_grid_temperature,ueu,heat_grid_length):
             cluster_occurence=aggregation1.clusterPeriodNoOccur
             data = aggregation1.typicalPeriods
             t1_agg = pd.date_range(
-                "2025-01-01", periods=typical_periods * hours_per_period, freq="H"
+                "2025-01-01", periods=typical_periods * hours_per_period, freq="h"
             )
             if False:
                 for index, row in combined_cluster.iterrows():
@@ -1174,7 +1172,7 @@ def run_main(heat_grid_temperature,ueu,heat_grid_length):
             with open(file_path, "wb") as f:
                 pickle.dump(existing_results, f)
 
-heat_grid_supply_temperatures = [40, 50, 60, 70]
+heat_grid_supply_temperatures = [50, 60, 70, 80]
 SOLVER_THREADS = 3
 
 import multiprocessing as mp
