@@ -647,7 +647,7 @@ def run_main(refurbish,buildings_connected):
         aggregation1.createTypicalPeriods()
         data = aggregation1.typicalPeriods
         t1_agg = pd.date_range(
-            "2025-01-01", periods=typical_periods * hours_per_period, freq="H"
+            "2025-01-01", periods=typical_periods * hours_per_period, freq="h"
         )
 
 

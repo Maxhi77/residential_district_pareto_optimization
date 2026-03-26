@@ -740,7 +740,7 @@ def run_main(heat_grid_temperature):
         cluster_occurence=aggregation1.clusterPeriodNoOccur
         data = aggregation1.typicalPeriods
         t1_agg = pd.date_range(
-            "2025-01-01", periods=typical_periods * hours_per_period, freq="H"
+            "2025-01-01", periods=typical_periods * hours_per_period, freq="h"
         )
         if False:
             for index, row in combined_cluster.iterrows():

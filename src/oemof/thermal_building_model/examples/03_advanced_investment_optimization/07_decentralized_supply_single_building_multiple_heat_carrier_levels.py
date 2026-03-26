@@ -747,7 +747,7 @@ def run_main(refurbish,building_id_in_cluster,ueu):
         cluster_occurence=aggregation1.clusterPeriodNoOccur
         data = aggregation1.typicalPeriods
         t1_agg = pd.date_range(
-            "2025-01-01", periods=typical_periods * hours_per_period, freq="H"
+            "2025-01-01", periods=typical_periods * hours_per_period, freq="h"
         )
 
 
