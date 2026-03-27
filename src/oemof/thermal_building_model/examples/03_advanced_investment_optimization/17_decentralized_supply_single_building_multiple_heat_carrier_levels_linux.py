@@ -44,7 +44,7 @@ def _set_co2_worker_context(context):
 #  create solver
 def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster, building_id_in_cluster,cluster_occurence,heat_demand_worst_case):
 
-    solver = "gurobi"
+    solver = "scip"
     es = solph.EnergySystem(
         timeindex=t1_agg,
         timeincrement=[1] * len(t1_agg),
@@ -567,7 +567,10 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         final_results["co2_investment"] = co2_investment
         final_results["totex"] = meta_results["objective"]
         final_results["totex_oemof_model"] = meta_results["objective"]
-        return final_results, co2_oemof_model, meta_results["solver"]["Wall time"]
+        if solver=="scip":
+            return final_results, co2_oemof_model, None
+        else:
+            return final_results, co2_oemof_model, meta_results["solver"]["Wall time"]
 
     except Exception as e:
         print(e)
