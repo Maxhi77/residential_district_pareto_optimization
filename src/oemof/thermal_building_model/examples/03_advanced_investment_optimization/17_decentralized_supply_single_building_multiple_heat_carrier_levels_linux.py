@@ -35,6 +35,8 @@ import pandas as pd
 import multiprocessing
 
 _CO2_WORKER_CONTEXT = {}
+DEFAULT_SOLVER = "gurobi"
+SOLVER = DEFAULT_SOLVER
 DEFAULT_SOLVER_THREADS = 1
 SOLVER_THREADS = DEFAULT_SOLVER_THREADS
 
@@ -43,8 +45,6 @@ def _set_co2_worker_context(context):
     _CO2_WORKER_CONTEXT = context
 #  create solver
 def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster, building_id_in_cluster,cluster_occurence,heat_demand_worst_case):
-
-    solver = "scip"
     es = solph.EnergySystem(
         timeindex=t1_agg,
         timeincrement=[1] * len(t1_agg),
@@ -462,7 +462,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
     try:
 
 
-        model.solve(solver=solver, solve_kwargs={"tee": True},
+        model.solve(solver=SOLVER, solve_kwargs={"tee": True},
                                               cmdline_options={"mipgap": 0.005,
                                                                "threads": SOLVER_THREADS},
         )
@@ -567,7 +567,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         final_results["co2_investment"] = co2_investment
         final_results["totex"] = meta_results["objective"]
         final_results["totex_oemof_model"] = meta_results["objective"]
-        if solver=="scip":
+        if SOLVER == "scip":
             return final_results, co2_oemof_model, None
         else:
             return final_results, co2_oemof_model, meta_results["solver"]["Wall time"]
@@ -1262,16 +1262,16 @@ DEFAULT_REFURBISHMENT = [
 DEFAULT_CLUSTER_LIST = [
     "processed_bds_in_DENI03403000SEC5658",
 ]
-DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference", 1, 2, 4, 6, 8, 10, 14, 18]
-DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference", 1, 2, 3, 4, 5, 6]
+DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = [10, 14, 18]
+DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = [5 ,6]
 
 # Legacy batches (alter Ablauf):
 # (batch_name, sfh_k_values, mfh_k_values)
 LEGACY_K_VALUE_BATCHES = [
-    ("reference_only", ["reference"], ["reference"]),
-    ("1", [1, 2, 4, 6, 8], [1, 2, 3, 4]),
-    ("2", [10, 14], [5]),
-    ("3", [18], [6]),
+    #("reference_only", ["reference"], ["reference"]),
+    #("1", [1, 2, 4, 6, 8], [1, 2, 3, 4]),
+    #("2", [10, 14, 18], [5 ,6]),
+    #("3", [18], [6]),
 ]
 
 refurbishment = list(DEFAULT_REFURBISHMENT)
@@ -1336,6 +1336,7 @@ if __name__ == "__main__":
         help="Parallel worker processes. Use an integer, or False/auto for automatic sizing.",
     )
     parser.add_argument("--serial", action="store_true", help="Run selected jobs sequentially.")
+    parser.add_argument("--solver", type=str, default=DEFAULT_SOLVER, help="Solver backend, e.g. scip, gurobi, cbc.")
     parser.add_argument("--solver-threads", type=int, default=DEFAULT_SOLVER_THREADS, help="Solver threads per job.")
     parser.add_argument(
         "--sfh-k",
@@ -1363,6 +1364,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    if not str(args.solver).strip():
+        raise ValueError("--solver must not be empty")
+    SOLVER = str(args.solver).strip()
+
     if args.solver_threads <= 0:
         raise ValueError("--solver-threads must be > 0")
 
@@ -1370,7 +1375,7 @@ if __name__ == "__main__":
     workers_raw = str(args.workers).strip().lower()
     if workers_raw in {"false", "auto", "none"}:
         n_cores = os.cpu_count() or 1
-        workers = max(1, n_cores // SOLVER_THREADS)
+        workers = max(1, n_cores // 2)
     else:
         try:
             workers = int(args.workers)
