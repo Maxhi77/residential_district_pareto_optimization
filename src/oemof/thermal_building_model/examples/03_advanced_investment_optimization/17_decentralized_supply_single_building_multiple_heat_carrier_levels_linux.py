@@ -33,12 +33,17 @@ import tsam.timeseriesaggregation as tsam
 
 import pandas as pd
 import multiprocessing
+from urllib.parse import urlparse
 
 _CO2_WORKER_CONTEXT = {}
-DEFAULT_SOLVER = "gurobi"
+DEFAULT_SOLVER = "scip"
 SOLVER = DEFAULT_SOLVER
 DEFAULT_SOLVER_THREADS = 1
 SOLVER_THREADS = DEFAULT_SOLVER_THREADS
+RESULT_STORAGE_ROOT = None
+RESULT_CHECK_ROOT = None
+DEFAULT_CO2_REDUCTION_FACTORS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
+DEFAULT_PEAK_REDUCTION_FACTORS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 
 def _set_co2_worker_context(context):
     global _CO2_WORKER_CONTEXT
@@ -772,6 +777,14 @@ def run_co2_factor_worker(args):
     co2_reference = context["co2_reference"]
     file_path_base = context["file_path_base"]
     simple_file_path_base = context["simple_file_path_base"]
+    worker_file_path, worker_simple_file_path = _get_worker_result_paths(
+        file_path_base,
+        simple_file_path_base,
+        co2_reduction_factor,
+    )
+
+    if os.path.exists(worker_file_path) and os.path.exists(worker_simple_file_path):
+        return group_key, worker_file_path, worker_simple_file_path
 
     ref = "co2"
     co2_new = compute_co2_target(co2_reference, co2_reduction_factor)
@@ -822,9 +835,6 @@ def run_co2_factor_worker(args):
             first_co2_run_in_peak_loop = False
             peak_reference = full_entry["peak"]
 
-    co2_suffix = _co2_factor_to_suffix(co2_reduction_factor)
-    worker_file_path = file_path_base + "_co2_" + co2_suffix + ".pkl"
-    worker_simple_file_path = simple_file_path_base + "_co2_" + co2_suffix + ".pkl"
     _atomic_pickle_dump(worker_file_path, worker_results)
     _atomic_pickle_dump(worker_simple_file_path, worker_simple_results)
 
@@ -907,6 +917,91 @@ def _parse_refurbishments(raw_csv):
     return _dedupe_keep_order(values)
 
 
+def _script_base_path():
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _normalize_result_root(raw_value, base_path):
+    if raw_value is None:
+        return None
+
+    value = str(raw_value).strip()
+    if not value or value.lower() in {"none", "default"}:
+        return None
+
+    # Keep local Windows paths (e.g. C:\data) untouched.
+    if len(value) >= 2 and value[1] == ":":
+        normalized = value
+    else:
+        parsed = urlparse(value)
+        if parsed.scheme and parsed.scheme != "file":
+            if not parsed.path:
+                raise ValueError(f"Invalid storage/check URL without path: {value}")
+            normalized = parsed.path
+        elif parsed.scheme == "file":
+            normalized = parsed.path
+        else:
+            normalized = value
+
+    if not os.path.isabs(normalized):
+        normalized = os.path.abspath(os.path.join(base_path, normalized))
+
+    return os.path.normpath(normalized)
+
+
+def _get_result_storage_root():
+    return RESULT_STORAGE_ROOT if RESULT_STORAGE_ROOT else _script_base_path()
+
+
+def _get_result_check_root():
+    if RESULT_CHECK_ROOT:
+        return RESULT_CHECK_ROOT
+    return _get_result_storage_root()
+
+
+def _get_result_output_dir(root_path, cluster_name, k_value, building_type):
+    cluster_root = os.path.join(root_path, cluster_name)
+    if _is_reference_k(k_value):
+        return os.path.join(cluster_root, "reference")
+
+    k_token = f"k{int(k_value):02d}"
+    if building_type == "SFH":
+        return os.path.join(cluster_root, f"sfh_cluster_{k_token}")
+    if building_type == "MFH":
+        return os.path.join(cluster_root, f"mfh_cluster_{k_token}")
+    raise ValueError(f"Unsupported building_type '{building_type}'")
+
+
+def _get_result_file_bases(root_path, cluster_name, k_value, building_type, refurbish, ev, building_id_in_cluster):
+    output_dir = _get_result_output_dir(root_path, cluster_name, k_value, building_type)
+    base_filename = "results_dec_" + str(refurbish) + "_" + str(ev) + "_" + str(building_id_in_cluster)
+    simple_base_filename = (
+        "simple_results_dec_" + str(refurbish) + "_" + str(ev) + "_" + str(building_id_in_cluster)
+    )
+    return os.path.join(output_dir, base_filename), os.path.join(output_dir, simple_base_filename)
+
+
+def _get_worker_result_paths(file_path_base, simple_file_path_base, co2_reduction_factor):
+    suffix = _co2_factor_to_suffix(co2_reduction_factor)
+    return (
+        file_path_base + "_co2_" + suffix + ".pkl",
+        simple_file_path_base + "_co2_" + suffix + ".pkl",
+    )
+
+
+def _missing_co2_factors(file_path_base, simple_file_path_base, co2_reduction_factors):
+    missing = []
+    for co2_reduction_factor in co2_reduction_factors:
+        worker_file_path, worker_simple_file_path = _get_worker_result_paths(
+            file_path_base,
+            simple_file_path_base,
+            co2_reduction_factor,
+        )
+        if not (os.path.exists(worker_file_path) and os.path.exists(worker_simple_file_path)):
+            missing.append(co2_reduction_factor)
+    return missing
+
+
 def _discover_available_k_values(base_path, cluster_name, building_type=None):
     cluster_root = os.path.join(base_path, cluster_name)
     if not os.path.isdir(cluster_root):
@@ -962,12 +1057,13 @@ def _collect_building_ids_for_k(base_path, cluster_name, k_value, building_type=
     return list(dict.fromkeys(building_in_cluster))
 
 
-def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value):
-    base_path = os.path.dirname(os.path.abspath(__file__))
+def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value, building_type=None):
+    base_path = _script_base_path()
     directory_path = os.path.join(base_path, ueu)
+    result_storage_root = _get_result_storage_root()
 
     number_of_time_steps = 8760
-    sfh_cluster, mfh_cluster, sfh_dir, mfh_dir = _load_clusters_for_k(base_path, ueu, k_value)
+    sfh_cluster, mfh_cluster, _, _ = _load_clusters_for_k(base_path, ueu, k_value)
     if sfh_cluster.empty and mfh_cluster.empty:
         raise ValueError(f"No cluster files found for cluster='{ueu}', k={k_value}.")
 
@@ -982,15 +1078,27 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value):
             f"building_id '{building_id_in_cluster}' not found in k={k_value} for cluster '{ueu}'."
         )
 
-    output_dir = sfh_dir if is_sfh else mfh_dir
-    os.makedirs(output_dir, exist_ok=True)
-    # Keep filenames short for Windows path-length limits; UEU/k are already encoded in folder path.
-    base_filename = "results_dec_" + str(refurbish) + "_" + str(ev) + "_" + str(building_id_in_cluster)
-    file_path = os.path.join(output_dir, base_filename + ".pkl")
-    simple_file_path = os.path.join(
-        output_dir,
-        "simple_results_dec_" + str(refurbish) + "_" + str(ev) + "_" + str(building_id_in_cluster) + ".pkl",
+    if building_type == "SFH" and not is_sfh:
+        raise ValueError(
+            f"building_id '{building_id_in_cluster}' is not SFH in k={k_value} for cluster '{ueu}'."
+        )
+    if building_type == "MFH" and not is_mfh:
+        raise ValueError(
+            f"building_id '{building_id_in_cluster}' is not MFH in k={k_value} for cluster '{ueu}'."
+        )
+    output_building_type = building_type if building_type in {"SFH", "MFH"} else ("SFH" if is_sfh else "MFH")
+
+    file_path_base, simple_file_path_base = _get_result_file_bases(
+        result_storage_root,
+        ueu,
+        k_value,
+        output_building_type,
+        refurbish,
+        "no_EV",
+        building_id_in_cluster,
     )
+    output_dir = os.path.dirname(file_path_base)
+    os.makedirs(output_dir, exist_ok=True)
 
     main_path = get_project_root()
     data = pd.DataFrame()
@@ -1097,8 +1205,8 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value):
             co2_reduction_factors = list(dict.fromkeys(co2_reduction_factors))
     #peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 
-    co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
-    peak_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+    co2_reduction_factors = list(DEFAULT_CO2_REDUCTION_FACTORS)
+    peak_reduction_factors = list(DEFAULT_PEAK_REDUCTION_FACTORS)
 
     worker_context = {
         "data": data,
@@ -1112,8 +1220,8 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value):
         "refurbish": refurbish,
         "peak_reduction_factors": peak_reduction_factors,
         "co2_reference": co2_ref,
-        "file_path_base": os.path.splitext(file_path)[0],
-        "simple_file_path_base": os.path.splitext(simple_file_path)[0],
+        "file_path_base": file_path_base,
+        "simple_file_path_base": simple_file_path_base,
     }
 
     return {
@@ -1121,8 +1229,8 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value):
         "worker_context": worker_context,
     }
 
-def run_main(refurbish, building_id_in_cluster, ueu, k_value):
-    prepared = _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value)
+def run_main(refurbish, building_id_in_cluster, ueu, k_value, building_type=None):
+    prepared = _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value, building_type=building_type)
 
     group_key = (ueu, _normalize_k_for_key(k_value), building_id_in_cluster, refurbish)
     _set_co2_worker_context({group_key: prepared["worker_context"]})
@@ -1137,7 +1245,8 @@ def run_cluster_refurbish_co2_parallel(
     selected_k_values_sfh=None,
     selected_k_values_mfh=None,
 ):
-    base_path = os.path.dirname(os.path.abspath(__file__))
+    base_path = _script_base_path()
+    result_check_root = _get_result_check_root()
 
     # Backward compatibility: one list for both SFH/MFH
     if selected_k_values is not None:
@@ -1213,8 +1322,35 @@ def run_cluster_refurbish_co2_parallel(
             )
             for refurbish in refurbishment:
                 for building_id_in_cluster in building_in_cluster:
+                    check_file_path_base, check_simple_file_path_base = _get_result_file_bases(
+                        result_check_root,
+                        cluster_name,
+                        k_value,
+                        building_type,
+                        refurbish,
+                        "no_EV",
+                        building_id_in_cluster,
+                    )
+                    missing_factors = _missing_co2_factors(
+                        check_file_path_base,
+                        check_simple_file_path_base,
+                        DEFAULT_CO2_REDUCTION_FACTORS,
+                    )
+                    if not missing_factors:
+                        print(
+                            f"skip existing: {cluster_name} | {building_type} | k={_format_k_for_log(k_value)} | "
+                            f"{building_id_in_cluster} | {refurbish}"
+                        )
+                        continue
+
                     try:
-                        prepared = _prepare_group_context(refurbish, building_id_in_cluster, cluster_name, k_value)
+                        prepared = _prepare_group_context(
+                            refurbish,
+                            building_id_in_cluster,
+                            cluster_name,
+                            k_value,
+                            building_type=building_type,
+                        )
                     except Exception as exc:
                         print(
                             f"skip failed prepare: {cluster_name} | {building_type} | k={_format_k_for_log(k_value)} | {building_id_in_cluster} | {refurbish} | {exc}"
@@ -1229,8 +1365,18 @@ def run_cluster_refurbish_co2_parallel(
                         refurbish,
                     )
                     group_contexts[group_key] = prepared["worker_context"]
+                    missing_set = set(missing_factors)
+                    pending_factors = [
+                        factor for factor in prepared["co2_reduction_factors"] if factor in missing_set
+                    ]
+                    if not pending_factors:
+                        print(
+                            f"skip existing after-prepare: {cluster_name} | {building_type} | "
+                            f"k={_format_k_for_log(k_value)} | {building_id_in_cluster} | {refurbish}"
+                        )
+                        continue
 
-                    for co2_reduction_factor in prepared["co2_reduction_factors"]:
+                    for co2_reduction_factor in pending_factors:
                         task_list.append((group_key, co2_reduction_factor))
     if not task_list:
         print(f"No runnable tasks for cluster {cluster_name}")
@@ -1262,8 +1408,8 @@ DEFAULT_REFURBISHMENT = [
 DEFAULT_CLUSTER_LIST = [
     "processed_bds_in_DENI03403000SEC5658",
 ]
-DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = [10, 14, 18]
-DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = [5 ,6]
+DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference", 1, 2, 4, 6, 8, 10, 14, 18]
+DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference", 1, 2, 3, 4, 5, 6]
 
 # Legacy batches (alter Ablauf):
 # (batch_name, sfh_k_values, mfh_k_values)
@@ -1278,7 +1424,13 @@ refurbishment = list(DEFAULT_REFURBISHMENT)
 
 
 def _run_legacy_batches(cluster_list, workers):
-    print(f"run_mode=legacy_batches workers={workers} clusters={cluster_list}")
+    print(
+        f"run_mode=legacy_batches workers={workers} clusters={cluster_list} "
+        f"result_check_root={_get_result_check_root()} result_storage_root={_get_result_storage_root()}"
+    )
+    if not LEGACY_K_VALUE_BATCHES:
+        print("No LEGACY_K_VALUE_BATCHES configured. Nothing to run in legacy_batches mode.")
+        return
     for cluster_name in cluster_list:
         for idx, (batch_name, sfh_batch, mfh_batch) in enumerate(LEGACY_K_VALUE_BATCHES, start=1):
             print(
@@ -1312,7 +1464,8 @@ def _run_cli_mode(args, workers):
     print(
         f"host={args.host_name} run_mode=cli clusters={cluster_list} workers={workers} "
         f"solver_threads={SOLVER_THREADS} sfh_k={sfh_requested} mfh_k={mfh_requested} "
-        f"refurbishments={refurbishment}"
+        f"refurbishments={refurbishment} result_check_root={_get_result_check_root()} "
+        f"result_storage_root={_get_result_storage_root()}"
     )
 
     for cluster_name in cluster_list:
@@ -1339,6 +1492,18 @@ if __name__ == "__main__":
     parser.add_argument("--solver", type=str, default=DEFAULT_SOLVER, help="Solver backend, e.g. scip, gurobi, cbc.")
     parser.add_argument("--solver-threads", type=int, default=DEFAULT_SOLVER_THREADS, help="Solver threads per job.")
     parser.add_argument(
+        "--result-check-root",
+        type=str,
+        default=None,
+        help="Root path used to check whether result files already exist. Supports ftp://... URL by using its path part.",
+    )
+    parser.add_argument(
+        "--result-storage-root",
+        type=str,
+        default=None,
+        help="Root path where new result files are written. Supports ftp://... URL by using its path part.",
+    )
+    parser.add_argument(
         "--sfh-k",
         type=str,
         default=",".join(str(x) for x in DEFAULT_K_VALUES_TO_OPTIMIZE_SFH),
@@ -1363,6 +1528,12 @@ if __name__ == "__main__":
         help="Comma-separated refurbishment cases.",
     )
     args = parser.parse_args()
+
+    script_base = _script_base_path()
+    RESULT_STORAGE_ROOT = _normalize_result_root(args.result_storage_root, script_base)
+    RESULT_CHECK_ROOT = _normalize_result_root(args.result_check_root, script_base)
+    if RESULT_STORAGE_ROOT:
+        os.makedirs(RESULT_STORAGE_ROOT, exist_ok=True)
 
     if not str(args.solver).strip():
         raise ValueError("--solver must not be empty")
