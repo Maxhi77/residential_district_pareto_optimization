@@ -20,8 +20,8 @@ REFURBISHMENT_STRATEGIES = [
 ]
 OPTIMIZATION_STRATEGIES = ["co2"]
 
-DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference", 1, 2, 4, 6, 8, 10, 14, 18]
-DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference", 1, 2, 3, 4, 5, 6]
+DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = [ 1, 2, 4, 6, 8, 10, 14, 18]
+DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = [ 1, 2, 3, 4, 5, 6]
 
 TODAY_DATE = date.today().strftime("%Y_%m_%d")
 OUTPUT_ROOT_NAME = f"post_processed_dec_k_combinations_{TODAY_DATE}"
@@ -355,6 +355,7 @@ def run_all_combinations() -> None:
                     refurbishment_strategies=REFURBISHMENT_STRATEGIES,
                     optimization_strategies=OPTIMIZATION_STRATEGIES,
                 )
+                print("building dict loaded for: SFH: "+str(sfh_k)+ " MFH: "+str(mfh_k))
             except Exception as exc:
                 print(f"skip {combo}: {exc}")
                 summary_rows.append(
@@ -384,7 +385,7 @@ def run_all_combinations() -> None:
                     }
                 )
                 continue
-
+            print("start filtering procedure for: SFH: "+str(sfh_k)+ " MFH: "+str(mfh_k))
             filtered_building_dict = {bid: building_dict[bid] for bid in non_empty_buildings}
             per_building_front, combined_front = combine_all_buildings(
                 filtered_building_dict,
@@ -394,7 +395,7 @@ def run_all_combinations() -> None:
                 modes_each=("log", "log", "log"),
                 eps_rel_merge=(0.008, 0.008, 0.008),
                 modes_merge=("log", "log", "log"),
-                max_points_after_each_merge=1000,
+                max_points_after_each_merge=500,
             )
 
             combo_output_dir = output_root / combo
