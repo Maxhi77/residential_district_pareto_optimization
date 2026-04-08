@@ -1,7 +1,10 @@
+import argparse
+import multiprocessing
+import os
 import pickle
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import geopandas as gpd
 import numpy as np
@@ -11,20 +14,26 @@ from pareto_optimal_help_functions import combine_all_buildings
 
 
 BASE_DIR = Path(__file__).resolve().parent
-UEU_CASE = "processed_bds_in_DENI03403000SEC5658"
-REFURBISHMENT_STRATEGIES = [
+DEFAULT_UEU_CASE = "processed_bds_in_DENI03403000SEC5658"
+DEFAULT_REFURBISHMENT_STRATEGIES = [
     "no_refurbishment",
     "usual_refurbishment",
     "advanced_refurbishment",
     "GEG_standard",
 ]
-OPTIMIZATION_STRATEGIES = ["co2"]
+DEFAULT_OPTIMIZATION_STRATEGIES = ["co2"]
 
 DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = [ 1, 2, 4, 6, 8, 10, 14, 18]
 DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = [ 1, 2, 3, 4, 5, 6]
 
 TODAY_DATE = date.today().strftime("%Y_%m_%d")
-OUTPUT_ROOT_NAME = f"post_processed_dec_k_combinations_{TODAY_DATE}"
+DEFAULT_OUTPUT_ROOT_NAME = f"post_processed_dec_k_combinations_{TODAY_DATE}"
+
+# Backward-compatible module constants.
+UEU_CASE = DEFAULT_UEU_CASE
+REFURBISHMENT_STRATEGIES = list(DEFAULT_REFURBISHMENT_STRATEGIES)
+OPTIMIZATION_STRATEGIES = list(DEFAULT_OPTIMIZATION_STRATEGIES)
+OUTPUT_ROOT_NAME = DEFAULT_OUTPUT_ROOT_NAME
 
 
 def _is_reference_k(k_value: Any) -> bool:
@@ -39,6 +48,64 @@ def _k_token(k_value: Any) -> str:
 
 def _combo_name(sfh_k: Any, mfh_k: Any) -> str:
     return f"sfh_{_k_token(sfh_k)}_mfh_{_k_token(mfh_k)}"
+
+
+def _format_k_for_log(k_value: Any) -> str:
+    if _is_reference_k(k_value):
+        return "reference"
+    return f"k{int(k_value):02d}"
+
+
+def _dedupe_keep_order(items: Iterable[Any]) -> List[Any]:
+    out = []
+    seen = set()
+    for item in items:
+        marker = item.lower() if isinstance(item, str) else item
+        if marker in seen:
+            continue
+        seen.add(marker)
+        out.append(item)
+    return out
+
+
+def _parse_k_values(raw_csv: Any) -> List[Any]:
+    if raw_csv is None:
+        return []
+
+    out = []
+    for token in str(raw_csv).split(","):
+        value = token.strip()
+        if not value:
+            continue
+        if value.lower() == "reference":
+            out.append("reference")
+        else:
+            out.append(int(value))
+    return _dedupe_keep_order(out)
+
+
+def _parse_csv_values(raw_csv: Any) -> List[str]:
+    if raw_csv is None:
+        return []
+    values = [x.strip() for x in str(raw_csv).split(",") if x.strip()]
+    return _dedupe_keep_order(values)
+
+
+def _resolve_workers(raw_workers: Any, serial: bool = False) -> int:
+    workers_raw = str(raw_workers).strip().lower()
+    if workers_raw in {"false", "auto", "none"}:
+        n_cores = os.cpu_count() or 1
+        workers = max(1, n_cores // 2)
+    else:
+        try:
+            workers = int(raw_workers)
+        except ValueError as exc:
+            raise ValueError("--workers must be an integer or one of: False, auto, none") from exc
+        if workers <= 0:
+            raise ValueError("--workers must be > 0, or use False/auto for automatic sizing")
+    if serial:
+        workers = 1
+    return max(1, workers)
 
 
 def _remove_series(obj: Any) -> Any:
@@ -327,115 +394,289 @@ def _save_combination_outputs(
         pickle.dump(meta, fh, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def run_all_combinations() -> None:
-    cluster_root = BASE_DIR / UEU_CASE
+def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[str], str]) -> Dict[str, Any]:
+    (
+        cluster_root_raw,
+        output_root_raw,
+        sfh_k,
+        mfh_k,
+        refurbishment_strategies,
+        optimization_strategies,
+        ueu_case,
+    ) = task
+    cluster_root = Path(cluster_root_raw)
+    output_root = Path(output_root_raw)
+    combo = _combo_name(sfh_k, mfh_k)
+
+    try:
+        building_dict, stats = _build_decentralized_building_dict_for_combination(
+            cluster_root=cluster_root,
+            sfh_k=sfh_k,
+            mfh_k=mfh_k,
+            refurbishment_strategies=refurbishment_strategies,
+            optimization_strategies=optimization_strategies,
+        )
+    except Exception as exc:
+        return {
+            "combo": combo,
+            "sfh_k": _k_token(sfh_k),
+            "mfh_k": _k_token(mfh_k),
+            "status": "skipped",
+            "reason": str(exc),
+        }
+
+    non_empty_buildings = [
+        bid for bid, data in building_dict.items()
+        if any(bool(data.get(ref, {})) for ref in refurbishment_strategies)
+    ]
+    if not non_empty_buildings:
+        return {
+            "combo": combo,
+            "sfh_k": _k_token(sfh_k),
+            "mfh_k": _k_token(mfh_k),
+            "status": "skipped",
+            "reason": "no result files found",
+        }
+
+    filtered_building_dict = {bid: building_dict[bid] for bid in non_empty_buildings}
+    try:
+        per_building_front, combined_front = combine_all_buildings(
+            filtered_building_dict,
+            refurbishment_strategies=refurbishment_strategies,
+            tau=1e-9,
+            eps_rel_each=(0.002, 0.002, 0.002),
+            modes_each=("log", "log", "log"),
+            eps_rel_merge=(0.008, 0.008, 0.008),
+            modes_merge=("log", "log", "log"),
+            max_points_after_each_merge=2000,
+        )
+    except Exception as exc:
+        return {
+            "combo": combo,
+            "sfh_k": _k_token(sfh_k),
+            "mfh_k": _k_token(mfh_k),
+            "status": "failed",
+            "reason": str(exc),
+        }
+
+    combo_output_dir = output_root / combo
+    meta = {
+        "ueu_case": ueu_case,
+        "sfh_k": sfh_k,
+        "mfh_k": mfh_k,
+        "combo": combo,
+        "stats": stats,
+        "total_buildings": len(filtered_building_dict),
+        "combined_front_size": len(combined_front),
+    }
+    _save_combination_outputs(
+        output_dir=combo_output_dir,
+        building_dict=filtered_building_dict,
+        per_building_front=per_building_front,
+        combined_front=combined_front,
+        meta=meta,
+    )
+    return {
+        "combo": combo,
+        "sfh_k": _k_token(sfh_k),
+        "mfh_k": _k_token(mfh_k),
+        "status": "ok",
+        "buildings": len(filtered_building_dict),
+        "combined_front_size": len(combined_front),
+        "output_dir": str(combo_output_dir),
+    }
+
+
+def _print_row_status(row: Dict[str, Any], index: int, total: int) -> None:
+    status = str(row.get("status", "unknown"))
+    combo = row.get("combo")
+    if status == "ok":
+        print(
+            f"[{index}/{total}] ok {combo}: buildings={row.get('buildings')} "
+            f"combined_front={row.get('combined_front_size')} -> {row.get('output_dir')}"
+        )
+    else:
+        print(f"[{index}/{total}] {status} {combo}: {row.get('reason')}")
+
+
+def run_all_combinations(
+    ueu_case: str = UEU_CASE,
+    sfh_k_values: Optional[Iterable[Any]] = None,
+    mfh_k_values: Optional[Iterable[Any]] = None,
+    refurbishment_strategies: Optional[Iterable[str]] = None,
+    optimization_strategies: Optional[Iterable[str]] = None,
+    workers: int = 1,
+    max_tasks: Optional[int] = None,
+    output_root_name: Optional[str] = None,
+) -> Path:
+    sfh_values = list(sfh_k_values) if sfh_k_values is not None else list(DEFAULT_K_VALUES_TO_OPTIMIZE_SFH)
+    mfh_values = list(mfh_k_values) if mfh_k_values is not None else list(DEFAULT_K_VALUES_TO_OPTIMIZE_MFH)
+    refurbishments = list(refurbishment_strategies) if refurbishment_strategies is not None else list(REFURBISHMENT_STRATEGIES)
+    optimization_modes = (
+        list(optimization_strategies)
+        if optimization_strategies is not None
+        else list(OPTIMIZATION_STRATEGIES)
+    )
+
+    if not sfh_values:
+        raise ValueError("No SFH k values configured.")
+    if not mfh_values:
+        raise ValueError("No MFH k values configured.")
+    if not refurbishments:
+        raise ValueError("No refurbishment strategies configured.")
+    if not optimization_modes:
+        raise ValueError("No optimization strategies configured.")
+    if workers <= 0:
+        raise ValueError("workers must be > 0")
+    if max_tasks is not None and max_tasks <= 0:
+        raise ValueError("max_tasks must be > 0 when provided")
+
+    cluster_root = BASE_DIR / str(ueu_case)
     if not cluster_root.exists():
         raise FileNotFoundError(f"UEU folder not found: {cluster_root}")
 
-    output_root = cluster_root / OUTPUT_ROOT_NAME
+    output_dir_name = str(output_root_name).strip() if output_root_name is not None else ""
+    if not output_dir_name:
+        output_dir_name = DEFAULT_OUTPUT_ROOT_NAME
+    output_root = cluster_root / output_dir_name
     output_root.mkdir(parents=True, exist_ok=True)
 
-    print(f"UEU: {UEU_CASE}")
+    all_combinations = [(sfh_k, mfh_k) for sfh_k in sfh_values for mfh_k in mfh_values]
+    if max_tasks is not None:
+        all_combinations = all_combinations[:max_tasks]
+    if not all_combinations:
+        raise ValueError("No combinations to run after applying max_tasks/filter settings.")
+
+    print(f"UEU: {ueu_case}")
     print(f"Output root: {output_root}")
-    print(f"SFH K list: {DEFAULT_K_VALUES_TO_OPTIMIZE_SFH}")
-    print(f"MFH K list: {DEFAULT_K_VALUES_TO_OPTIMIZE_MFH}")
+    print(f"SFH K list: {sfh_values}")
+    print(f"MFH K list: {mfh_values}")
+    print(f"Refurbishments: {refurbishments}")
+    print(f"Optimization strategies: {optimization_modes}")
+    print(f"Workers: {workers}")
+    print(f"Task count: {len(all_combinations)}")
 
     summary_rows = []
+    tasks = [
+        (
+            str(cluster_root),
+            str(output_root),
+            sfh_k,
+            mfh_k,
+            refurbishments,
+            optimization_modes,
+            str(ueu_case),
+        )
+        for sfh_k, mfh_k in all_combinations
+    ]
 
-    for sfh_k in DEFAULT_K_VALUES_TO_OPTIMIZE_SFH:
-        for mfh_k in DEFAULT_K_VALUES_TO_OPTIMIZE_MFH:
-            combo = _combo_name(sfh_k, mfh_k)
-            print(f"\n--- Processing {combo} ---")
-
-            try:
-                building_dict, stats = _build_decentralized_building_dict_for_combination(
-                    cluster_root=cluster_root,
-                    sfh_k=sfh_k,
-                    mfh_k=mfh_k,
-                    refurbishment_strategies=REFURBISHMENT_STRATEGIES,
-                    optimization_strategies=OPTIMIZATION_STRATEGIES,
-                )
-                print("building dict loaded for: SFH: "+str(sfh_k)+ " MFH: "+str(mfh_k))
-            except Exception as exc:
-                print(f"skip {combo}: {exc}")
-                summary_rows.append(
-                    {
-                        "combo": combo,
-                        "sfh_k": _k_token(sfh_k),
-                        "mfh_k": _k_token(mfh_k),
-                        "status": "skipped",
-                        "reason": str(exc),
-                    }
-                )
-                continue
-
-            non_empty_buildings = [
-                bid for bid, data in building_dict.items()
-                if any(bool(data.get(ref, {})) for ref in REFURBISHMENT_STRATEGIES)
-            ]
-            if not non_empty_buildings:
-                print(f"skip {combo}: no result files found.")
-                summary_rows.append(
-                    {
-                        "combo": combo,
-                        "sfh_k": _k_token(sfh_k),
-                        "mfh_k": _k_token(mfh_k),
-                        "status": "skipped",
-                        "reason": "no result files found",
-                    }
-                )
-                continue
-            print("start filtering procedure for: SFH: "+str(sfh_k)+ " MFH: "+str(mfh_k))
-            filtered_building_dict = {bid: building_dict[bid] for bid in non_empty_buildings}
-            per_building_front, combined_front = combine_all_buildings(
-                filtered_building_dict,
-                refurbishment_strategies=REFURBISHMENT_STRATEGIES,
-                tau=1e-9,
-                eps_rel_each=(0.002, 0.002, 0.002),
-                modes_each=("log", "log", "log"),
-                eps_rel_merge=(0.008, 0.008, 0.008),
-                modes_merge=("log", "log", "log"),
-                max_points_after_each_merge=1500,
-            )
-
-            combo_output_dir = output_root / combo
-            meta = {
-                "ueu_case": UEU_CASE,
-                "sfh_k": sfh_k,
-                "mfh_k": mfh_k,
-                "combo": combo,
-                "stats": stats,
-                "total_buildings": len(filtered_building_dict),
-                "combined_front_size": len(combined_front),
-            }
-            _save_combination_outputs(
-                output_dir=combo_output_dir,
-                building_dict=filtered_building_dict,
-                per_building_front=per_building_front,
-                combined_front=combined_front,
-                meta=meta,
-            )
-            print(
-                f"saved {combo}: buildings={len(filtered_building_dict)} "
-                f"combined_front={len(combined_front)} -> {combo_output_dir}"
-            )
-            summary_rows.append(
-                {
-                    "combo": combo,
-                    "sfh_k": _k_token(sfh_k),
-                    "mfh_k": _k_token(mfh_k),
-                    "status": "ok",
-                    "buildings": len(filtered_building_dict),
-                    "combined_front_size": len(combined_front),
-                    "output_dir": str(combo_output_dir),
-                }
-            )
+    if workers > 1 and len(tasks) > 1:
+        with multiprocessing.Pool(processes=workers) as pool:
+            for index, row in enumerate(pool.imap_unordered(_process_single_combination, tasks), start=1):
+                summary_rows.append(row)
+                _print_row_status(row, index, len(tasks))
+    else:
+        for index, task in enumerate(tasks, start=1):
+            row = _process_single_combination(task)
+            summary_rows.append(row)
+            _print_row_status(row, index, len(tasks))
 
     summary_df = pd.DataFrame(summary_rows)
     summary_csv = output_root / "summary.csv"
     summary_df.to_csv(summary_csv, index=False)
     print(f"\nDone. Summary: {summary_csv}")
+    return summary_csv
+
+
+def _build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Post-process decentralized k-combination results.")
+    parser.add_argument("--host-name", type=str, default="unknown")
+    parser.add_argument(
+        "--workers",
+        type=str,
+        default="auto",
+        help="Parallel worker processes. Use an integer, or False/auto for automatic sizing.",
+    )
+    parser.add_argument("--serial", action="store_true", help="Run selected combinations sequentially.")
+    parser.add_argument(
+        "--max-tasks",
+        type=int,
+        default=None,
+        help="Maximum number of SFH/MFH combination tasks to execute.",
+    )
+    parser.add_argument(
+        "--ueu-case",
+        type=str,
+        default=DEFAULT_UEU_CASE,
+        help="UEU folder name below the example directory.",
+    )
+    parser.add_argument(
+        "--sfh-k",
+        type=str,
+        default=",".join(str(x) for x in DEFAULT_K_VALUES_TO_OPTIMIZE_SFH),
+        help="Comma-separated SFH k values, e.g. reference,1,2,4",
+    )
+    parser.add_argument(
+        "--mfh-k",
+        type=str,
+        default=",".join(str(x) for x in DEFAULT_K_VALUES_TO_OPTIMIZE_MFH),
+        help="Comma-separated MFH k values, e.g. reference,1,2,3",
+    )
+    parser.add_argument(
+        "--refurbishments",
+        type=str,
+        default=",".join(DEFAULT_REFURBISHMENT_STRATEGIES),
+        help="Comma-separated refurbishment cases.",
+    )
+    parser.add_argument(
+        "--optimization-strategies",
+        type=str,
+        default=",".join(DEFAULT_OPTIMIZATION_STRATEGIES),
+        help="Comma-separated optimization strategy keys, e.g. co2",
+    )
+    parser.add_argument(
+        "--output-root-name",
+        type=str,
+        default=None,
+        help="Output folder name below the UEU folder. Defaults to date-based folder.",
+    )
+    return parser
 
 
 if __name__ == "__main__":
-    run_all_combinations()
+    parser = _build_arg_parser()
+    args = parser.parse_args()
+
+    sfh_requested = _parse_k_values(args.sfh_k)
+    mfh_requested = _parse_k_values(args.mfh_k)
+    selected_refurbishments = _parse_csv_values(args.refurbishments)
+    selected_optimization = _parse_csv_values(args.optimization_strategies)
+
+    if not sfh_requested:
+        raise ValueError("No SFH k values provided via --sfh-k.")
+    if not mfh_requested:
+        raise ValueError("No MFH k values provided via --mfh-k.")
+    if not selected_refurbishments:
+        raise ValueError("No refurbishments provided via --refurbishments.")
+    if not selected_optimization:
+        raise ValueError("No optimization strategies provided via --optimization-strategies.")
+
+    workers = _resolve_workers(args.workers, serial=args.serial)
+
+    print(
+        f"host={args.host_name} workers={workers} max_tasks={args.max_tasks} "
+        f"ueu_case={args.ueu_case} sfh_k={[ _format_k_for_log(x) for x in sfh_requested ]} "
+        f"mfh_k={[ _format_k_for_log(x) for x in mfh_requested ]} "
+        f"refurbishments={selected_refurbishments} optimization_strategies={selected_optimization}"
+    )
+
+    run_all_combinations(
+        ueu_case=args.ueu_case,
+        sfh_k_values=sfh_requested,
+        mfh_k_values=mfh_requested,
+        refurbishment_strategies=selected_refurbishments,
+        optimization_strategies=selected_optimization,
+        workers=workers,
+        max_tasks=args.max_tasks,
+        output_root_name=args.output_root_name,
+    )
