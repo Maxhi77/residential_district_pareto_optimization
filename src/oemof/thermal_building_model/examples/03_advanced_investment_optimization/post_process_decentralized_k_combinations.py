@@ -199,6 +199,13 @@ def _scale_payload(value: Any, factor: float) -> Any:
     return value
 
 
+def _resolve_cluster_root(ueu_case: str, base_dir: Path) -> Path:
+    ueu_path = Path(str(ueu_case))
+    if ueu_path.is_absolute():
+        return ueu_path
+    return base_dir / str(ueu_case)
+
+
 def _scale_building_records_to_occurrence(
     recs: Dict[Any, Dict[str, Any]],
     building_id: str,
@@ -507,6 +514,8 @@ def run_all_combinations(
     optimization_strategies: Optional[Iterable[str]] = None,
     workers: int = 1,
     max_tasks: Optional[int] = None,
+    task_offset: int = 0,
+    base_dir: Optional[str] = None,
     output_root_name: Optional[str] = None,
 ) -> Path:
     sfh_values = list(sfh_k_values) if sfh_k_values is not None else list(DEFAULT_K_VALUES_TO_OPTIMIZE_SFH)
@@ -530,10 +539,15 @@ def run_all_combinations(
         raise ValueError("workers must be > 0")
     if max_tasks is not None and max_tasks <= 0:
         raise ValueError("max_tasks must be > 0 when provided")
+    if task_offset < 0:
+        raise ValueError("task_offset must be >= 0")
 
-    cluster_root = BASE_DIR / str(ueu_case)
+    data_base_dir = Path(base_dir).expanduser() if base_dir else BASE_DIR
+    cluster_root = _resolve_cluster_root(str(ueu_case), data_base_dir)
     if not cluster_root.exists():
-        raise FileNotFoundError(f"UEU folder not found: {cluster_root}")
+        raise FileNotFoundError(
+            f"UEU folder not found: {cluster_root} (ueu_case={ueu_case}, base_dir={data_base_dir})"
+        )
 
     output_dir_name = str(output_root_name).strip() if output_root_name is not None else ""
     if not output_dir_name:
@@ -542,18 +556,25 @@ def run_all_combinations(
     output_root.mkdir(parents=True, exist_ok=True)
 
     all_combinations = [(sfh_k, mfh_k) for sfh_k in sfh_values for mfh_k in mfh_values]
+    total_combinations = len(all_combinations)
+    if task_offset > 0:
+        all_combinations = all_combinations[task_offset:]
     if max_tasks is not None:
         all_combinations = all_combinations[:max_tasks]
     if not all_combinations:
-        raise ValueError("No combinations to run after applying max_tasks/filter settings.")
+        raise ValueError("No combinations to run after applying task_offset/max_tasks/filter settings.")
 
     print(f"UEU: {ueu_case}")
+    print(f"Data base dir: {data_base_dir}")
+    print(f"Cluster root: {cluster_root}")
     print(f"Output root: {output_root}")
     print(f"SFH K list: {sfh_values}")
     print(f"MFH K list: {mfh_values}")
     print(f"Refurbishments: {refurbishments}")
     print(f"Optimization strategies: {optimization_modes}")
     print(f"Workers: {workers}")
+    print(f"Task offset: {task_offset}")
+    print(f"Total combos available: {total_combinations}")
     print(f"Task count: {len(all_combinations)}")
 
     summary_rows = []
@@ -605,10 +626,22 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Maximum number of SFH/MFH combination tasks to execute.",
     )
     parser.add_argument(
+        "--task-offset",
+        type=int,
+        default=0,
+        help="Start index in the deterministic SFHxMFH combination list.",
+    )
+    parser.add_argument(
         "--ueu-case",
         type=str,
         default=DEFAULT_UEU_CASE,
         help="UEU folder name below the example directory.",
+    )
+    parser.add_argument(
+        "--base-dir",
+        type=str,
+        default=None,
+        help="Base directory containing UEU folders. Defaults to this script directory.",
     )
     parser.add_argument(
         "--sfh-k",
@@ -664,8 +697,9 @@ if __name__ == "__main__":
     workers = _resolve_workers(args.workers, serial=args.serial)
 
     print(
-        f"host={args.host_name} workers={workers} max_tasks={args.max_tasks} "
-        f"ueu_case={args.ueu_case} sfh_k={[ _format_k_for_log(x) for x in sfh_requested ]} "
+        f"host={args.host_name} workers={workers} task_offset={args.task_offset} max_tasks={args.max_tasks} "
+        f"ueu_case={args.ueu_case} base_dir={args.base_dir or str(BASE_DIR)} "
+        f"sfh_k={[ _format_k_for_log(x) for x in sfh_requested ]} "
         f"mfh_k={[ _format_k_for_log(x) for x in mfh_requested ]} "
         f"refurbishments={selected_refurbishments} optimization_strategies={selected_optimization}"
     )
@@ -678,5 +712,7 @@ if __name__ == "__main__":
         optimization_strategies=selected_optimization,
         workers=workers,
         max_tasks=args.max_tasks,
+        task_offset=args.task_offset,
+        base_dir=args.base_dir,
         output_root_name=args.output_root_name,
     )
