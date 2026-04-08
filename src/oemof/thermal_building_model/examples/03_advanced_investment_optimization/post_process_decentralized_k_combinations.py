@@ -11,7 +11,7 @@ from pareto_optimal_help_functions import combine_all_buildings
 
 
 BASE_DIR = Path(__file__).resolve().parent
-UEU_CASE = "processed_bds_in_DENI03403000SEC5658"
+UEU_CASE = "processed_bds_in_DENI03403000SEC5101"
 REFURBISHMENT_STRATEGIES = [
     "no_refurbishment",
     "usual_refurbishment",
@@ -395,7 +395,7 @@ def run_all_combinations() -> None:
                 modes_each=("log", "log", "log"),
                 eps_rel_merge=(0.008, 0.008, 0.008),
                 modes_merge=("log", "log", "log"),
-                max_points_after_each_merge=500,
+                max_points_after_each_merge=1500,
             )
 
             combo_output_dir = output_root / combo
