@@ -25,8 +25,10 @@ DEFAULT_OPTIMIZATION_STRATEGIES = ["co2"]
 
 #DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = [ 1, 2, 4, 6, 8, 10, 14, 18]
 #DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = [ 1, 2, 3, 4, 5, 6]
-DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference"]
-DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference"]
+DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = [ 14, 18]
+DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = [ 5, 6]
+#DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference"]
+#DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference"]
 TODAY_DATE = date.today().strftime("%Y_%m_%d")
 DEFAULT_OUTPUT_ROOT_NAME = f"post_processed_dec_k_combinations_{TODAY_DATE}"
 
@@ -211,8 +213,13 @@ def _scale_building_records_to_occurrence(
     recs: Dict[Any, Dict[str, Any]],
     building_id: str,
     target_occurrence: float,
+    print_scaling: bool = False,
+    print_scaling_only_changed: bool = True,
+    scaling_context: str = "",
 ) -> Dict[Any, Dict[str, Any]]:
     if not recs:
+        if print_scaling:
+            print(f"[scaling] {scaling_context} building={building_id} no_records")
         return recs
 
     carriers_to_scale = ("Electricity", "NaturalGas", "NautralGas", "BioGas", "Hydrogen")
@@ -232,6 +239,7 @@ def _scale_building_records_to_occurrence(
     investment_keys = ("investment_cost", "investment_co2")
     top_level_numeric = ("co2", "totex", "peak", "real_peak_from_grid", "real_peak_into_grid")
     results_numeric = ("co2_oemof_model", "co2_operation", "co2_investment", "totex", "totex_oemof_model")
+    scaling_markers = set()
 
     for rec_key, rec in recs.items():
         if not isinstance(rec, dict):
@@ -247,6 +255,14 @@ def _scale_building_records_to_occurrence(
         used = _to_positive_float(building_results.get("buildings_in_cluster_used", 1), default=1.0)
         target = _to_positive_float(target_occurrence, default=1.0)
         factor = target / used if used > 0 else 1.0
+        marker = (round(used, 12), round(target, 12), round(factor, 12))
+        if marker not in scaling_markers:
+            scaling_markers.add(marker)
+            if print_scaling and (not print_scaling_only_changed or abs(factor - 1.0) > 1e-12):
+                print(
+                    f"[scaling] {scaling_context} building={building_id} "
+                    f"used={used} target={target} factor={factor}"
+                )
 
         if abs(factor - 1.0) <= 1e-12:
             building_results["buildings_in_cluster"] = target
@@ -285,6 +301,9 @@ def _scale_building_records_to_occurrence(
         building_results["buildings_in_cluster_used"] = target
         rec["scaled_to_buildings_in_cluster_factor"] = factor
 
+    if print_scaling and not scaling_markers:
+        print(f"[scaling] {scaling_context} building={building_id} no_scaling_marker")
+
     return recs
 
 
@@ -319,6 +338,8 @@ def _build_decentralized_building_dict_for_combination(
     mfh_k: Any,
     refurbishment_strategies: Iterable[str],
     optimization_strategies: Iterable[str],
+    print_scaling: bool = False,
+    print_scaling_only_changed: bool = True,
 ) -> Tuple[Dict[str, Dict[str, Dict[Any, Dict[str, Any]]]], Dict[str, int]]:
     sfh_df = _load_cluster_dataframe(cluster_root, "SFH", sfh_k)
     mfh_df = _load_cluster_dataframe(cluster_root, "MFH", mfh_k)
@@ -352,11 +373,12 @@ def _build_decentralized_building_dict_for_combination(
         "missing_refurbishment_buckets": 0,
     }
 
-    mixed_buildings: List[Tuple[str, Path, float]] = (
-        [(bid, sfh_folder, sfh_occurrence.get(bid, 1.0)) for bid in sfh_ids]
-        + [(bid, mfh_folder, mfh_occurrence.get(bid, 1.0)) for bid in mfh_ids]
+    combo_name = _combo_name(sfh_k, mfh_k)
+    mixed_buildings: List[Tuple[str, str, Path, float]] = (
+        [(bid, "SFH", sfh_folder, sfh_occurrence.get(bid, 1.0)) for bid in sfh_ids]
+        + [(bid, "MFH", mfh_folder, mfh_occurrence.get(bid, 1.0)) for bid in mfh_ids]
     )
-    for building_id, folder, target_occurrence in mixed_buildings:
+    for building_id, building_type, folder, target_occurrence in mixed_buildings:
         building_dict[building_id] = {}
         for refurbish in refurbishment_strategies:
             try:
@@ -370,6 +392,12 @@ def _build_decentralized_building_dict_for_combination(
                     recs=recs,
                     building_id=building_id,
                     target_occurrence=target_occurrence,
+                    print_scaling=print_scaling,
+                    print_scaling_only_changed=print_scaling_only_changed,
+                    scaling_context=(
+                        f"combo={combo_name} type={building_type} "
+                        f"refurb={refurbish}"
+                    ),
                 )
             except Exception:
                 recs = {}
@@ -402,7 +430,7 @@ def _save_combination_outputs(
         pickle.dump(meta, fh, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[str], str]) -> Dict[str, Any]:
+def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[str], str, bool, bool]) -> Dict[str, Any]:
     (
         cluster_root_raw,
         output_root_raw,
@@ -411,6 +439,8 @@ def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[
         refurbishment_strategies,
         optimization_strategies,
         ueu_case,
+        print_scaling,
+        print_scaling_only_changed,
     ) = task
     cluster_root = Path(cluster_root_raw)
     output_root = Path(output_root_raw)
@@ -423,6 +453,8 @@ def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[
             mfh_k=mfh_k,
             refurbishment_strategies=refurbishment_strategies,
             optimization_strategies=optimization_strategies,
+            print_scaling=print_scaling,
+            print_scaling_only_changed=print_scaling_only_changed,
         )
     except Exception as exc:
         return {
@@ -518,6 +550,8 @@ def run_all_combinations(
     task_offset: int = 0,
     base_dir: Optional[str] = None,
     output_root_name: Optional[str] = None,
+    print_scaling: bool = False,
+    print_scaling_only_changed: bool = True,
 ) -> Path:
     sfh_values = list(sfh_k_values) if sfh_k_values is not None else list(DEFAULT_K_VALUES_TO_OPTIMIZE_SFH)
     mfh_values = list(mfh_k_values) if mfh_k_values is not None else list(DEFAULT_K_VALUES_TO_OPTIMIZE_MFH)
@@ -577,6 +611,8 @@ def run_all_combinations(
     print(f"Task offset: {task_offset}")
     print(f"Total combos available: {total_combinations}")
     print(f"Task count: {len(all_combinations)}")
+    print(f"Print scaling: {print_scaling}")
+    print(f"Print scaling only changed: {print_scaling_only_changed}")
 
     summary_rows = []
     tasks = [
@@ -588,6 +624,8 @@ def run_all_combinations(
             refurbishments,
             optimization_modes,
             str(ueu_case),
+            bool(print_scaling),
+            bool(print_scaling_only_changed),
         )
         for sfh_k, mfh_k in all_combinations
     ]
@@ -674,6 +712,16 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Output folder name below the UEU folder. Defaults to date-based folder.",
     )
+    parser.add_argument(
+        "--print-scaling",
+        action="store_true",
+        help="Print scaling factor (used -> target -> factor) per building/combo/refurbishment.",
+    )
+    parser.add_argument(
+        "--print-scaling-all",
+        action="store_true",
+        help="With --print-scaling, also print unchanged factors (factor=1).",
+    )
     return parser
 
 
@@ -702,7 +750,8 @@ if __name__ == "__main__":
         f"ueu_case={args.ueu_case} base_dir={args.base_dir or str(BASE_DIR)} "
         f"sfh_k={[ _format_k_for_log(x) for x in sfh_requested ]} "
         f"mfh_k={[ _format_k_for_log(x) for x in mfh_requested ]} "
-        f"refurbishments={selected_refurbishments} optimization_strategies={selected_optimization}"
+        f"refurbishments={selected_refurbishments} optimization_strategies={selected_optimization} "
+        f"print_scaling={args.print_scaling} print_scaling_all={args.print_scaling_all}"
     )
 
     run_all_combinations(
@@ -716,4 +765,6 @@ if __name__ == "__main__":
         task_offset=args.task_offset,
         base_dir=args.base_dir,
         output_root_name=args.output_root_name,
+        print_scaling=args.print_scaling,
+        print_scaling_only_changed=(not args.print_scaling_all),
     )
