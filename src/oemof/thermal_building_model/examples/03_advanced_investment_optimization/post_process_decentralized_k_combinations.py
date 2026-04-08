@@ -11,7 +11,7 @@ from pareto_optimal_help_functions import combine_all_buildings
 
 
 BASE_DIR = Path(__file__).resolve().parent
-UEU_CASE = "processed_bds_in_DENI03403000SEC5101"
+UEU_CASE = "processed_bds_in_DENI03403000SEC5658"
 REFURBISHMENT_STRATEGIES = [
     "no_refurbishment",
     "usual_refurbishment",
