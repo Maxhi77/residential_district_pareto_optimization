@@ -14,7 +14,7 @@ from pareto_optimal_help_functions import combine_all_buildings
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_UEU_CASE = "processed_bds_in_DENI03403000SEC5658"
+DEFAULT_UEU_CASE = "processed_bds_in_DENI03403000SEC4580"
 DEFAULT_REFURBISHMENT_STRATEGIES = [
     "no_refurbishment",
     "usual_refurbishment",
@@ -23,8 +23,8 @@ DEFAULT_REFURBISHMENT_STRATEGIES = [
 ]
 DEFAULT_OPTIMIZATION_STRATEGIES = ["co2"]
 
-DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference", 1, 2, 4, 6, 8, 10, 14, 18]
-DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference", 1, 2, 3, 4, 5, 6]
+DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference", 1, 2, 4, 6, 8, 10]
+DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference", 1, 2, 3, 4, 6, 8, 10]
 
 #DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference"]
 #DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference"]
