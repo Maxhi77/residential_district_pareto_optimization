@@ -40,6 +40,8 @@ DEFAULT_SOLVER = "scip"
 SOLVER = DEFAULT_SOLVER
 DEFAULT_SOLVER_THREADS = 1
 SOLVER_THREADS = DEFAULT_SOLVER_THREADS
+DEFAULT_EV_MODE = "yes_EV"
+EV_MODE = DEFAULT_EV_MODE
 RESULT_STORAGE_ROOT = None
 RESULT_CHECK_ROOT = None
 DEFAULT_CO2_REDUCTION_FACTORS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
@@ -1070,7 +1072,7 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value, buil
     combined_frames = [df for df in (sfh_cluster, mfh_cluster) if not df.empty]
     combined_cluster = pd.concat(combined_frames, ignore_index=True)
 
-    ev = "no_EV"
+    ev = EV_MODE
     is_sfh = not sfh_cluster.empty and bool((sfh_cluster["building_id"] == building_id_in_cluster).any())
     is_mfh = not mfh_cluster.empty and bool((mfh_cluster["building_id"] == building_id_in_cluster).any())
     if not is_sfh and not is_mfh:
@@ -1094,7 +1096,7 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value, buil
         k_value,
         output_building_type,
         refurbish,
-        "no_EV",
+        ev,
         building_id_in_cluster,
     )
     output_dir = os.path.dirname(file_path_base)
@@ -1328,7 +1330,7 @@ def run_cluster_refurbish_co2_parallel(
                         k_value,
                         building_type,
                         refurbish,
-                        "no_EV",
+                        EV_MODE,
                         building_id_in_cluster,
                     )
                     missing_factors = _missing_co2_factors(
@@ -1426,6 +1428,7 @@ refurbishment = list(DEFAULT_REFURBISHMENT)
 def _run_legacy_batches(cluster_list, workers):
     print(
         f"run_mode=legacy_batches workers={workers} clusters={cluster_list} "
+        f"ev={EV_MODE} "
         f"result_check_root={_get_result_check_root()} result_storage_root={_get_result_storage_root()}"
     )
     if not LEGACY_K_VALUE_BATCHES:
@@ -1464,7 +1467,7 @@ def _run_cli_mode(args, workers):
     print(
         f"host={args.host_name} run_mode=cli clusters={cluster_list} workers={workers} "
         f"solver_threads={SOLVER_THREADS} sfh_k={sfh_requested} mfh_k={mfh_requested} "
-        f"refurbishments={refurbishment} result_check_root={_get_result_check_root()} "
+        f"refurbishments={refurbishment} ev={EV_MODE} result_check_root={_get_result_check_root()} "
         f"result_storage_root={_get_result_storage_root()}"
     )
 
@@ -1527,6 +1530,13 @@ if __name__ == "__main__":
         default=",".join(DEFAULT_REFURBISHMENT),
         help="Comma-separated refurbishment cases.",
     )
+    parser.add_argument(
+        "--ev",
+        type=str,
+        default=DEFAULT_EV_MODE,
+        choices=["no_EV", "yes_EV"],
+        help="Demand file suffix for EV scenario.",
+    )
     args = parser.parse_args()
 
     script_base = _script_base_path()
@@ -1543,6 +1553,7 @@ if __name__ == "__main__":
         raise ValueError("--solver-threads must be > 0")
 
     SOLVER_THREADS = args.solver_threads
+    EV_MODE = args.ev
     workers_raw = str(args.workers).strip().lower()
     if workers_raw in {"false", "auto", "none"}:
         n_cores = os.cpu_count() or 1
