@@ -24,7 +24,12 @@ import pickle
 from oemof.thermal_building_model.helpers import calculate_gain_by_sun
 from oemof.thermal_building_model.helpers.path_helper import get_project_root
 from oemof.thermal_building_model.input.economics.investment_components import battery_config,hot_water_tank_config,air_heat_pump_config,gas_heater_config,pv_system_config,chp_config
-from oemof.thermal_building_model.input.economics.operation_grid_economics import natural_gas_grid_config, bio_gas_grid_config
+from oemof.thermal_building_model.input.economics.operation_grid_economics import (
+    natural_gas_grid_config,
+    bio_gas_grid_config,
+    electricity_grid_config,
+    hydrogen_grid_config,
+)
 
 from oemof.thermal_building_model.tabula.tabula_reader import Building
 import pprint as pp
@@ -46,12 +51,101 @@ RESULT_STORAGE_ROOT = None
 RESULT_CHECK_ROOT = None
 DEFAULT_CO2_REDUCTION_FACTORS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
 DEFAULT_PEAK_REDUCTION_FACTORS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+PRICE_SCENARIO_CONFIGS = {
+    "ref": {
+        "electricity_factor": 1.0,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.0,
+    },
+    "electricity_minus20": {
+        "electricity_factor": 0.8,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.0,
+    },
+    "electricity_plus20": {
+        "electricity_factor": 1.2,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.0,
+    },
+    "gas_minus20": {
+        "electricity_factor": 1.0,
+        "natural_gas_factor": 0.8,
+        "bio_gas_factor": 0.8,
+        "hydrogen_factor": 1.0,
+    },
+    "gas_plus20": {
+        "electricity_factor": 1.0,
+        "natural_gas_factor": 1.2,
+        "bio_gas_factor": 1.2,
+        "hydrogen_factor": 1.0,
+    },
+    "hydrogen_minus20": {
+        "electricity_factor": 1.0,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 0.8,
+    },
+    "hydrogen_plus20": {
+        "electricity_factor": 1.0,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.2,
+    },
+}
+DEFAULT_PRICE_SCENARIO_SWEEP = [
+    "ref",
+    "electricity_minus20",
+    "electricity_plus20",
+    "gas_minus20",
+    "gas_plus20",
+    "hydrogen_minus20",
+    "hydrogen_plus20",
+]
+DEFAULT_PRICE_SCENARIOS = ["ref"]
 
 def _set_co2_worker_context(context):
     global _CO2_WORKER_CONTEXT
     _CO2_WORKER_CONTEXT = context
+
+
+def _normalize_price_scenario_name(name):
+    if name is None:
+        return "ref"
+    value = str(name).strip().lower()
+    return value if value else "ref"
+
+
+def _resolve_price_scenario_config(price_scenario):
+    if isinstance(price_scenario, dict):
+        required_keys = {
+            "electricity_factor",
+            "natural_gas_factor",
+            "bio_gas_factor",
+            "hydrogen_factor",
+        }
+        missing = sorted(required_keys.difference(price_scenario.keys()))
+        if missing:
+            raise ValueError(f"price_scenario dict is missing keys: {missing}")
+        return copy.deepcopy(price_scenario)
+
+    scenario_name = _normalize_price_scenario_name(price_scenario)
+    if scenario_name not in PRICE_SCENARIO_CONFIGS:
+        raise ValueError(
+            f"Unknown price scenario '{price_scenario}'. Supported: {sorted(PRICE_SCENARIO_CONFIGS.keys())}"
+        )
+    return copy.deepcopy(PRICE_SCENARIO_CONFIGS[scenario_name])
+
+
+def _scenario_output_cluster_name(cluster_name, price_scenario_name):
+    scenario_name = _normalize_price_scenario_name(price_scenario_name)
+    if scenario_name == "ref":
+        return cluster_name
+    return f"{cluster_name}_{scenario_name}"
 #  create solver
-def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster, building_id_in_cluster,cluster_occurence,heat_demand_worst_case):
+def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster, building_id_in_cluster,cluster_occurence,heat_demand_worst_case,price_scenario=None):
     es = solph.EnergySystem(
         timeindex=t1_agg,
         timeincrement=[1] * len(t1_agg),
@@ -66,11 +160,15 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
         infer_last_interval=False,
     )
 
+    price_scenario_config = _resolve_price_scenario_config(price_scenario)
+    electricity_grid_config_grid = copy.deepcopy(electricity_grid_config)
+    electricity_grid_config_grid.working_rate *= float(price_scenario_config["electricity_factor"])
     if peak_new is False or None:
-        electricity_grid_dataclass = ElectricityGrid()
+        electricity_grid_dataclass = ElectricityGrid(operation_grid=electricity_grid_config_grid)
     else:
         electricity_grid_dataclass = ElectricityGrid(max_peak_from_grid=peak_new,
-                                                     max_peak_into_grid=peak_new)
+                                                     max_peak_into_grid=peak_new,
+                                                     operation_grid=electricity_grid_config_grid)
 
     electricity_grid_bus_from_grid = electricity_grid_dataclass.get_bus_from_grid()
     electricity_grid_bus_into_grid = electricity_grid_dataclass.get_bus_into_grid()
@@ -88,12 +186,14 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
     es.add(*electricity)
 
     natural_gas_grid_config_grid = copy.deepcopy(natural_gas_grid_config)
+    natural_gas_grid_config_grid.working_rate *= float(price_scenario_config["natural_gas_factor"])
     natural_gas_grid_dataclass = GasGrid(operation_grid=natural_gas_grid_config_grid,
                                  name="NaturalGas")
     natural_gas_grid_bus_from_grid = natural_gas_grid_dataclass.get_bus_from_grid()
     natural_gas_grid_source = natural_gas_grid_dataclass.create_source()
 
     bio_gas_grid_config_grid = copy.deepcopy(bio_gas_grid_config)
+    bio_gas_grid_config_grid.working_rate *= float(price_scenario_config["bio_gas_factor"])
     bio_gas_grid_dataclass = GasGrid(operation_grid=bio_gas_grid_config_grid,
                                  name="BioGas")
     bio_gas_grid_bus_from_grid = bio_gas_grid_dataclass.get_bus_from_grid()
@@ -107,7 +207,9 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
     gas = [natural_gas_grid_bus_from_grid,natural_gas_grid_source,bio_gas_grid_source,bio_gas_grid_bus_from_grid,gas_bus]
     es.add(*gas)
     if True:
-        hydrogen_grid_dataclass = HydrogenGrid()
+        hydrogen_grid_config_grid = copy.deepcopy(hydrogen_grid_config)
+        hydrogen_grid_config_grid.working_rate *= float(price_scenario_config["hydrogen_factor"])
+        hydrogen_grid_dataclass = HydrogenGrid(operation_grid=hydrogen_grid_config_grid)
         hydrogen_grid_bus_from_grid = hydrogen_grid_dataclass.get_bus_from_grid()
         hydrogen_grid_source = hydrogen_grid_dataclass.create_source()
 
@@ -714,13 +816,14 @@ def _load_pickle_if_exists(path):
         data = pickle.load(fh)
     return data if isinstance(data, dict) else {}
 
-def _build_result_entries(final_results, co2, peak_reduction_factor, refurbish, time):
+def _build_result_entries(final_results, co2, peak_reduction_factor, refurbish, time, price_scenario_name):
     if final_results is None:
         full_entry = {
             "results": None,
             "co2": None,
             "peak_reduction_factor": None,
             "refurbish": None,
+            "price_scenario": price_scenario_name,
             "totex": None,
             "peak": None,
             "time": None,
@@ -729,6 +832,7 @@ def _build_result_entries(final_results, co2, peak_reduction_factor, refurbish, 
             "co2": None,
             "peak_reduction_factor": None,
             "refurbish": None,
+            "price_scenario": price_scenario_name,
             "totex": None,
             "peak": None,
             "time": None,
@@ -742,6 +846,7 @@ def _build_result_entries(final_results, co2, peak_reduction_factor, refurbish, 
         "co2": co2,
         "peak_reduction_factor": peak_reduction_factor,
         "refurbish": refurbish,
+        "price_scenario": price_scenario_name,
         "totex": totex,
         "peak": peak,
         "electricity_grid": final_results["Electricity"],
@@ -753,6 +858,7 @@ def _build_result_entries(final_results, co2, peak_reduction_factor, refurbish, 
         "co2": co2,
         "peak_reduction_factor": peak_reduction_factor,
         "refurbish": refurbish,
+        "price_scenario": price_scenario_name,
         "totex": totex,
         "peak": peak,
         "electricity_grid": final_results["Electricity"],
@@ -779,6 +885,8 @@ def run_co2_factor_worker(args):
     co2_reference = context["co2_reference"]
     file_path_base = context["file_path_base"]
     simple_file_path_base = context["simple_file_path_base"]
+    price_scenario_name = context["price_scenario_name"]
+    price_scenario = context["price_scenario"]
     worker_file_path, worker_simple_file_path = _get_worker_result_paths(
         file_path_base,
         simple_file_path_base,
@@ -814,6 +922,7 @@ def run_co2_factor_worker(args):
             building_id_in_cluster,
             cluster_occurence,
             heat_demand_worst_case,
+            price_scenario=price_scenario,
         )
 
         key = (co2_reduction_factor, peak_reduction_factor, refurbish, ref)
@@ -823,6 +932,7 @@ def run_co2_factor_worker(args):
             peak_reduction_factor,
             refurbish,
             time,
+            price_scenario_name,
         )
         worker_results[key] = full_entry
         worker_simple_results[key] = simple_entry
@@ -917,6 +1027,30 @@ def _parse_refurbishments(raw_csv):
         return []
     values = [x.strip() for x in str(raw_csv).split(",") if x.strip()]
     return _dedupe_keep_order(values)
+
+
+def _parse_price_scenarios(raw_csv):
+    if raw_csv is None:
+        return list(DEFAULT_PRICE_SCENARIOS)
+
+    values = []
+    for token in str(raw_csv).split(","):
+        scenario_name = _normalize_price_scenario_name(token)
+        if not scenario_name:
+            continue
+        if scenario_name == "all":
+            values.extend(DEFAULT_PRICE_SCENARIO_SWEEP)
+            continue
+        if scenario_name not in PRICE_SCENARIO_CONFIGS:
+            raise ValueError(
+                f"Unknown price scenario '{scenario_name}'. Supported: {sorted(PRICE_SCENARIO_CONFIGS.keys())} or 'all'"
+            )
+        values.append(scenario_name)
+
+    values = _dedupe_keep_order(values)
+    if not values:
+        return list(DEFAULT_PRICE_SCENARIOS)
+    return values
 
 
 def _script_base_path():
@@ -1059,10 +1193,22 @@ def _collect_building_ids_for_k(base_path, cluster_name, k_value, building_type=
     return list(dict.fromkeys(building_in_cluster))
 
 
-def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value, building_type=None):
+def _prepare_group_context(
+    refurbish,
+    building_id_in_cluster,
+    ueu,
+    k_value,
+    building_type=None,
+    price_scenario_name="ref",
+    output_cluster_name=None,
+):
     base_path = _script_base_path()
     directory_path = os.path.join(base_path, ueu)
     result_storage_root = _get_result_storage_root()
+    scenario_name = _normalize_price_scenario_name(price_scenario_name)
+    scenario_config = _resolve_price_scenario_config(scenario_name)
+    if output_cluster_name is None:
+        output_cluster_name = _scenario_output_cluster_name(ueu, scenario_name)
 
     number_of_time_steps = 8760
     sfh_cluster, mfh_cluster, _, _ = _load_clusters_for_k(base_path, ueu, k_value)
@@ -1092,7 +1238,7 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value, buil
 
     file_path_base, simple_file_path_base = _get_result_file_bases(
         result_storage_root,
-        ueu,
+        output_cluster_name,
         k_value,
         output_building_type,
         refurbish,
@@ -1187,10 +1333,12 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value, buil
         building_id_in_cluster,
         cluster_occurence,
         heat_demand_worst_case,
+        price_scenario=scenario_config,
     )
     if final_results_ref is None:
         raise RuntimeError(
-            f"Reference scenario failed for cluster={ueu}, building={building_id_in_cluster}, refurbish={refurbish}."
+            f"Reference scenario failed for cluster={ueu}, building={building_id_in_cluster}, "
+            f"refurbish={refurbish}, price_scenario={scenario_name}."
         )
 
     hp_power = 0
@@ -1224,6 +1372,8 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value, buil
         "co2_reference": co2_ref,
         "file_path_base": file_path_base,
         "simple_file_path_base": simple_file_path_base,
+        "price_scenario_name": scenario_name,
+        "price_scenario": scenario_config,
     }
 
     return {
@@ -1231,10 +1381,25 @@ def _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value, buil
         "worker_context": worker_context,
     }
 
-def run_main(refurbish, building_id_in_cluster, ueu, k_value, building_type=None):
-    prepared = _prepare_group_context(refurbish, building_id_in_cluster, ueu, k_value, building_type=building_type)
+def run_main(refurbish, building_id_in_cluster, ueu, k_value, building_type=None, price_scenario_name="ref"):
+    output_cluster_name = _scenario_output_cluster_name(ueu, price_scenario_name)
+    prepared = _prepare_group_context(
+        refurbish,
+        building_id_in_cluster,
+        ueu,
+        k_value,
+        building_type=building_type,
+        price_scenario_name=price_scenario_name,
+        output_cluster_name=output_cluster_name,
+    )
 
-    group_key = (ueu, _normalize_k_for_key(k_value), building_id_in_cluster, refurbish)
+    group_key = (
+        ueu,
+        _normalize_k_for_key(k_value),
+        building_id_in_cluster,
+        refurbish,
+        _normalize_price_scenario_name(price_scenario_name),
+    )
     _set_co2_worker_context({group_key: prepared["worker_context"]})
     worker_outputs = [run_co2_factor_worker((group_key, factor)) for factor in prepared["co2_reduction_factors"]]
     _CO2_WORKER_CONTEXT.clear()
@@ -1246,9 +1411,19 @@ def run_cluster_refurbish_co2_parallel(
     selected_k_values=None,
     selected_k_values_sfh=None,
     selected_k_values_mfh=None,
+    price_scenarios_to_run=None,
 ):
     base_path = _script_base_path()
     result_check_root = _get_result_check_root()
+    if price_scenarios_to_run is None:
+        price_scenarios_to_run = list(DEFAULT_PRICE_SCENARIOS)
+    else:
+        price_scenarios_to_run = _dedupe_keep_order(
+            [_normalize_price_scenario_name(s) for s in price_scenarios_to_run]
+        )
+    if not price_scenarios_to_run:
+        print(f"No price scenarios selected for cluster {cluster_name}")
+        return
 
     # Backward compatibility: one list for both SFH/MFH
     if selected_k_values is not None:
@@ -1322,64 +1497,70 @@ def run_cluster_refurbish_co2_parallel(
                 k_value,
                 building_type=building_type,
             )
-            for refurbish in refurbishment:
-                for building_id_in_cluster in building_in_cluster:
-                    check_file_path_base, check_simple_file_path_base = _get_result_file_bases(
-                        result_check_root,
-                        cluster_name,
-                        k_value,
-                        building_type,
-                        refurbish,
-                        EV_MODE,
-                        building_id_in_cluster,
-                    )
-                    missing_factors = _missing_co2_factors(
-                        check_file_path_base,
-                        check_simple_file_path_base,
-                        DEFAULT_CO2_REDUCTION_FACTORS,
-                    )
-                    if not missing_factors:
-                        print(
-                            f"skip existing: {cluster_name} | {building_type} | k={_format_k_for_log(k_value)} | "
-                            f"{building_id_in_cluster} | {refurbish}"
-                        )
-                        continue
-
-                    try:
-                        prepared = _prepare_group_context(
-                            refurbish,
-                            building_id_in_cluster,
-                            cluster_name,
+            for price_scenario_name in price_scenarios_to_run:
+                output_cluster_name = _scenario_output_cluster_name(cluster_name, price_scenario_name)
+                for refurbish in refurbishment:
+                    for building_id_in_cluster in building_in_cluster:
+                        check_file_path_base, check_simple_file_path_base = _get_result_file_bases(
+                            result_check_root,
+                            output_cluster_name,
                             k_value,
-                            building_type=building_type,
+                            building_type,
+                            refurbish,
+                            EV_MODE,
+                            building_id_in_cluster,
                         )
-                    except Exception as exc:
-                        print(
-                            f"skip failed prepare: {cluster_name} | {building_type} | k={_format_k_for_log(k_value)} | {building_id_in_cluster} | {refurbish} | {exc}"
+                        missing_factors = _missing_co2_factors(
+                            check_file_path_base,
+                            check_simple_file_path_base,
+                            DEFAULT_CO2_REDUCTION_FACTORS,
                         )
-                        continue
+                        if not missing_factors:
+                            print(
+                                f"skip existing: {cluster_name} | scenario={price_scenario_name} | {building_type} | "
+                                f"k={_format_k_for_log(k_value)} | {building_id_in_cluster} | {refurbish}"
+                            )
+                            continue
 
-                    group_key = (
-                        cluster_name,
-                        building_type,
-                        _normalize_k_for_key(k_value),
-                        building_id_in_cluster,
-                        refurbish,
-                    )
-                    group_contexts[group_key] = prepared["worker_context"]
-                    missing_set = set(missing_factors)
-                    pending_factors = [
-                        factor for factor in prepared["co2_reduction_factors"] if factor in missing_set
-                    ]
-                    if not pending_factors:
-                        print(
-                            f"skip existing after-prepare: {cluster_name} | {building_type} | "
-                            f"k={_format_k_for_log(k_value)} | {building_id_in_cluster} | {refurbish}"
-                        )
-                        continue
+                        try:
+                            prepared = _prepare_group_context(
+                                refurbish,
+                                building_id_in_cluster,
+                                cluster_name,
+                                k_value,
+                                building_type=building_type,
+                                price_scenario_name=price_scenario_name,
+                                output_cluster_name=output_cluster_name,
+                            )
+                        except Exception as exc:
+                            print(
+                                f"skip failed prepare: {cluster_name} | scenario={price_scenario_name} | {building_type} | "
+                                f"k={_format_k_for_log(k_value)} | {building_id_in_cluster} | {refurbish} | {exc}"
+                            )
+                            continue
 
-                    for co2_reduction_factor in pending_factors:
-                        task_list.append((group_key, co2_reduction_factor))
+                        group_key = (
+                            cluster_name,
+                            building_type,
+                            _normalize_k_for_key(k_value),
+                            building_id_in_cluster,
+                            refurbish,
+                            _normalize_price_scenario_name(price_scenario_name),
+                        )
+                        group_contexts[group_key] = prepared["worker_context"]
+                        missing_set = set(missing_factors)
+                        pending_factors = [
+                            factor for factor in prepared["co2_reduction_factors"] if factor in missing_set
+                        ]
+                        if not pending_factors:
+                            print(
+                                f"skip existing after-prepare: {cluster_name} | scenario={price_scenario_name} | {building_type} | "
+                                f"k={_format_k_for_log(k_value)} | {building_id_in_cluster} | {refurbish}"
+                            )
+                            continue
+
+                        for co2_reduction_factor in pending_factors:
+                            task_list.append((group_key, co2_reduction_factor))
     if not task_list:
         print(f"No runnable tasks for cluster {cluster_name}")
         return
@@ -1423,12 +1604,13 @@ LEGACY_K_VALUE_BATCHES = [
 ]
 
 refurbishment = list(DEFAULT_REFURBISHMENT)
+price_scenarios = list(DEFAULT_PRICE_SCENARIOS)
 
 
 def _run_legacy_batches(cluster_list, workers):
     print(
         f"run_mode=legacy_batches workers={workers} clusters={cluster_list} "
-        f"ev={EV_MODE} "
+        f"ev={EV_MODE} price_scenarios={price_scenarios} "
         f"result_check_root={_get_result_check_root()} result_storage_root={_get_result_storage_root()}"
     )
     if not LEGACY_K_VALUE_BATCHES:
@@ -1445,6 +1627,7 @@ def _run_legacy_batches(cluster_list, workers):
                 processes=workers,
                 selected_k_values_sfh=sfh_batch,
                 selected_k_values_mfh=mfh_batch,
+                price_scenarios_to_run=price_scenarios,
             )
 
 
@@ -1453,6 +1636,7 @@ def _run_cli_mode(args, workers):
     sfh_requested = _parse_k_values(args.sfh_k)
     mfh_requested = _parse_k_values(args.mfh_k)
     selected_refurbishments = _parse_refurbishments(args.refurbishments)
+    selected_price_scenarios = _parse_price_scenarios(args.price_scenarios)
 
     if not cluster_list:
         raise ValueError("No UEU cases provided via --ueu-cases.")
@@ -1460,14 +1644,18 @@ def _run_cli_mode(args, workers):
         raise ValueError("Both --sfh-k and --mfh-k are empty.")
     if not selected_refurbishments:
         raise ValueError("No refurbishments provided via --refurbishments.")
+    if not selected_price_scenarios:
+        raise ValueError("No price scenarios provided via --price-scenarios.")
 
-    global refurbishment
+    global refurbishment, price_scenarios
     refurbishment = selected_refurbishments
+    price_scenarios = selected_price_scenarios
 
     print(
         f"host={args.host_name} run_mode=cli clusters={cluster_list} workers={workers} "
         f"solver_threads={SOLVER_THREADS} sfh_k={sfh_requested} mfh_k={mfh_requested} "
-        f"refurbishments={refurbishment} ev={EV_MODE} result_check_root={_get_result_check_root()} "
+        f"refurbishments={refurbishment} price_scenarios={price_scenarios} ev={EV_MODE} "
+        f"result_check_root={_get_result_check_root()} "
         f"result_storage_root={_get_result_storage_root()}"
     )
 
@@ -1478,6 +1666,7 @@ def _run_cli_mode(args, workers):
             processes=workers,
             selected_k_values_sfh=sfh_requested,
             selected_k_values_mfh=mfh_requested,
+            price_scenarios_to_run=price_scenarios,
         )
 
 
@@ -1531,6 +1720,16 @@ if __name__ == "__main__":
         help="Comma-separated refurbishment cases.",
     )
     parser.add_argument(
+        "--price-scenarios",
+        type=str,
+        default=",".join(DEFAULT_PRICE_SCENARIOS),
+        help=(
+            "Comma-separated price scenarios. Supported: "
+            "ref,electricity_minus20,electricity_plus20,gas_minus20,gas_plus20,"
+            "hydrogen_minus20,hydrogen_plus20 or 'all'."
+        ),
+    )
+    parser.add_argument(
         "--ev",
         type=str,
         default=DEFAULT_EV_MODE,
@@ -1554,6 +1753,7 @@ if __name__ == "__main__":
 
     SOLVER_THREADS = args.solver_threads
     EV_MODE = args.ev
+    price_scenarios = _parse_price_scenarios(args.price_scenarios)
     workers_raw = str(args.workers).strip().lower()
     if workers_raw in {"false", "auto", "none"}:
         n_cores = os.cpu_count() or 1
