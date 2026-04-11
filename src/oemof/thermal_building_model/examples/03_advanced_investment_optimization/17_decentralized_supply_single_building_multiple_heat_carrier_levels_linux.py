@@ -73,6 +73,20 @@ PRICE_SCENARIO_CONFIGS = {
         "bio_gas_factor": 1.0,
         "hydrogen_factor": 1.0,
     },
+    "electricity_minus40": {
+        "electricity_factor": 0.6,
+        "electricity_feed_in_factor": 1.0,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.0,
+    },
+    "electricity_plus40": {
+        "electricity_factor": 1.4,
+        "electricity_feed_in_factor": 1.0,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.0,
+    },
     "electricity_feed_in_minus20": {
         "electricity_factor": 1.0,
         "electricity_feed_in_factor": 0.8,
@@ -83,6 +97,20 @@ PRICE_SCENARIO_CONFIGS = {
     "electricity_feed_in_plus20": {
         "electricity_factor": 1.0,
         "electricity_feed_in_factor": 1.2,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.0,
+    },
+    "electricity_feed_in_minus40": {
+        "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 0.6,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.0,
+    },
+    "electricity_feed_in_plus40": {
+        "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.4,
         "natural_gas_factor": 1.0,
         "bio_gas_factor": 1.0,
         "hydrogen_factor": 1.0,
@@ -101,6 +129,20 @@ PRICE_SCENARIO_CONFIGS = {
         "bio_gas_factor": 1.2,
         "hydrogen_factor": 1.0,
     },
+    "gas_minus40": {
+        "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.0,
+        "natural_gas_factor": 0.6,
+        "bio_gas_factor": 0.6,
+        "hydrogen_factor": 1.0,
+    },
+    "gas_plus40": {
+        "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.0,
+        "natural_gas_factor": 1.4,
+        "bio_gas_factor": 1.4,
+        "hydrogen_factor": 1.0,
+    },
     "hydrogen_minus20": {
         "electricity_factor": 1.0,
         "electricity_feed_in_factor": 1.0,
@@ -115,19 +157,41 @@ PRICE_SCENARIO_CONFIGS = {
         "bio_gas_factor": 1.0,
         "hydrogen_factor": 1.2,
     },
+    "hydrogen_minus40": {
+        "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.0,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 0.6,
+    },
+    "hydrogen_plus40": {
+        "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.0,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.4,
+    },
 }
 DEFAULT_PRICE_SCENARIO_SWEEP = [
     "ref",
     "electricity_minus20",
     "electricity_plus20",
+    "electricity_minus40",
+    "electricity_plus40",
     "electricity_feed_in_minus20",
     "electricity_feed_in_plus20",
+    "electricity_feed_in_minus40",
+    "electricity_feed_in_plus40",
     "gas_minus20",
     "gas_plus20",
+    "gas_minus40",
+    "gas_plus40",
     "hydrogen_minus20",
     "hydrogen_plus20",
+    "hydrogen_minus40",
+    "hydrogen_plus40",
 ]
-DEFAULT_PRICE_SCENARIOS = ["ref"]
+DEFAULT_PRICE_SCENARIOS = list(DEFAULT_PRICE_SCENARIO_SWEEP)
 
 def _set_co2_worker_context(context):
     global _CO2_WORKER_CONTEXT
@@ -1750,9 +1814,10 @@ if __name__ == "__main__":
         default=",".join(DEFAULT_PRICE_SCENARIOS),
         help=(
             "Comma-separated price scenarios. Supported: "
-            "ref,electricity_minus20,electricity_plus20,electricity_feed_in_minus20,electricity_feed_in_plus20,"
-            "gas_minus20,gas_plus20,"
-            "hydrogen_minus20,hydrogen_plus20 or 'all'."
+            "ref,electricity_minus20,electricity_plus20,electricity_minus40,electricity_plus40,"
+            "electricity_feed_in_minus20,electricity_feed_in_plus20,electricity_feed_in_minus40,electricity_feed_in_plus40,"
+            "gas_minus20,gas_plus20,gas_minus40,gas_plus40,"
+            "hydrogen_minus20,hydrogen_plus20,hydrogen_minus40,hydrogen_plus40 or 'all'."
         ),
     )
     parser.add_argument(
