@@ -54,42 +54,63 @@ DEFAULT_PEAK_REDUCTION_FACTORS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1
 PRICE_SCENARIO_CONFIGS = {
     "ref": {
         "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.0,
         "natural_gas_factor": 1.0,
         "bio_gas_factor": 1.0,
         "hydrogen_factor": 1.0,
     },
     "electricity_minus20": {
         "electricity_factor": 0.8,
+        "electricity_feed_in_factor": 1.0,
         "natural_gas_factor": 1.0,
         "bio_gas_factor": 1.0,
         "hydrogen_factor": 1.0,
     },
     "electricity_plus20": {
         "electricity_factor": 1.2,
+        "electricity_feed_in_factor": 1.0,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.0,
+    },
+    "electricity_feed_in_minus20": {
+        "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 0.8,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.0,
+    },
+    "electricity_feed_in_plus20": {
+        "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.2,
         "natural_gas_factor": 1.0,
         "bio_gas_factor": 1.0,
         "hydrogen_factor": 1.0,
     },
     "gas_minus20": {
         "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.0,
         "natural_gas_factor": 0.8,
         "bio_gas_factor": 0.8,
         "hydrogen_factor": 1.0,
     },
     "gas_plus20": {
         "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.0,
         "natural_gas_factor": 1.2,
         "bio_gas_factor": 1.2,
         "hydrogen_factor": 1.0,
     },
     "hydrogen_minus20": {
         "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.0,
         "natural_gas_factor": 1.0,
         "bio_gas_factor": 1.0,
         "hydrogen_factor": 0.8,
     },
     "hydrogen_plus20": {
         "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.0,
         "natural_gas_factor": 1.0,
         "bio_gas_factor": 1.0,
         "hydrogen_factor": 1.2,
@@ -99,6 +120,8 @@ DEFAULT_PRICE_SCENARIO_SWEEP = [
     "ref",
     "electricity_minus20",
     "electricity_plus20",
+    "electricity_feed_in_minus20",
+    "electricity_feed_in_plus20",
     "gas_minus20",
     "gas_plus20",
     "hydrogen_minus20",
@@ -122,6 +145,7 @@ def _resolve_price_scenario_config(price_scenario):
     if isinstance(price_scenario, dict):
         required_keys = {
             "electricity_factor",
+            "electricity_feed_in_factor",
             "natural_gas_factor",
             "bio_gas_factor",
             "hydrogen_factor",
@@ -163,6 +187,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
     price_scenario_config = _resolve_price_scenario_config(price_scenario)
     electricity_grid_config_grid = copy.deepcopy(electricity_grid_config)
     electricity_grid_config_grid.working_rate *= float(price_scenario_config["electricity_factor"])
+    electricity_grid_config_grid.revenue *= float(price_scenario_config["electricity_feed_in_factor"])
     if peak_new is False or None:
         electricity_grid_dataclass = ElectricityGrid(operation_grid=electricity_grid_config_grid)
     else:
@@ -1591,8 +1616,8 @@ DEFAULT_REFURBISHMENT = [
 DEFAULT_CLUSTER_LIST = [
     "processed_bds_in_DENI03403000SEC5658",
 ]
-DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference", 1, 2, 4, 6, 8, 10, 14, 18]
-DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference", 1, 2, 3, 4, 5, 6]
+DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = [6]
+DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = [1]
 
 # Legacy batches (alter Ablauf):
 # (batch_name, sfh_k_values, mfh_k_values)
@@ -1725,7 +1750,8 @@ if __name__ == "__main__":
         default=",".join(DEFAULT_PRICE_SCENARIOS),
         help=(
             "Comma-separated price scenarios. Supported: "
-            "ref,electricity_minus20,electricity_plus20,gas_minus20,gas_plus20,"
+            "ref,electricity_minus20,electricity_plus20,electricity_feed_in_minus20,electricity_feed_in_plus20,"
+            "gas_minus20,gas_plus20,"
             "hydrogen_minus20,hydrogen_plus20 or 'all'."
         ),
     )
