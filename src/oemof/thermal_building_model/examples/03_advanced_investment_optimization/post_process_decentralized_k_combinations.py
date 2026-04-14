@@ -460,7 +460,7 @@ def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[
             "combo": combo,
             "sfh_k": _k_token(sfh_k),
             "mfh_k": _k_token(mfh_k),
-            "status": "skipped",
+            "status": "failed",
             "reason": str(exc),
         }
 
@@ -473,8 +473,8 @@ def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[
             "combo": combo,
             "sfh_k": _k_token(sfh_k),
             "mfh_k": _k_token(mfh_k),
-            "status": "skipped",
-            "reason": "no result files found",
+            "status": "failed",
+            "reason": "no result files found for combination",
         }
 
     filtered_building_dict = {bid: building_dict[bid] for bid in non_empty_buildings}
@@ -644,6 +644,19 @@ def run_all_combinations(
     summary_csv = output_root / "summary.csv"
     summary_df.to_csv(summary_csv, index=False)
     print(f"\nDone. Summary: {summary_csv}")
+    non_ok_rows = [row for row in summary_rows if str(row.get("status", "")).lower() != "ok"]
+    if non_ok_rows:
+        max_preview = 10
+        preview = "; ".join(
+            f"{row.get('combo')} [{row.get('status')}]: {row.get('reason')}"
+            for row in non_ok_rows[:max_preview]
+        )
+        if len(non_ok_rows) > max_preview:
+            preview += f"; ... +{len(non_ok_rows) - max_preview} more"
+        raise RuntimeError(
+            f"{len(non_ok_rows)} of {len(summary_rows)} combinations failed. "
+            f"See summary at {summary_csv}. Details: {preview}"
+        )
     return summary_csv
 
 
