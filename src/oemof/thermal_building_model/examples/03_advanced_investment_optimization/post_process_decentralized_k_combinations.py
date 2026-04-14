@@ -14,7 +14,7 @@ from pareto_optimal_help_functions import combine_all_buildings
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_UEU_CASE = "processed_bds_in_DENI03403000SEC5101"
+DEFAULT_UEU_CASE = "processed_bds_in_DENI03403000SEC5658"
 DEFAULT_REFURBISHMENT_STRATEGIES = [
     "no_refurbishment",
     "usual_refurbishment",
@@ -487,7 +487,7 @@ def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[
             modes_each=("log", "log", "log"),
             eps_rel_merge=(0.008, 0.008, 0.008),
             modes_merge=("log", "log", "log"),
-            max_points_after_each_merge=2000,
+            max_points_after_each_merge=8000,
         )
     except Exception as exc:
         return {
