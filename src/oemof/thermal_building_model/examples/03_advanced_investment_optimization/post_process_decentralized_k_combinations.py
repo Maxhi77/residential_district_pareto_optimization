@@ -497,6 +497,28 @@ def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[
             "status": "failed",
             "reason": str(exc),
         }
+    if not combined_front:
+        empty_building_fronts = [
+            bid for bid, front in per_building_front.items()
+            if not front
+        ]
+        reason = (
+            "combined_front is empty after merge "
+            f"(buildings={len(filtered_building_dict)}, "
+            f"empty_per_building_fronts={len(empty_building_fronts)})"
+        )
+        if empty_building_fronts:
+            preview = ", ".join(empty_building_fronts[:8])
+            if len(empty_building_fronts) > 8:
+                preview += f", ... +{len(empty_building_fronts) - 8} more"
+            reason = f"{reason}; sample_buildings={preview}"
+        return {
+            "combo": combo,
+            "sfh_k": _k_token(sfh_k),
+            "mfh_k": _k_token(mfh_k),
+            "status": "failed",
+            "reason": reason,
+        }
 
     combo_output_dir = output_root / combo
     meta = {
