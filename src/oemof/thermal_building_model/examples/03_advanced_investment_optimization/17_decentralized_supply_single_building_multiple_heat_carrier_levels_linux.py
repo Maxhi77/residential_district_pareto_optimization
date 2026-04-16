@@ -233,7 +233,21 @@ def _scenario_output_cluster_name(cluster_name, price_scenario_name):
         return cluster_name
     return f"{cluster_name}_{scenario_name}"
 #  create solver
-def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_comp,combined_cluster, building_id_in_cluster,cluster_occurence,heat_demand_worst_case,price_scenario=None):
+def run_model(
+    co2_new,
+    peak_new,
+    refurbish,
+    data,
+    aggregation1,
+    t1_agg,
+    data_classes_comp,
+    combined_cluster,
+    building_id_in_cluster,
+    cluster_occurence,
+    heat_demand_worst_case,
+    price_scenario=None,
+    combined_optimization=False,
+):
     es = solph.EnergySystem(
         timeindex=t1_agg,
         timeincrement=[1] * len(t1_agg),
@@ -314,17 +328,23 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
     dataclasses = {}
     components = {}
     index_stopper=1
+    buildings_in_cluster_to_save = {}
     for index, row in combined_cluster.iterrows():
-        if building_id_in_cluster != row["building_id"]:
+        if (not combined_optimization) and building_id_in_cluster != row["building_id"]:
             continue
         building_id =row['building_id']
-        all_building_and_not_clusters = True
+        all_building_and_not_clusters = not combined_optimization
         if all_building_and_not_clusters:
             building_in_cluster = 1
             building_in_cluster_to_save = 1
         else:
-            building_in_cluster =row['buildings_in_cluster']
-            building_in_cluster_to_save = row['buildings_in_cluster']
+            building_in_cluster = row.get("buildings_in_cluster", 1)
+            building_in_cluster_to_save = row.get("buildings_in_cluster", 1)
+        buildings_in_cluster_to_save[building_id] = building_in_cluster_to_save
+        if isinstance(heat_demand_worst_case, dict):
+            heat_demand_worst_case_building = heat_demand_worst_case.get(building_id)
+        else:
+            heat_demand_worst_case_building = heat_demand_worst_case
         dataclasses[building_id] = {}
         components[building_id] = {}
         if True:
@@ -353,6 +373,8 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
             components[building_id]["electricity_demand"] = electricity_demand
 
         max_required_heating = max(data["ww_demand_"+str(building_id)] + data["building_"+str(building_id)]) * 3
+        if heat_demand_worst_case_building is None:
+            heat_demand_worst_case_building = max_required_heating
         print("max_required_heating: "+str(max(data["ww_demand_"+str(building_id)] + data["building_"+str(building_id)])))
         building_dataclass = copy.deepcopy(data_classes_comp.loc["building", building_id])
         temp_heating_demand_building = building_dataclass.level_heating_demand
@@ -410,10 +432,10 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
                 if True:
                     if data_classes_comp[building_id]["building_type"] == "SFH":
                         if hot_water_tank_config_building.maximum_capacity >1:
-                            hot_water_tank_config_building.maximum_capacity = 0.17 * heat_demand_worst_case
+                            hot_water_tank_config_building.maximum_capacity = 0.17 * heat_demand_worst_case_building
                     elif data_classes_comp[building_id]["building_type"] == "MFH":
                         if hot_water_tank_config_building.maximum_capacity > 1:
-                            hot_water_tank_config_building.maximum_capacity = 0.2 * heat_demand_worst_case
+                            hot_water_tank_config_building.maximum_capacity = 0.2 * heat_demand_worst_case_building
 
                 hot_water_tank_config_building.set_reference_unit_quantity(reference_unit_quantity=building_in_cluster)
                 hot_water_tank_input_bus = solph.buses.Bus(label=f"tank_input_bus_{building_id}_{key}")
@@ -719,7 +741,7 @@ def run_model(co2_new,peak_new,refurbish,data,aggregation1,t1_agg,data_classes_c
 
             final_results[building_id][dataclasses[building_id]["heat_demand_dataclass"].name] = dataclasses[building_id]["heat_demand_dataclass"].post_process(results,components[building_id]["heat_demand"])
             if True:
-                final_results[building_id]["buildings_in_cluster"] = building_in_cluster_to_save
+                final_results[building_id]["buildings_in_cluster"] = buildings_in_cluster_to_save.get(building_id, 1)
                 final_results[building_id]["buildings_in_cluster_used"] = dataclasses[building_id][
                 "building_dataclass"].buildings_in_cluster
         co2_investment = 0
@@ -976,6 +998,7 @@ def run_co2_factor_worker(args):
     simple_file_path_base = context["simple_file_path_base"]
     price_scenario_name = context["price_scenario_name"]
     price_scenario = context["price_scenario"]
+    combined_optimization = context.get("combined_optimization", False)
     worker_file_path, worker_simple_file_path = _get_worker_result_paths(
         file_path_base,
         simple_file_path_base,
@@ -1012,6 +1035,7 @@ def run_co2_factor_worker(args):
             cluster_occurence,
             heat_demand_worst_case,
             price_scenario=price_scenario,
+            combined_optimization=combined_optimization,
         )
 
         key = (co2_reduction_factor, peak_reduction_factor, refurbish, ref)
@@ -1056,12 +1080,23 @@ def _is_reference_k(k_value):
 
 
 def _normalize_k_for_key(k_value):
+    if isinstance(k_value, (tuple, list)):
+        if len(k_value) != 2:
+            raise ValueError(f"Expected k_value pair of length 2, got: {k_value}")
+        return (
+            _normalize_k_for_key(k_value[0]),
+            _normalize_k_for_key(k_value[1]),
+        )
     if _is_reference_k(k_value):
         return "reference"
     return int(k_value)
 
 
 def _format_k_for_log(k_value):
+    if isinstance(k_value, (tuple, list)):
+        if len(k_value) != 2:
+            return str(k_value)
+        return f"sfh={_format_k_for_log(k_value[0])},mfh={_format_k_for_log(k_value[1])}"
     if _is_reference_k(k_value):
         return "reference"
     return f"k{int(k_value):02d}"
@@ -1184,12 +1219,26 @@ def _get_result_check_root():
     return _get_result_storage_root()
 
 
+def _k_to_folder_token(k_value):
+    if _is_reference_k(k_value):
+        return "reference"
+    return f"k{int(k_value):02d}"
+
+
 def _get_result_output_dir(root_path, cluster_name, k_value, building_type):
     cluster_root = os.path.join(root_path, cluster_name)
+    if building_type == "COMBINED":
+        if not isinstance(k_value, (tuple, list)) or len(k_value) != 2:
+            raise ValueError(f"COMBINED output requires k pair (sfh_k, mfh_k), got '{k_value}'")
+        sfh_k, mfh_k = k_value
+        sfh_token = _k_to_folder_token(sfh_k)
+        mfh_token = _k_to_folder_token(mfh_k)
+        return os.path.join(cluster_root, f"combined_cluster_sfh_{sfh_token}_mfh_{mfh_token}")
+
     if _is_reference_k(k_value):
         return os.path.join(cluster_root, "reference")
 
-    k_token = f"k{int(k_value):02d}"
+    k_token = _k_to_folder_token(k_value)
     if building_type == "SFH":
         return os.path.join(cluster_root, f"sfh_cluster_{k_token}")
     if building_type == "MFH":
@@ -1252,23 +1301,41 @@ def _discover_available_k_values(base_path, cluster_name, building_type=None):
     return sorted(k_values)
 
 
-def _load_clusters_for_k(base_path, cluster_name, k_value):
+def _load_cluster_for_k_and_type(base_path, cluster_name, k_value, building_type):
     cluster_root = os.path.join(base_path, cluster_name)
     if _is_reference_k(k_value):
         gpkg_ueu = os.path.join(cluster_root, f"{cluster_name}.gpkg")
         if not os.path.exists(gpkg_ueu):
             raise FileNotFoundError(f"Reference gpkg not found: {gpkg_ueu}")
         gdf_ueu = gpd.read_file(gpkg_ueu)
-        sfh_cluster = gdf_ueu.loc[gdf_ueu["tabula_building_type"] == "SFH"].copy()
-        mfh_cluster = gdf_ueu.loc[gdf_ueu["tabula_building_type"] == "MFH"].copy()
-        reference_dir = os.path.join(cluster_root, "reference")
-        return sfh_cluster, mfh_cluster, reference_dir, reference_dir
+        out_dir = os.path.join(cluster_root, "reference")
+        if building_type == "SFH":
+            return gdf_ueu.loc[gdf_ueu["tabula_building_type"] == "SFH"].copy(), out_dir
+        if building_type == "MFH":
+            return gdf_ueu.loc[gdf_ueu["tabula_building_type"] == "MFH"].copy(), out_dir
+        raise ValueError(f"Unsupported building_type '{building_type}'")
 
     k_token = f"k{int(k_value):02d}"
-    sfh_dir = os.path.join(cluster_root, f"sfh_cluster_{k_token}")
-    mfh_dir = os.path.join(cluster_root, f"mfh_cluster_{k_token}")
-    sfh_cluster = _safe_load_cluster_pickle(os.path.join(sfh_dir, "sfh_cluster.pkl"))
-    mfh_cluster = _safe_load_cluster_pickle(os.path.join(mfh_dir, "mfh_cluster.pkl"))
+    if building_type == "SFH":
+        out_dir = os.path.join(cluster_root, f"sfh_cluster_{k_token}")
+        cluster_path = os.path.join(out_dir, "sfh_cluster.pkl")
+    elif building_type == "MFH":
+        out_dir = os.path.join(cluster_root, f"mfh_cluster_{k_token}")
+        cluster_path = os.path.join(out_dir, "mfh_cluster.pkl")
+    else:
+        raise ValueError(f"Unsupported building_type '{building_type}'")
+    return _safe_load_cluster_pickle(cluster_path), out_dir
+
+
+def _load_clusters_for_k(base_path, cluster_name, k_value):
+    sfh_cluster, sfh_dir = _load_cluster_for_k_and_type(base_path, cluster_name, k_value, "SFH")
+    mfh_cluster, mfh_dir = _load_cluster_for_k_and_type(base_path, cluster_name, k_value, "MFH")
+    return sfh_cluster, mfh_cluster, sfh_dir, mfh_dir
+
+
+def _load_clusters_for_k_pair(base_path, cluster_name, sfh_k_value, mfh_k_value):
+    sfh_cluster, sfh_dir = _load_cluster_for_k_and_type(base_path, cluster_name, sfh_k_value, "SFH")
+    mfh_cluster, mfh_dir = _load_cluster_for_k_and_type(base_path, cluster_name, mfh_k_value, "MFH")
     return sfh_cluster, mfh_cluster, sfh_dir, mfh_dir
 
 
@@ -1290,6 +1357,9 @@ def _prepare_group_context(
     building_type=None,
     price_scenario_name="ref",
     output_cluster_name=None,
+    combined_optimization=False,
+    sfh_k_value=None,
+    mfh_k_value=None,
 ):
     base_path = _script_base_path()
     directory_path = os.path.join(base_path, ueu)
@@ -1300,7 +1370,22 @@ def _prepare_group_context(
         output_cluster_name = _scenario_output_cluster_name(ueu, scenario_name)
 
     number_of_time_steps = 8760
-    sfh_cluster, mfh_cluster, _, _ = _load_clusters_for_k(base_path, ueu, k_value)
+    if combined_optimization:
+        if isinstance(k_value, (tuple, list)) and len(k_value) == 2:
+            sfh_k_value = k_value[0] if sfh_k_value is None else sfh_k_value
+            mfh_k_value = k_value[1] if mfh_k_value is None else mfh_k_value
+        if sfh_k_value is None or mfh_k_value is None:
+            raise ValueError("combined_optimization requires both sfh_k_value and mfh_k_value.")
+        sfh_cluster, mfh_cluster, _, _ = _load_clusters_for_k_pair(
+            base_path,
+            ueu,
+            sfh_k_value,
+            mfh_k_value,
+        )
+        k_value_for_output = (sfh_k_value, mfh_k_value)
+    else:
+        sfh_cluster, mfh_cluster, _, _ = _load_clusters_for_k(base_path, ueu, k_value)
+        k_value_for_output = k_value
     if sfh_cluster.empty and mfh_cluster.empty:
         raise ValueError(f"No cluster files found for cluster='{ueu}', k={k_value}.")
 
@@ -1308,27 +1393,35 @@ def _prepare_group_context(
     combined_cluster = pd.concat(combined_frames, ignore_index=True)
 
     ev = EV_MODE
-    is_sfh = not sfh_cluster.empty and bool((sfh_cluster["building_id"] == building_id_in_cluster).any())
-    is_mfh = not mfh_cluster.empty and bool((mfh_cluster["building_id"] == building_id_in_cluster).any())
-    if not is_sfh and not is_mfh:
-        raise ValueError(
-            f"building_id '{building_id_in_cluster}' not found in k={k_value} for cluster '{ueu}'."
-        )
+    if combined_optimization:
+        if building_id_in_cluster is None:
+            building_id_in_cluster = (
+                f"combined_sfh_{_k_to_folder_token(sfh_k_value)}"
+                f"_mfh_{_k_to_folder_token(mfh_k_value)}"
+            )
+        output_building_type = "COMBINED"
+    else:
+        is_sfh = not sfh_cluster.empty and bool((sfh_cluster["building_id"] == building_id_in_cluster).any())
+        is_mfh = not mfh_cluster.empty and bool((mfh_cluster["building_id"] == building_id_in_cluster).any())
+        if not is_sfh and not is_mfh:
+            raise ValueError(
+                f"building_id '{building_id_in_cluster}' not found in k={k_value} for cluster '{ueu}'."
+            )
 
-    if building_type == "SFH" and not is_sfh:
-        raise ValueError(
-            f"building_id '{building_id_in_cluster}' is not SFH in k={k_value} for cluster '{ueu}'."
-        )
-    if building_type == "MFH" and not is_mfh:
-        raise ValueError(
-            f"building_id '{building_id_in_cluster}' is not MFH in k={k_value} for cluster '{ueu}'."
-        )
-    output_building_type = building_type if building_type in {"SFH", "MFH"} else ("SFH" if is_sfh else "MFH")
+        if building_type == "SFH" and not is_sfh:
+            raise ValueError(
+                f"building_id '{building_id_in_cluster}' is not SFH in k={k_value} for cluster '{ueu}'."
+            )
+        if building_type == "MFH" and not is_mfh:
+            raise ValueError(
+                f"building_id '{building_id_in_cluster}' is not MFH in k={k_value} for cluster '{ueu}'."
+            )
+        output_building_type = building_type if building_type in {"SFH", "MFH"} else ("SFH" if is_sfh else "MFH")
 
     file_path_base, simple_file_path_base = _get_result_file_bases(
         result_storage_root,
         output_cluster_name,
-        k_value,
+        k_value_for_output,
         output_building_type,
         refurbish,
         ev,
@@ -1360,12 +1453,11 @@ def _prepare_group_context(
     data["air_temperature"] = location.weather_data["drybulb_C"].to_list()
     date_time_index = solph.create_time_index(2025, number=number_of_time_steps - 1)
     data.index = date_time_index
-    heat_demand_worst_case = None
+    heat_demand_worst_case = {} if combined_optimization else None
 
-    for _, building_row in sfh_cluster.iterrows():
-
-        if building_id_in_cluster == building_row["building_id"]:
-            data, data_classes_comp, heat_demand_worst_case = process_cluster(
+    if combined_optimization:
+        for _, building_row in sfh_cluster.iterrows():
+            data, data_classes_comp, heat_demand_worst_case_building = process_cluster(
                 building_row=building_row,
                 building_type="SFH",
                 epw_path=epw_path,
@@ -1377,11 +1469,10 @@ def _prepare_group_context(
                 ev=ev,
                 time_index=date_time_index,
             )
+            heat_demand_worst_case[building_row["building_id"]] = heat_demand_worst_case_building
 
-
-    for _, building_row in mfh_cluster.iterrows():
-        if building_id_in_cluster == building_row["building_id"]:
-            data, data_classes_comp, heat_demand_worst_case = process_cluster(
+        for _, building_row in mfh_cluster.iterrows():
+            data, data_classes_comp, heat_demand_worst_case_building = process_cluster(
                 building_row=building_row,
                 building_type="MFH",
                 epw_path=epw_path,
@@ -1393,9 +1484,46 @@ def _prepare_group_context(
                 ev=ev,
                 time_index=date_time_index,
             )
+            heat_demand_worst_case[building_row["building_id"]] = heat_demand_worst_case_building
 
-    if heat_demand_worst_case is None:
-        raise ValueError(f"No matching building_id '{building_id_in_cluster}' in cluster '{ueu}'.")
+        if not heat_demand_worst_case:
+            raise ValueError(
+                f"No buildings available for combined optimization in cluster '{ueu}' "
+                f"(sfh_k={sfh_k_value}, mfh_k={mfh_k_value})."
+            )
+    else:
+        for _, building_row in sfh_cluster.iterrows():
+            if building_id_in_cluster == building_row["building_id"]:
+                data, data_classes_comp, heat_demand_worst_case = process_cluster(
+                    building_row=building_row,
+                    building_type="SFH",
+                    epw_path=epw_path,
+                    directory_path=directory_path,
+                    data=data,
+                    refurbish=refurbish,
+                    number_of_time_steps=number_of_time_steps,
+                    data_classes_comp=data_classes_comp,
+                    ev=ev,
+                    time_index=date_time_index,
+                )
+
+        for _, building_row in mfh_cluster.iterrows():
+            if building_id_in_cluster == building_row["building_id"]:
+                data, data_classes_comp, heat_demand_worst_case = process_cluster(
+                    building_row=building_row,
+                    building_type="MFH",
+                    epw_path=epw_path,
+                    directory_path=directory_path,
+                    data=data,
+                    refurbish=refurbish,
+                    number_of_time_steps=number_of_time_steps,
+                    data_classes_comp=data_classes_comp,
+                    ev=ev,
+                    time_index=date_time_index,
+                )
+
+        if heat_demand_worst_case is None:
+            raise ValueError(f"No matching building_id '{building_id_in_cluster}' in cluster '{ueu}'.")
 
     typical_periods = 30
     hours_per_period = 24
@@ -1423,6 +1551,7 @@ def _prepare_group_context(
         cluster_occurence,
         heat_demand_worst_case,
         price_scenario=scenario_config,
+        combined_optimization=combined_optimization,
     )
     if final_results_ref is None:
         raise RuntimeError(
@@ -1463,6 +1592,7 @@ def _prepare_group_context(
         "simple_file_path_base": simple_file_path_base,
         "price_scenario_name": scenario_name,
         "price_scenario": scenario_config,
+        "combined_optimization": combined_optimization,
     }
 
     return {
@@ -1470,7 +1600,17 @@ def _prepare_group_context(
         "worker_context": worker_context,
     }
 
-def run_main(refurbish, building_id_in_cluster, ueu, k_value, building_type=None, price_scenario_name="ref"):
+def run_main(
+    refurbish,
+    building_id_in_cluster,
+    ueu,
+    k_value,
+    building_type=None,
+    price_scenario_name="ref",
+    combined_optimization=False,
+    sfh_k_value=None,
+    mfh_k_value=None,
+):
     output_cluster_name = _scenario_output_cluster_name(ueu, price_scenario_name)
     prepared = _prepare_group_context(
         refurbish,
@@ -1480,6 +1620,9 @@ def run_main(refurbish, building_id_in_cluster, ueu, k_value, building_type=None
         building_type=building_type,
         price_scenario_name=price_scenario_name,
         output_cluster_name=output_cluster_name,
+        combined_optimization=combined_optimization,
+        sfh_k_value=sfh_k_value,
+        mfh_k_value=mfh_k_value,
     )
 
     group_key = (
@@ -1501,6 +1644,7 @@ def run_cluster_refurbish_co2_parallel(
     selected_k_values_sfh=None,
     selected_k_values_mfh=None,
     price_scenarios_to_run=None,
+    combined_optimization=False,
 ):
     base_path = _script_base_path()
     result_check_root = _get_result_check_root()
@@ -1578,26 +1722,51 @@ def run_cluster_refurbish_co2_parallel(
     task_list = []
     group_contexts = {}
 
-    for building_type, k_values_to_run in (("SFH", k_values_to_run_sfh), ("MFH", k_values_to_run_mfh)):
-        for k_value in k_values_to_run:
-            building_in_cluster = _collect_building_ids_for_k(
-                base_path,
-                cluster_name,
-                k_value,
-                building_type=building_type,
+    if combined_optimization:
+        if not k_values_to_run_sfh or not k_values_to_run_mfh:
+            print(
+                f"Combined optimization needs both SFH and MFH k values for cluster {cluster_name}. "
+                f"sfh={k_values_to_run_sfh}, mfh={k_values_to_run_mfh}"
             )
-            for price_scenario_name in price_scenarios_to_run:
-                output_cluster_name = _scenario_output_cluster_name(cluster_name, price_scenario_name)
-                for refurbish in refurbishment:
-                    for building_id_in_cluster in building_in_cluster:
+            return
+
+        for sfh_k_value in k_values_to_run_sfh:
+            for mfh_k_value in k_values_to_run_mfh:
+                sfh_buildings = _collect_building_ids_for_k(
+                    base_path,
+                    cluster_name,
+                    sfh_k_value,
+                    building_type="SFH",
+                )
+                mfh_buildings = _collect_building_ids_for_k(
+                    base_path,
+                    cluster_name,
+                    mfh_k_value,
+                    building_type="MFH",
+                )
+                if not sfh_buildings and not mfh_buildings:
+                    print(
+                        f"skip empty combined selection: {cluster_name} | "
+                        f"sfh_k={_format_k_for_log(sfh_k_value)} | mfh_k={_format_k_for_log(mfh_k_value)}"
+                    )
+                    continue
+
+                k_pair = (sfh_k_value, mfh_k_value)
+                combined_building_id = (
+                    f"combined_sfh_{_k_to_folder_token(sfh_k_value)}"
+                    f"_mfh_{_k_to_folder_token(mfh_k_value)}"
+                )
+                for price_scenario_name in price_scenarios_to_run:
+                    output_cluster_name = _scenario_output_cluster_name(cluster_name, price_scenario_name)
+                    for refurbish in refurbishment:
                         check_file_path_base, check_simple_file_path_base = _get_result_file_bases(
                             result_check_root,
                             output_cluster_name,
-                            k_value,
-                            building_type,
+                            k_pair,
+                            "COMBINED",
                             refurbish,
                             EV_MODE,
-                            building_id_in_cluster,
+                            combined_building_id,
                         )
                         missing_factors = _missing_co2_factors(
                             check_file_path_base,
@@ -1606,33 +1775,36 @@ def run_cluster_refurbish_co2_parallel(
                         )
                         if not missing_factors:
                             print(
-                                f"skip existing: {cluster_name} | scenario={price_scenario_name} | {building_type} | "
-                                f"k={_format_k_for_log(k_value)} | {building_id_in_cluster} | {refurbish}"
+                                f"skip existing: {cluster_name} | scenario={price_scenario_name} | COMBINED | "
+                                f"k={_format_k_for_log(k_pair)} | {combined_building_id} | {refurbish}"
                             )
                             continue
 
                         try:
                             prepared = _prepare_group_context(
                                 refurbish,
-                                building_id_in_cluster,
+                                combined_building_id,
                                 cluster_name,
-                                k_value,
-                                building_type=building_type,
+                                k_pair,
+                                building_type="COMBINED",
                                 price_scenario_name=price_scenario_name,
                                 output_cluster_name=output_cluster_name,
+                                combined_optimization=True,
+                                sfh_k_value=sfh_k_value,
+                                mfh_k_value=mfh_k_value,
                             )
                         except Exception as exc:
                             print(
-                                f"skip failed prepare: {cluster_name} | scenario={price_scenario_name} | {building_type} | "
-                                f"k={_format_k_for_log(k_value)} | {building_id_in_cluster} | {refurbish} | {exc}"
+                                f"skip failed prepare: {cluster_name} | scenario={price_scenario_name} | COMBINED | "
+                                f"k={_format_k_for_log(k_pair)} | {combined_building_id} | {refurbish} | {exc}"
                             )
                             continue
 
                         group_key = (
                             cluster_name,
-                            building_type,
-                            _normalize_k_for_key(k_value),
-                            building_id_in_cluster,
+                            "COMBINED",
+                            _normalize_k_for_key(k_pair),
+                            combined_building_id,
                             refurbish,
                             _normalize_price_scenario_name(price_scenario_name),
                         )
@@ -1643,13 +1815,86 @@ def run_cluster_refurbish_co2_parallel(
                         ]
                         if not pending_factors:
                             print(
-                                f"skip existing after-prepare: {cluster_name} | scenario={price_scenario_name} | {building_type} | "
-                                f"k={_format_k_for_log(k_value)} | {building_id_in_cluster} | {refurbish}"
+                                f"skip existing after-prepare: {cluster_name} | scenario={price_scenario_name} | COMBINED | "
+                                f"k={_format_k_for_log(k_pair)} | {combined_building_id} | {refurbish}"
                             )
                             continue
 
                         for co2_reduction_factor in pending_factors:
                             task_list.append((group_key, co2_reduction_factor))
+    else:
+        for building_type, k_values_to_run in (("SFH", k_values_to_run_sfh), ("MFH", k_values_to_run_mfh)):
+            for k_value in k_values_to_run:
+                building_in_cluster = _collect_building_ids_for_k(
+                    base_path,
+                    cluster_name,
+                    k_value,
+                    building_type=building_type,
+                )
+                for price_scenario_name in price_scenarios_to_run:
+                    output_cluster_name = _scenario_output_cluster_name(cluster_name, price_scenario_name)
+                    for refurbish in refurbishment:
+                        for building_id_in_cluster in building_in_cluster:
+                            check_file_path_base, check_simple_file_path_base = _get_result_file_bases(
+                                result_check_root,
+                                output_cluster_name,
+                                k_value,
+                                building_type,
+                                refurbish,
+                                EV_MODE,
+                                building_id_in_cluster,
+                            )
+                            missing_factors = _missing_co2_factors(
+                                check_file_path_base,
+                                check_simple_file_path_base,
+                                DEFAULT_CO2_REDUCTION_FACTORS,
+                            )
+                            if not missing_factors:
+                                print(
+                                    f"skip existing: {cluster_name} | scenario={price_scenario_name} | {building_type} | "
+                                    f"k={_format_k_for_log(k_value)} | {building_id_in_cluster} | {refurbish}"
+                                )
+                                continue
+
+                            try:
+                                prepared = _prepare_group_context(
+                                    refurbish,
+                                    building_id_in_cluster,
+                                    cluster_name,
+                                    k_value,
+                                    building_type=building_type,
+                                    price_scenario_name=price_scenario_name,
+                                    output_cluster_name=output_cluster_name,
+                                )
+                            except Exception as exc:
+                                print(
+                                    f"skip failed prepare: {cluster_name} | scenario={price_scenario_name} | {building_type} | "
+                                    f"k={_format_k_for_log(k_value)} | {building_id_in_cluster} | {refurbish} | {exc}"
+                                )
+                                continue
+
+                            group_key = (
+                                cluster_name,
+                                building_type,
+                                _normalize_k_for_key(k_value),
+                                building_id_in_cluster,
+                                refurbish,
+                                _normalize_price_scenario_name(price_scenario_name),
+                            )
+                            group_contexts[group_key] = prepared["worker_context"]
+                            missing_set = set(missing_factors)
+                            pending_factors = [
+                                factor for factor in prepared["co2_reduction_factors"] if factor in missing_set
+                            ]
+                            if not pending_factors:
+                                print(
+                                    f"skip existing after-prepare: {cluster_name} | scenario={price_scenario_name} | {building_type} | "
+                                    f"k={_format_k_for_log(k_value)} | {building_id_in_cluster} | {refurbish}"
+                                )
+                                continue
+
+                            for co2_reduction_factor in pending_factors:
+                                task_list.append((group_key, co2_reduction_factor))
     if not task_list:
         print(f"No runnable tasks for cluster {cluster_name}")
         return
@@ -1743,6 +1988,7 @@ def _run_cli_mode(args, workers):
     print(
         f"host={args.host_name} run_mode=cli clusters={cluster_list} workers={workers} "
         f"solver_threads={SOLVER_THREADS} sfh_k={sfh_requested} mfh_k={mfh_requested} "
+        f"combined_optimization={args.combined_optimization} "
         f"refurbishments={refurbishment} price_scenarios={price_scenarios} ev={EV_MODE} "
         f"result_check_root={_get_result_check_root()} "
         f"result_storage_root={_get_result_storage_root()}"
@@ -1756,6 +2002,7 @@ def _run_cli_mode(args, workers):
             selected_k_values_sfh=sfh_requested,
             selected_k_values_mfh=mfh_requested,
             price_scenarios_to_run=price_scenarios,
+            combined_optimization=args.combined_optimization,
         )
 
 
@@ -1795,6 +2042,14 @@ if __name__ == "__main__":
         type=str,
         default=",".join(str(x) for x in DEFAULT_K_VALUES_TO_OPTIMIZE_MFH),
         help="Comma-separated MFH k values, e.g. reference,1,2,3",
+    )
+    parser.add_argument(
+        "--combined-optimization",
+        action="store_true",
+        help=(
+            "Optimize SFH+MFH representatives jointly in one combined_cluster per (sfh_k, mfh_k) pair. "
+            "If enabled, all selected buildings of the two k-clusters are added to one model run."
+        ),
     )
     parser.add_argument(
         "--ueu-cases",
