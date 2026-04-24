@@ -1,4 +1,5 @@
 import argparse
+import ast
 from oemof.thermal_building_model.oemof_facades.base_component import  PhysicalBaseUnit
 from oemof.solph.components import Converter
 import copy
@@ -21,6 +22,7 @@ import networkx as nx
 from oemof.network.graph import create_nx_graph
 import os
 import pickle
+import re
 from oemof.thermal_building_model.helpers import calculate_gain_by_sun
 from oemof.thermal_building_model.helpers.path_helper import get_project_root
 from oemof.thermal_building_model.input.economics.investment_components import battery_config,hot_water_tank_config,air_heat_pump_config,gas_heater_config,pv_system_config,chp_config
@@ -47,12 +49,29 @@ DEFAULT_SOLVER_THREADS = 1
 SOLVER_THREADS = DEFAULT_SOLVER_THREADS
 DEFAULT_EV_MODE = "no_EV"
 EV_MODE = DEFAULT_EV_MODE
+EV_SUFFIX_NO = "no_EV"
+EV_SUFFIX_YES = "yes_EV"
+EV_SUFFIX_YES2 = "yes_EV2"
 RESULT_STORAGE_ROOT = None
 RESULT_CHECK_ROOT = None
 DEFAULT_CO2_REDUCTION_FACTORS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
 DEFAULT_PEAK_REDUCTION_FACTORS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 PRICE_SCENARIO_CONFIGS = {
     "ref": {
+        "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.0,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.0,
+    },
+    "yes_ev": {
+        "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.0,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.0,
+    },
+    "yes_ev2": {
         "electricity_factor": 1.0,
         "electricity_feed_in_factor": 1.0,
         "natural_gas_factor": 1.0,
@@ -797,6 +816,209 @@ def run_model(
         return None, None, None
 
 
+def _load_demand_dataframe(directory_path, building_id, ev_suffix):
+    demand_path = os.path.join(directory_path, f"{building_id}_demand_{ev_suffix}.pkl")
+    if not os.path.exists(demand_path):
+        raise FileNotFoundError(
+            f"Missing demand file for building '{building_id}' and ev suffix '{ev_suffix}': {demand_path}"
+        )
+    with open(demand_path, "rb") as f:
+        demand = pickle.load(f)
+    if isinstance(demand, pd.DataFrame):
+        return demand.copy()
+    return pd.DataFrame(demand)
+
+
+def _is_nan_like(value):
+    if isinstance(value, (list, tuple, dict, set)):
+        return False
+    try:
+        return bool(pd.isna(value))
+    except Exception:
+        return False
+
+
+def _coerce_ev_count_like(value, context):
+    if value is None or _is_nan_like(value):
+        return 0
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        numeric = float(value)
+        if numeric < 0 or not numeric.is_integer():
+            raise ValueError(f"{context}: EV count must be a non-negative integer, got {value}")
+        return int(numeric)
+    token = str(value).strip().lower()
+    if token in {"true", "yes", "y", "ja"}:
+        return 1
+    if token in {"false", "no", "n", "nein", ""}:
+        return 0
+    try:
+        numeric = float(token)
+    except Exception:
+        raise ValueError(f"{context}: cannot parse EV count value '{value}'")
+    if numeric < 0 or not numeric.is_integer():
+        raise ValueError(f"{context}: EV count must be a non-negative integer, got {value}")
+    return int(numeric)
+
+
+def _normalize_household_ev_counts(raw_flags, expected_households, building_id, source_name):
+    values = raw_flags
+    if isinstance(values, str):
+        text = values.strip()
+        if not text:
+            values = []
+        else:
+            try:
+                values = ast.literal_eval(text)
+            except Exception:
+                values = [part.strip() for part in text.split(",")]
+
+    if hasattr(values, "tolist") and not isinstance(values, (str, bytes, dict)):
+        values = values.tolist()
+    if isinstance(values, tuple):
+        values = list(values)
+    elif not isinstance(values, list):
+        values = [values]
+
+    if len(values) < expected_households:
+        print(
+            f"Warning: building '{building_id}': '{source_name}' has {len(values)} entries, "
+            f"but {expected_households} households are expected. Padding missing households with 0 EV."
+        )
+        values = values + [0] * (expected_households - len(values))
+    elif len(values) > expected_households:
+        print(
+            f"Warning: building '{building_id}': '{source_name}' has {len(values)} entries, "
+            f"but {expected_households} households are expected. Truncating to first {expected_households} entries."
+        )
+        values = values[:expected_households]
+
+    ev_counts = []
+    for idx, val in enumerate(values, start=1):
+        ev_counts.append(
+            _coerce_ev_count_like(
+                val,
+                context=f"building '{building_id}' {source_name}[HH{idx}]",
+            )
+        )
+    return ev_counts
+
+
+def _extract_has_ev_list(building_row, expected_households, building_id, require_field):
+    candidate_fields = ("has_ev_home_per_household_rep", "has_ev_home_per_household")
+    for field_name in candidate_fields:
+        if field_name in building_row.index:
+            raw = building_row[field_name]
+            if _is_nan_like(raw):
+                continue
+            return _normalize_household_ev_counts(
+                raw,
+                expected_households=expected_households,
+                building_id=building_id,
+                source_name=field_name,
+            )
+    if require_field:
+        raise KeyError(
+            f"building '{building_id}': missing EV household list. "
+            f"Expected one of {candidate_fields} in cluster row."
+        )
+    return [0] * expected_households
+
+
+def _extract_household_column_map(demand_df, prefix):
+    pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
+    mapping = {}
+    for col in demand_df.columns:
+        match = pattern.match(str(col).strip())
+        if match:
+            hh_idx = int(match.group(1))
+            if hh_idx in mapping:
+                raise ValueError(f"Duplicate household index {hh_idx} for prefix '{prefix}'.")
+            mapping[hh_idx] = col
+    return mapping
+
+
+def build_mixed_electricity_profile_per_household(
+    building_id,
+    directory_path,
+    has_ev_list,
+    ev_suffix_with_ev=EV_SUFFIX_YES,
+    strict_car_column_for_ev_households=True,
+):
+    demand_no_ev = _load_demand_dataframe(directory_path, building_id, EV_SUFFIX_NO)
+    demand_with_ev = _load_demand_dataframe(directory_path, building_id, ev_suffix_with_ev)
+
+    if len(demand_no_ev) != len(demand_with_ev):
+        raise ValueError(
+            f"building '{building_id}': no_EV and {ev_suffix_with_ev} demand length mismatch "
+            f"({len(demand_no_ev)} vs {len(demand_with_ev)})."
+        )
+    if not demand_no_ev.index.equals(demand_with_ev.index):
+        demand_no_ev = demand_no_ev.reset_index(drop=True)
+        demand_with_ev = demand_with_ev.reset_index(drop=True)
+
+    hh_cols_no_ev = _extract_household_column_map(demand_no_ev, "Electricity_HH")
+    hh_cols_with_ev = _extract_household_column_map(demand_with_ev, "Electricity_HH")
+    if not hh_cols_no_ev:
+        raise ValueError(
+            f"building '{building_id}': no household electricity columns found in no_EV file. "
+            "Expected columns like 'Electricity_HH1'."
+        )
+    if set(hh_cols_no_ev.keys()) != set(hh_cols_with_ev.keys()):
+        raise ValueError(
+            f"building '{building_id}': household electricity columns differ between no_EV and {ev_suffix_with_ev}. "
+            f"no_EV={sorted(hh_cols_no_ev.keys())}, {ev_suffix_with_ev}={sorted(hh_cols_with_ev.keys())}"
+        )
+
+    hh_indices = sorted(hh_cols_no_ev.keys())
+    expected_hh_indices = list(range(1, len(hh_indices) + 1))
+    if hh_indices != expected_hh_indices:
+        raise ValueError(
+            f"building '{building_id}': expected contiguous household columns HH1..HH{len(hh_indices)}, "
+            f"got HH indices {hh_indices}."
+        )
+
+    has_ev_counts = _normalize_household_ev_counts(
+        has_ev_list,
+        expected_households=len(hh_indices),
+        building_id=building_id,
+        source_name="has_ev_list",
+    )
+    car_cols_with_ev = _extract_household_column_map(
+        demand_with_ev, "Electricity for Car Charging_HH"
+    )
+
+    mixed_electricity = pd.Series(0.0, index=demand_no_ev.index, dtype=float)
+    for list_pos, hh_idx in enumerate(hh_indices):
+        base_col = hh_cols_no_ev[hh_idx]
+        base_profile = pd.to_numeric(demand_no_ev[base_col], errors="coerce").fillna(0.0)
+        mixed_electricity = mixed_electricity.add(base_profile, fill_value=0.0)
+
+        ev_count_for_hh = int(has_ev_counts[list_pos])
+        if ev_count_for_hh > 0:
+            car_col = car_cols_with_ev.get(hh_idx)
+            if car_col is None:
+                message = (
+                    f"building '{building_id}': EV household HH{hh_idx} requires "
+                    f"'Electricity for Car Charging_HH{hh_idx}' in '{ev_suffix_with_ev}' demand file."
+                )
+                if strict_car_column_for_ev_households:
+                    raise ValueError(message)
+                continue
+            car_profile = pd.to_numeric(demand_with_ev[car_col], errors="coerce").fillna(0.0)
+            if ev_suffix_with_ev == EV_SUFFIX_YES2:
+                car_multiplier = ev_count_for_hh
+            else:
+                car_multiplier = 1
+            mixed_electricity = mixed_electricity.add(
+                car_profile * float(car_multiplier),
+                fill_value=0.0,
+            )
+
+    return mixed_electricity, demand_no_ev, demand_with_ev
+
+
 def process_cluster(building_row, building_type, epw_path, directory_path, data, refurbish, number_of_time_steps,data_classes_comp,ev,time_index):
 
         building_id = building_row['building_id']
@@ -804,7 +1026,7 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
         building_floor_area = building_row['net_floor_area']
         building_roof_area = building_row['roof_surface_area']
         number_of_occupants = building_row['number_of_residents']
-        number_of_households = building_row['number_of_apartments']
+        number_of_households = int(building_row['number_of_apartments'])
         azimuth = building_row['azimuth']
         tilt = building_row['tilt']
         # Zuordnung Baujahr
@@ -815,14 +1037,31 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
         }
         year_of_construction = year_map.get(tabula_year_class, 2000)  # fallback
 
-        # Demands laden
-        with open(os.path.join(directory_path, f"{building_id}_demand_{ev}.pkl"), "rb") as f:
-            demand = pickle.load(f)
+        ev_suffix_with_ev = EV_SUFFIX_YES2 if str(ev).strip() == EV_SUFFIX_YES2 else EV_SUFFIX_YES
+        require_ev_household_titles = str(ev).strip() in {EV_SUFFIX_YES, EV_SUFFIX_YES2}
+        has_ev_list = _extract_has_ev_list(
+            building_row=building_row,
+            expected_households=number_of_households,
+            building_id=building_id,
+            require_field=require_ev_household_titles,
+        )
+        if str(ev).strip() == EV_SUFFIX_NO:
+            has_ev_list = [0] * number_of_households
 
-        electricity_cols = [col for col in demand.columns if col.startswith("Electricity")]
-        demand_electricity = (demand[electricity_cols].sum(axis=1) * 1000).tolist()
-        warm_water_cols = [col for col in demand.columns if col.startswith("Warm Water_")]
-        demand_warm_water = demand[warm_water_cols].sum(axis=1).tolist()
+        mixed_electricity, demand_no_ev, _ = build_mixed_electricity_profile_per_household(
+            building_id=building_id,
+            directory_path=directory_path,
+            has_ev_list=has_ev_list,
+            ev_suffix_with_ev=ev_suffix_with_ev,
+            strict_car_column_for_ev_households=True,
+        )
+        demand_electricity = (mixed_electricity * 1000).tolist()
+        warm_water_cols = [col for col in demand_no_ev.columns if str(col).startswith("Warm Water_")]
+        if not warm_water_cols:
+            raise ValueError(
+                f"building '{building_id}': no warm water columns found in no_EV demand file."
+            )
+        demand_warm_water = demand_no_ev[warm_water_cols].sum(axis=1).tolist()
 
         # Datenklassen
         electricity_demand = ElectricityDemand(name=f"e_demand_{building_id}", value_list=demand_electricity)
@@ -2069,6 +2308,7 @@ if __name__ == "__main__":
         default=",".join(DEFAULT_PRICE_SCENARIOS),
         help=(
             "Comma-separated price scenarios. Supported: "
+            "yes_ev,yes_ev2,"
             "ref,electricity_minus20,electricity_plus20,electricity_minus40,electricity_plus40,"
             "electricity_feed_in_minus20,electricity_feed_in_plus20,electricity_feed_in_minus40,electricity_feed_in_plus40,"
             "gas_minus20,gas_plus20,gas_minus40,gas_plus40,"
@@ -2079,7 +2319,7 @@ if __name__ == "__main__":
         "--ev",
         type=str,
         default=DEFAULT_EV_MODE,
-        choices=["no_EV", "yes_EV"],
+        choices=["no_EV", "yes_EV", "yes_EV2"],
         help="Demand file suffix for EV scenario.",
     )
     args = parser.parse_args()
