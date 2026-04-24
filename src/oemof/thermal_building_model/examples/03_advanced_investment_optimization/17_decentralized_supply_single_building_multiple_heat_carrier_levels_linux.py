@@ -43,7 +43,7 @@ import multiprocessing
 from urllib.parse import urlparse
 
 _CO2_WORKER_CONTEXT = {}
-DEFAULT_SOLVER = "gurobi"
+DEFAULT_SOLVER = "scip"
 SOLVER = DEFAULT_SOLVER
 DEFAULT_SOLVER_THREADS = 1
 SOLVER_THREADS = DEFAULT_SOLVER_THREADS
@@ -945,30 +945,15 @@ def build_mixed_electricity_profile_per_household(
     has_ev_list,
     ev_suffix_with_ev=EV_SUFFIX_YES,
     strict_car_column_for_ev_households=True,
+    force_load_with_ev_file=False,
 ):
     demand_no_ev = _load_demand_dataframe(directory_path, building_id, EV_SUFFIX_NO)
-    demand_with_ev = _load_demand_dataframe(directory_path, building_id, ev_suffix_with_ev)
-
-    if len(demand_no_ev) != len(demand_with_ev):
-        raise ValueError(
-            f"building '{building_id}': no_EV and {ev_suffix_with_ev} demand length mismatch "
-            f"({len(demand_no_ev)} vs {len(demand_with_ev)})."
-        )
-    if not demand_no_ev.index.equals(demand_with_ev.index):
-        demand_no_ev = demand_no_ev.reset_index(drop=True)
-        demand_with_ev = demand_with_ev.reset_index(drop=True)
 
     hh_cols_no_ev = _extract_household_column_map(demand_no_ev, "Electricity_HH")
-    hh_cols_with_ev = _extract_household_column_map(demand_with_ev, "Electricity_HH")
     if not hh_cols_no_ev:
         raise ValueError(
             f"building '{building_id}': no household electricity columns found in no_EV file. "
             "Expected columns like 'Electricity_HH1'."
-        )
-    if set(hh_cols_no_ev.keys()) != set(hh_cols_with_ev.keys()):
-        raise ValueError(
-            f"building '{building_id}': household electricity columns differ between no_EV and {ev_suffix_with_ev}. "
-            f"no_EV={sorted(hh_cols_no_ev.keys())}, {ev_suffix_with_ev}={sorted(hh_cols_with_ev.keys())}"
         )
 
     hh_indices = sorted(hh_cols_no_ev.keys())
@@ -985,9 +970,34 @@ def build_mixed_electricity_profile_per_household(
         building_id=building_id,
         source_name="has_ev_list",
     )
-    car_cols_with_ev = _extract_household_column_map(
-        demand_with_ev, "Electricity for Car Charging_HH"
-    )
+    needs_with_ev_file = force_load_with_ev_file or any(int(x) > 0 for x in has_ev_counts)
+
+    if not needs_with_ev_file:
+        mixed_electricity = pd.Series(0.0, index=demand_no_ev.index, dtype=float)
+        for hh_idx in hh_indices:
+            base_col = hh_cols_no_ev[hh_idx]
+            base_profile = pd.to_numeric(demand_no_ev[base_col], errors="coerce").fillna(0.0)
+            mixed_electricity = mixed_electricity.add(base_profile, fill_value=0.0)
+        return mixed_electricity, demand_no_ev, None
+
+    demand_with_ev = _load_demand_dataframe(directory_path, building_id, ev_suffix_with_ev)
+    if len(demand_no_ev) != len(demand_with_ev):
+        raise ValueError(
+            f"building '{building_id}': no_EV and {ev_suffix_with_ev} demand length mismatch "
+            f"({len(demand_no_ev)} vs {len(demand_with_ev)})."
+        )
+    if not demand_no_ev.index.equals(demand_with_ev.index):
+        demand_no_ev = demand_no_ev.reset_index(drop=True)
+        demand_with_ev = demand_with_ev.reset_index(drop=True)
+
+    hh_cols_with_ev = _extract_household_column_map(demand_with_ev, "Electricity_HH")
+    if set(hh_cols_no_ev.keys()) != set(hh_cols_with_ev.keys()):
+        raise ValueError(
+            f"building '{building_id}': household electricity columns differ between no_EV and {ev_suffix_with_ev}. "
+            f"no_EV={sorted(hh_cols_no_ev.keys())}, {ev_suffix_with_ev}={sorted(hh_cols_with_ev.keys())}"
+        )
+
+    car_cols_with_ev = _extract_household_column_map(demand_with_ev, "Electricity for Car Charging_HH")
 
     mixed_electricity = pd.Series(0.0, index=demand_no_ev.index, dtype=float)
     for list_pos, hh_idx in enumerate(hh_indices):
@@ -1037,15 +1047,16 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
         }
         year_of_construction = year_map.get(tabula_year_class, 2000)  # fallback
 
-        ev_suffix_with_ev = EV_SUFFIX_YES2 if str(ev).strip() == EV_SUFFIX_YES2 else EV_SUFFIX_YES
-        require_ev_household_titles = str(ev).strip() in {EV_SUFFIX_YES, EV_SUFFIX_YES2}
+        ev_mode = str(ev).strip()
+        ev_suffix_with_ev = EV_SUFFIX_YES2 if ev_mode == EV_SUFFIX_YES2 else EV_SUFFIX_YES
+        require_ev_household_titles = ev_mode in {EV_SUFFIX_YES, EV_SUFFIX_YES2}
         has_ev_list = _extract_has_ev_list(
             building_row=building_row,
             expected_households=number_of_households,
             building_id=building_id,
             require_field=require_ev_household_titles,
         )
-        if str(ev).strip() == EV_SUFFIX_NO:
+        if ev_mode == EV_SUFFIX_NO:
             has_ev_list = [0] * number_of_households
 
         mixed_electricity, demand_no_ev, _ = build_mixed_electricity_profile_per_household(
@@ -1054,6 +1065,7 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
             has_ev_list=has_ev_list,
             ev_suffix_with_ev=ev_suffix_with_ev,
             strict_car_column_for_ev_households=True,
+            force_load_with_ev_file=require_ev_household_titles,
         )
         demand_electricity = (mixed_electricity * 1000).tolist()
         warm_water_cols = [col for col in demand_no_ev.columns if str(col).startswith("Warm Water_")]
