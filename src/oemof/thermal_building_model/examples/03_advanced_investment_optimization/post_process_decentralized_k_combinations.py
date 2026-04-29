@@ -14,7 +14,11 @@ from pareto_optimal_help_functions import combine_all_buildings
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_UEU_CASE = "processed_bds_in_DENI03403000SEC5658"
+DEFAULT_UEU_CASE = [
+    #"processed_bds_in_DENI03403000SEC5658",
+    "processed_bds_in_DENI03403000SEC5101",
+    "processed_bds_in_DENI03403000SEC4580",
+]
 DEFAULT_REFURBISHMENT_STRATEGIES = [
     "no_refurbishment",
     "usual_refurbishment",
@@ -32,7 +36,7 @@ TODAY_DATE = date.today().strftime("%Y_%m_%d")
 DEFAULT_OUTPUT_ROOT_NAME = f"post_processed_dec_k_combinations_{TODAY_DATE}"
 
 # Backward-compatible module constants.
-UEU_CASE = DEFAULT_UEU_CASE
+UEU_CASE = list(DEFAULT_UEU_CASE)
 REFURBISHMENT_STRATEGIES = list(DEFAULT_REFURBISHMENT_STRATEGIES)
 OPTIMIZATION_STRATEGIES = list(DEFAULT_OPTIMIZATION_STRATEGIES)
 OUTPUT_ROOT_NAME = DEFAULT_OUTPUT_ROOT_NAME
@@ -91,6 +95,15 @@ def _parse_csv_values(raw_csv: Any) -> List[str]:
         return []
     values = [x.strip() for x in str(raw_csv).split(",") if x.strip()]
     return _dedupe_keep_order(values)
+
+
+def _parse_ueu_cases(raw_value: Any) -> List[str]:
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, (list, tuple, set)):
+        values = [str(x).strip() for x in raw_value if str(x).strip()]
+        return _dedupe_keep_order(values)
+    return _parse_csv_values(raw_value)
 
 
 def _resolve_workers(raw_workers: Any, serial: bool = False) -> int:
@@ -487,7 +500,7 @@ def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[
             modes_each=("log", "log", "log"),
             eps_rel_merge=(0.008, 0.008, 0.008),
             modes_merge=("log", "log", "log"),
-            max_points_after_each_merge=8000,
+            max_points_after_each_merge=2000,
         )
     except Exception as exc:
         return {
@@ -561,7 +574,7 @@ def _print_row_status(row: Dict[str, Any], index: int, total: int) -> None:
 
 
 def run_all_combinations(
-    ueu_case: str = UEU_CASE,
+    ueu_case: str = DEFAULT_UEU_CASE[0],
     sfh_k_values: Optional[Iterable[Any]] = None,
     mfh_k_values: Optional[Iterable[Any]] = None,
     refurbishment_strategies: Optional[Iterable[str]] = None,
@@ -707,8 +720,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--ueu-case",
         type=str,
-        default=DEFAULT_UEU_CASE,
-        help="UEU folder name below the example directory.",
+        default=",".join(DEFAULT_UEU_CASE),
+        help="Comma-separated UEU folder names below the example directory.",
     )
     parser.add_argument(
         "--base-dir",
@@ -765,9 +778,12 @@ if __name__ == "__main__":
 
     sfh_requested = _parse_k_values(args.sfh_k)
     mfh_requested = _parse_k_values(args.mfh_k)
+    selected_ueu_cases = _parse_ueu_cases(args.ueu_case)
     selected_refurbishments = _parse_csv_values(args.refurbishments)
     selected_optimization = _parse_csv_values(args.optimization_strategies)
 
+    if not selected_ueu_cases:
+        raise ValueError("No UEU cases provided via --ueu-case.")
     if not sfh_requested:
         raise ValueError("No SFH k values provided via --sfh-k.")
     if not mfh_requested:
@@ -781,24 +797,26 @@ if __name__ == "__main__":
 
     print(
         f"host={args.host_name} workers={workers} task_offset={args.task_offset} max_tasks={args.max_tasks} "
-        f"ueu_case={args.ueu_case} base_dir={args.base_dir or str(BASE_DIR)} "
+        f"ueu_cases={selected_ueu_cases} base_dir={args.base_dir or str(BASE_DIR)} "
         f"sfh_k={[ _format_k_for_log(x) for x in sfh_requested ]} "
         f"mfh_k={[ _format_k_for_log(x) for x in mfh_requested ]} "
         f"refurbishments={selected_refurbishments} optimization_strategies={selected_optimization} "
         f"print_scaling={args.print_scaling} print_scaling_all={args.print_scaling_all}"
     )
 
-    run_all_combinations(
-        ueu_case=args.ueu_case,
-        sfh_k_values=sfh_requested,
-        mfh_k_values=mfh_requested,
-        refurbishment_strategies=selected_refurbishments,
-        optimization_strategies=selected_optimization,
-        workers=workers,
-        max_tasks=args.max_tasks,
-        task_offset=args.task_offset,
-        base_dir=args.base_dir,
-        output_root_name=args.output_root_name,
-        print_scaling=args.print_scaling,
-        print_scaling_only_changed=(not args.print_scaling_all),
-    )
+    for index, selected_ueu in enumerate(selected_ueu_cases, start=1):
+        print(f"\n=== UEU [{index}/{len(selected_ueu_cases)}]: {selected_ueu} ===")
+        run_all_combinations(
+            ueu_case=selected_ueu,
+            sfh_k_values=sfh_requested,
+            mfh_k_values=mfh_requested,
+            refurbishment_strategies=selected_refurbishments,
+            optimization_strategies=selected_optimization,
+            workers=workers,
+            max_tasks=args.max_tasks,
+            task_offset=args.task_offset,
+            base_dir=args.base_dir,
+            output_root_name=args.output_root_name,
+            print_scaling=args.print_scaling,
+            print_scaling_only_changed=(not args.print_scaling_all),
+        )
