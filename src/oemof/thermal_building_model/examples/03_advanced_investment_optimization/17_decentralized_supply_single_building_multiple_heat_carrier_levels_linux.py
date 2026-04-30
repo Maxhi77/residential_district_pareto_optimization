@@ -1256,7 +1256,8 @@ def run_co2_factor_worker(args):
         co2_reduction_factor,
     )
 
-    if os.path.exists(worker_file_path) and os.path.exists(worker_simple_file_path):
+    # Fast-skip when simple output is already present.
+    if os.path.exists(worker_simple_file_path):
         return group_key, worker_file_path, worker_simple_file_path
 
     ref = "co2"
@@ -1522,7 +1523,8 @@ def _missing_co2_factors(file_path_base, simple_file_path_base, co2_reduction_fa
             simple_file_path_base,
             co2_reduction_factor,
         )
-        if not (os.path.exists(worker_file_path) and os.path.exists(worker_simple_file_path)):
+        # Skip already when the simple result exists (even if full result is missing).
+        if not os.path.exists(worker_simple_file_path):
             missing.append(co2_reduction_factor)
     return missing
 
