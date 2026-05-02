@@ -27,8 +27,8 @@ DEFAULT_REFURBISHMENT_STRATEGIES = [
 ]
 DEFAULT_OPTIMIZATION_STRATEGIES = ["co2"]
 
-DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference"]
-DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference"]
+DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference", 1, 2, 4, 6, 8, 10, 14, 18]
+DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference", 1, 2, 3, 4, 5, 6]
 
 #DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference"]
 #DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference"]
@@ -496,11 +496,11 @@ def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[
             filtered_building_dict,
             refurbishment_strategies=refurbishment_strategies,
             tau=1e-9,
-            eps_rel_each=(0.002, 0.002, 0.002),
+            eps_rel_each=(0.001, 0.001, 0.001),
             modes_each=("log", "log", "log"),
-            eps_rel_merge=(0.008, 0.008, 0.008),
+            eps_rel_merge=(0.002, 0.002, 0.002),
             modes_merge=("log", "log", "log"),
-            max_points_after_each_merge=2000,
+            max_points_after_each_merge=6000,
         )
     except Exception as exc:
         return {
