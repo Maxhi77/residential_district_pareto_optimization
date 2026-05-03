@@ -16,6 +16,16 @@ from pareto_optimal_help_functions import combine_all_buildings
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_UEU_CASE = [
     "processed_bds_in_DENI03403000SEC5658",
+"processed_bds_in_DENI03403000SEC5658_yes_EV",
+"processed_bds_in_DENI03403000SEC5658_yes_EV2",
+"processed_bds_in_DENI03403000SEC5658_electricity_minus20",
+"processed_bds_in_DENI03403000SEC5658_electricity_plus20",
+"processed_bds_in_DENI03403000SEC5658_electricity_feed_in_minus20",
+"processed_bds_in_DENI03403000SEC5658_electricity_feed_in_plus20",
+"processed_bds_in_DENI03403000SEC5658_electricity_feed_in_minus40",
+"processed_bds_in_DENI03403000SEC5658_electricity_feed_in_plus40",
+"processed_bds_in_DENI03403000SEC5658_hydrogen_minus20",
+"processed_bds_in_DENI03403000SEC5658_hydrogen_plus20",
     #"processed_bds_in_DENI03403000SEC5101",
     #"processed_bds_in_DENI03403000SEC4580",
 ]
@@ -30,6 +40,8 @@ DEFAULT_OPTIMIZATION_STRATEGIES = ["co2"]
 DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference", 1, 2, 4, 6, 8, 10, 14, 18]
 DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference", 1, 2, 3, 4, 5, 6]
 
+DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = [6]
+DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = [1]
 #DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference"]
 #DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference"]
 TODAY_DATE = date.today().strftime("%Y_%m_%d")
@@ -346,6 +358,7 @@ def _load_building_result_records(
 
 def _build_decentralized_building_dict_for_combination(
     cluster_root: Path,
+    result_root: Path,
     sfh_k: Any,
     mfh_k: Any,
     refurbishment_strategies: Iterable[str],
@@ -372,8 +385,8 @@ def _build_decentralized_building_dict_for_combination(
         for _, row in mfh_df.iterrows():
             mfh_occurrence[str(row["building_id"])] = _to_positive_float(row.get("buildings_in_cluster", 1), default=1.0)
 
-    sfh_folder = _result_folder_for_type(cluster_root, "SFH", sfh_k)
-    mfh_folder = _result_folder_for_type(cluster_root, "MFH", mfh_k)
+    sfh_folder = _result_folder_for_type(result_root, "SFH", sfh_k)
+    mfh_folder = _result_folder_for_type(result_root, "MFH", mfh_k)
 
     building_dict: Dict[str, Dict[str, Dict[Any, Dict[str, Any]]]] = {}
     stats = {
@@ -442,9 +455,10 @@ def _save_combination_outputs(
         pickle.dump(meta, fh, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[str], str, bool, bool]) -> Dict[str, Any]:
+def _process_single_combination(task: Tuple[str, str, str, Any, Any, List[str], List[str], str, bool, bool]) -> Dict[str, Any]:
     (
         cluster_root_raw,
+        result_root_raw,
         output_root_raw,
         sfh_k,
         mfh_k,
@@ -455,12 +469,14 @@ def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[
         print_scaling_only_changed,
     ) = task
     cluster_root = Path(cluster_root_raw)
+    result_root = Path(result_root_raw)
     output_root = Path(output_root_raw)
     combo = _combo_name(sfh_k, mfh_k)
 
     try:
         building_dict, stats = _build_decentralized_building_dict_for_combination(
             cluster_root=cluster_root,
+            result_root=result_root,
             sfh_k=sfh_k,
             mfh_k=mfh_k,
             refurbishment_strategies=refurbishment_strategies,
@@ -496,11 +512,11 @@ def _process_single_combination(task: Tuple[str, str, Any, Any, List[str], List[
             filtered_building_dict,
             refurbishment_strategies=refurbishment_strategies,
             tau=1e-9,
-            eps_rel_each=(0.001, 0.001, 0.001),
+            eps_rel_each=(0.002, 0.002, 0.002),
             modes_each=("log", "log", "log"),
-            eps_rel_merge=(0.002, 0.002, 0.002),
+            eps_rel_merge=(0.008, 0.008, 0.008),
             modes_merge=("log", "log", "log"),
-            max_points_after_each_merge=6000,
+            max_points_after_each_merge=2000,
         )
     except Exception as exc:
         return {
@@ -583,6 +599,8 @@ def run_all_combinations(
     max_tasks: Optional[int] = None,
     task_offset: int = 0,
     base_dir: Optional[str] = None,
+    cluster_base_dir: Optional[str] = None,
+    cluster_ueu_case: Optional[str] = None,
     output_root_name: Optional[str] = None,
     print_scaling: bool = False,
     print_scaling_only_changed: bool = True,
@@ -611,17 +629,27 @@ def run_all_combinations(
     if task_offset < 0:
         raise ValueError("task_offset must be >= 0")
 
-    data_base_dir = Path(base_dir).expanduser() if base_dir else BASE_DIR
-    cluster_root = _resolve_cluster_root(str(ueu_case), data_base_dir)
+    result_base_dir = Path(base_dir).expanduser() if base_dir else BASE_DIR
+    cluster_base = Path(cluster_base_dir).expanduser() if cluster_base_dir else result_base_dir
+    cluster_case = str(cluster_ueu_case).strip() if cluster_ueu_case else str(ueu_case)
+
+    cluster_root = _resolve_cluster_root(cluster_case, cluster_base)
     if not cluster_root.exists():
         raise FileNotFoundError(
-            f"UEU folder not found: {cluster_root} (ueu_case={ueu_case}, base_dir={data_base_dir})"
+            f"Cluster UEU folder not found: {cluster_root} "
+            f"(cluster_ueu_case={cluster_case}, cluster_base_dir={cluster_base})"
+        )
+    result_root = _resolve_cluster_root(str(ueu_case), result_base_dir)
+    if not result_root.exists():
+        raise FileNotFoundError(
+            f"Result UEU folder not found: {result_root} "
+            f"(ueu_case={ueu_case}, base_dir={result_base_dir})"
         )
 
     output_dir_name = str(output_root_name).strip() if output_root_name is not None else ""
     if not output_dir_name:
         output_dir_name = DEFAULT_OUTPUT_ROOT_NAME
-    output_root = cluster_root / output_dir_name
+    output_root = result_root / output_dir_name
     output_root.mkdir(parents=True, exist_ok=True)
 
     all_combinations = [(sfh_k, mfh_k) for sfh_k in sfh_values for mfh_k in mfh_values]
@@ -634,8 +662,11 @@ def run_all_combinations(
         raise ValueError("No combinations to run after applying task_offset/max_tasks/filter settings.")
 
     print(f"UEU: {ueu_case}")
-    print(f"Data base dir: {data_base_dir}")
+    print(f"Result base dir: {result_base_dir}")
+    print(f"Cluster base dir: {cluster_base}")
+    print(f"Cluster UEU case: {cluster_case}")
     print(f"Cluster root: {cluster_root}")
+    print(f"Result root: {result_root}")
     print(f"Output root: {output_root}")
     print(f"SFH K list: {sfh_values}")
     print(f"MFH K list: {mfh_values}")
@@ -652,6 +683,7 @@ def run_all_combinations(
     tasks = [
         (
             str(cluster_root),
+            str(result_root),
             str(output_root),
             sfh_k,
             mfh_k,
@@ -727,7 +759,19 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--base-dir",
         type=str,
         default=None,
-        help="Base directory containing UEU folders. Defaults to this script directory.",
+        help="Base directory containing result UEU folders. Defaults to this script directory.",
+    )
+    parser.add_argument(
+        "--cluster-base-dir",
+        type=str,
+        default=None,
+        help="Base directory containing cluster UEU folders. Defaults to --base-dir.",
+    )
+    parser.add_argument(
+        "--cluster-ueu-case",
+        type=str,
+        default=None,
+        help="UEU folder name to use for clusters. Defaults to the current --ueu-case.",
     )
     parser.add_argument(
         "--sfh-k",
@@ -798,6 +842,8 @@ if __name__ == "__main__":
     print(
         f"host={args.host_name} workers={workers} task_offset={args.task_offset} max_tasks={args.max_tasks} "
         f"ueu_cases={selected_ueu_cases} base_dir={args.base_dir or str(BASE_DIR)} "
+        f"cluster_base_dir={args.cluster_base_dir or (args.base_dir or str(BASE_DIR))} "
+        f"cluster_ueu_case={args.cluster_ueu_case or '<same_as_ueu_case>'} "
         f"sfh_k={[ _format_k_for_log(x) for x in sfh_requested ]} "
         f"mfh_k={[ _format_k_for_log(x) for x in mfh_requested ]} "
         f"refurbishments={selected_refurbishments} optimization_strategies={selected_optimization} "
@@ -816,6 +862,8 @@ if __name__ == "__main__":
             max_tasks=args.max_tasks,
             task_offset=args.task_offset,
             base_dir=args.base_dir,
+            cluster_base_dir=args.cluster_base_dir,
+            cluster_ueu_case=args.cluster_ueu_case,
             output_root_name=args.output_root_name,
             print_scaling=args.print_scaling,
             print_scaling_only_changed=(not args.print_scaling_all),
