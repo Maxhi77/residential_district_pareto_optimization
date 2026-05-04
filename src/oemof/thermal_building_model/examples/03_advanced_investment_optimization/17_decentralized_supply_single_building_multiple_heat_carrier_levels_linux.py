@@ -52,6 +52,8 @@ EV_MODE = DEFAULT_EV_MODE
 EV_SUFFIX_NO = "no_EV"
 EV_SUFFIX_YES = "yes_EV"
 EV_SUFFIX_YES2 = "yes_EV2"
+EV_SUFFIX_TOTAL = "yes_EV_total"
+EV_SUFFIX_HALF = "yes_EV_half"
 RESULT_STORAGE_ROOT = None
 RESULT_CHECK_ROOT = None
 DEFAULT_CO2_REDUCTION_FACTORS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01]
@@ -72,6 +74,20 @@ PRICE_SCENARIO_CONFIGS = {
         "hydrogen_factor": 1.0,
     },
     "yes_ev2": {
+        "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.0,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.0,
+    },
+    "yes_ev_total": {
+        "electricity_factor": 1.0,
+        "electricity_feed_in_factor": 1.0,
+        "natural_gas_factor": 1.0,
+        "bio_gas_factor": 1.0,
+        "hydrogen_factor": 1.0,
+    },
+    "yes_ev_half": {
         "electricity_factor": 1.0,
         "electricity_feed_in_factor": 1.0,
         "natural_gas_factor": 1.0,
@@ -926,6 +942,25 @@ def _extract_has_ev_list(building_row, expected_households, building_id, require
     return [0] * expected_households
 
 
+def _build_even_ev_assignment(num_households, num_ev_households):
+    n = int(max(0, num_households))
+    k = int(max(0, num_ev_households))
+    if n == 0 or k == 0:
+        return [0] * n
+    if k >= n:
+        return [1] * n
+
+    out = [0] * n
+    # Evenly spread EV households over HH1..HHn
+    # Use centered bins to avoid clustering at the edges.
+    for i in range(k):
+        pos = int(((i + 0.5) * n) / k)
+        if pos >= n:
+            pos = n - 1
+        out[pos] = 1
+    return out
+
+
 def _extract_household_column_map(demand_df, prefix):
     pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
     mapping = {}
@@ -1048,7 +1083,10 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
         year_of_construction = year_map.get(tabula_year_class, 2000)  # fallback
 
         ev_mode = str(ev).strip()
-        ev_suffix_with_ev = EV_SUFFIX_YES2 if ev_mode == EV_SUFFIX_YES2 else EV_SUFFIX_YES
+        if ev_mode == EV_SUFFIX_YES2:
+            ev_suffix_with_ev = EV_SUFFIX_YES2
+        else:
+            ev_suffix_with_ev = EV_SUFFIX_YES
         require_ev_household_titles = ev_mode in {EV_SUFFIX_YES, EV_SUFFIX_YES2}
         has_ev_list = _extract_has_ev_list(
             building_row=building_row,
@@ -1058,6 +1096,11 @@ def process_cluster(building_row, building_type, epw_path, directory_path, data,
         )
         if ev_mode == EV_SUFFIX_NO:
             has_ev_list = [0] * number_of_households
+        elif ev_mode == EV_SUFFIX_TOTAL:
+            has_ev_list = [1] * number_of_households
+        elif ev_mode == EV_SUFFIX_HALF:
+            ev_households = int(round(number_of_households / 2.0))
+            has_ev_list = _build_even_ev_assignment(number_of_households, ev_households)
 
         mixed_electricity, demand_no_ev, _ = build_mixed_electricity_profile_per_household(
             building_id=building_id,
@@ -2323,6 +2366,7 @@ if __name__ == "__main__":
         help=(
             "Comma-separated price scenarios. Supported: "
             "yes_ev,yes_ev2,"
+            "yes_ev_total,yes_ev_half,"
             "ref,electricity_minus20,electricity_plus20,electricity_minus40,electricity_plus40,"
             "electricity_feed_in_minus20,electricity_feed_in_plus20,electricity_feed_in_minus40,electricity_feed_in_plus40,"
             "gas_minus20,gas_plus20,gas_minus40,gas_plus40,"
@@ -2333,8 +2377,11 @@ if __name__ == "__main__":
         "--ev",
         type=str,
         default=DEFAULT_EV_MODE,
-        choices=["no_EV", "yes_EV", "yes_EV2"],
-        help="Demand file suffix for EV scenario.",
+        choices=["no_EV", "yes_EV", "yes_EV2", "yes_EV_total", "yes_EV_half"],
+        help=(
+            "EV scenario mode: no_EV, yes_EV, yes_EV2, yes_EV_total, yes_EV_half. "
+            "yes_EV_total assigns 1 EV to every household, yes_EV_half assigns EV to ~50% households evenly."
+        ),
     )
     args = parser.parse_args()
 
