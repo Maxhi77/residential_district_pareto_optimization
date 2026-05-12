@@ -307,6 +307,87 @@ class HotWaterTank(Storage):
                                                                temperature_high=temperature_high))
 
 
+@dataclass
+class SeasonalWaterTank(HotWaterTank):
+    name: str = "SeasonalWaterTank"
+
+    u_value: Optional[float] = 0.25
+    volume_in_m3: float = 1000
+    height_diameter_relation: float = 1.0
+
+    loss_rate: float =  0.0000758
+    charging_efficiency: float = 0.99
+    discharging_efficiency: float = 0.99
+
+    invest_relation_input_capacity: float = 0.025
+    invest_relation_output_capacity: float = 0.025
+
+    def calculate_loss_rate_for_stratified_layer(
+        self,
+        storage_temperature: float,
+        external_temperature: Optional[float] = None,
+    ):
+        if external_temperature is None:
+            external_temperature = self.external_temperautre
+
+        reference_delta = self.max_temperature - external_temperature
+        layer_delta = storage_temperature - external_temperature
+
+        if reference_delta <= 0 or layer_delta <= 0:
+            return 0
+
+        return self.loss_rate * layer_delta / reference_delta
+
+    def create_stratified_storage(self, levels, carrier_buses):
+        storage_dict = {}
+
+        for temperature, share in levels.items():
+            if temperature <= min(carrier_buses):
+                continue
+
+            self.oemof_component_name = f"{self.name.lower()}_{str(temperature)}"
+
+            input_bus = {carrier_buses[temperature]: solph.Flow()}
+            output_bus = {carrier_buses[temperature]: solph.Flow()}
+
+            stratified_loss_rate = self.calculate_loss_rate_for_stratified_layer(
+                storage_temperature=temperature,
+                external_temperature=self.external_temperautre,
+            )
+
+            if self.investment:
+                storage_dict[temperature] = solph.components.GenericStorage(
+                    label=self.oemof_component_name,
+                    inputs=input_bus,
+                    outputs=output_bus,
+                    invest_relation_input_capacity=self.invest_relation_input_capacity,
+                    invest_relation_output_capacity=self.invest_relation_output_capacity,
+                    nominal_storage_capacity=solph.Investment(
+                        ep_costs=0,
+                        nonconvex=True,
+                        maximum=self.investment_component.maximum_capacity,
+                        minimum=self.investment_component.minimum_capacity,
+                        lifetime=self.investment_component.lifetime,
+                        custom_attributes={
+                            "co2": {
+                                "offset": 0.00,
+                                "linear": 0.00,
+                            }
+                        },
+                    ),
+                    loss_rate=stratified_loss_rate,
+                    min_storage_level=self.min_storage_level,
+                    initial_storage_level=self.initial_storage_level,
+                    inflow_conversion_factor=self.charging_efficiency,
+                    outflow_conversion_factor=self.discharging_efficiency,
+                    balanced=self.balanced,
+                    lifetime_inflow=self.investment_component.lifetime,
+                    lifetime_outflow=self.investment_component.lifetime,
+                )
+
+        return storage_dict
+
+
 
 @dataclass
 class Battery(Storage):

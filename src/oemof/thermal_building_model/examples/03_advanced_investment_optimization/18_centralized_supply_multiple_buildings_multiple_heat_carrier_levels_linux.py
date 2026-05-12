@@ -7,7 +7,7 @@ from oemof.thermal_building_model.oemof_facades.infrastructure.carriers import E
 from oemof.thermal_building_model.oemof_facades.helper_functions import connect_buses, flatten_components_list
 from oemof.thermal_building_model.oemof_facades.infrastructure.demands import ElectricityDemand, WarmWater
 from oemof.thermal_building_model.oemof_facades.technologies.renewable_energy_source import PVSystem
-from oemof.thermal_building_model.oemof_facades.technologies.storages import Battery, HotWaterTank
+from oemof.thermal_building_model.oemof_facades.technologies.storages import Battery, HotWaterTank, SeasonalWaterTank
 from oemof.thermal_building_model.oemof_facades.technologies.converter import AirHeatPump, GasHeater, CHP
 from oemof.thermal_building_model.oemof_facades.technologies.heat_grid import HeatGridInvestment
 from oemof.thermal_building_model.input.economics.operation_grid_economics import natural_gas_grid_config, bio_gas_grid_config
@@ -26,7 +26,7 @@ import pickle
 import argparse
 from oemof.thermal_building_model.helpers import calculate_gain_by_sun
 from oemof.thermal_building_model.helpers.path_helper import get_project_root
-from oemof.thermal_building_model.input.economics.investment_components_heat_grid import battery_config,hot_water_tank_config,air_heat_pump_config,gas_heater_config,pv_system_config,chp_config
+from oemof.thermal_building_model.input.economics.investment_components_heat_grid import battery_config,hot_water_tank_config,air_heat_pump_config,gas_heater_config,pv_system_config,chp_config, seasonal_hot_water_tank_config
 
 from oemof.thermal_building_model.tabula.tabula_reader import Building
 import pprint as pp
@@ -182,22 +182,54 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                 investment_component=hot_water_tank_config_building,
                 input_bus=hot_water_tank_input_bus,
                 output_bus=hot_water_tank_output_bus,
+                invest_relation_input_capacity=0.2,
+                invest_relation_output_capacity = 0.2,
             )
         hot_water_tank = hot_water_tank_dataclass.create_storage()
 
         dataclasses[heat_grid_id]["hot_water_tank_dataclass_" + str(key)] = hot_water_tank_dataclass
         components[heat_grid_id]["hot_water_tank_" + str(key)] = hot_water_tank
 
-        if True:
-            hot_water_tank_stratisfied_temp_levels_dict = hot_water_tank_dataclass.get_stratified_storage_temperature_levels()
-            hot_water_tank_stratisfied = hot_water_tank_dataclass.create_stratified_storage(
-                hot_water_tank_stratisfied_temp_levels_dict, heat_carrier_bus)
+    hot_water_tank_stratisfied_temp_levels_dict = hot_water_tank_dataclass.get_stratified_storage_temperature_levels()
+    hot_water_tank_stratisfied = hot_water_tank_dataclass.create_stratified_storage(
+        hot_water_tank_stratisfied_temp_levels_dict, heat_carrier_bus)
 
-            dataclasses[heat_grid_id][
-                "hot_water_tank_stratisfied_temp_levels_" + str(key)] = hot_water_tank_stratisfied_temp_levels_dict
-            components[heat_grid_id]["hot_water_tank_stratisfied_" + str(key)] = hot_water_tank_stratisfied
-            components[heat_grid_id]["hot_water_tank_input_bus_" + str(key)] = hot_water_tank_input_bus
-            components[heat_grid_id]["hot_water_tank_output_bus_" + str(key)] = hot_water_tank_output_bus
+    dataclasses[heat_grid_id][
+        "hot_water_tank_stratisfied_temp_levels_" + str(key)] = hot_water_tank_stratisfied_temp_levels_dict
+    components[heat_grid_id]["hot_water_tank_stratisfied_" + str(key)] = hot_water_tank_stratisfied
+    components[heat_grid_id]["hot_water_tank_input_bus_" + str(key)] = hot_water_tank_input_bus
+    components[heat_grid_id]["hot_water_tank_output_bus_" + str(key)] = hot_water_tank_output_bus
+
+    for key, config in seasonal_hot_water_tank_config.items():
+        seasonal_water_tank_config_building = copy.deepcopy(config)
+        seasonal_water_tank_input_bus = solph.buses.Bus(label=f"seasonal_water_tank_input_bus_{heat_grid_id}_{key}")
+        seasonal_water_tank_output_bus = solph.buses.Bus(label=f"seasonal_water_tank_output_bus_{heat_grid_id}_{key}")
+        seasonal_water_tank_dataclass = SeasonalWaterTank(
+            name=f"seasonal_water_tank_{heat_grid_id}_{key}",
+            investment=True,
+            temperature_buses=heat_carrier_dataclass.get_bus(),
+            max_temperature=90,
+            min_temperature=40,
+            investment_component=seasonal_water_tank_config_building,
+            input_bus=seasonal_water_tank_input_bus,
+            output_bus=seasonal_water_tank_output_bus,
+
+        )
+        seasonal_water_tank = seasonal_water_tank_dataclass.create_storage()
+
+        dataclasses[heat_grid_id]["seasonal_water_tank_dataclass_" + str(key)] = seasonal_water_tank_dataclass
+        components[heat_grid_id]["seasonal_water_tank_" + str(key)] = seasonal_water_tank
+
+
+    seasonal_water_tank_stratisfied_temp_levels_dict = seasonal_water_tank_dataclass.get_stratified_storage_temperature_levels()
+    seasonal_water_tank_stratisfied = seasonal_water_tank_dataclass.create_stratified_storage(
+        seasonal_water_tank_stratisfied_temp_levels_dict, heat_carrier_bus)
+
+    dataclasses[heat_grid_id][
+        "seasonal_water_tank_stratisfied_temp_levels_" + str(key)] = seasonal_water_tank_stratisfied_temp_levels_dict
+    components[heat_grid_id]["seasonal_water_tank_stratisfied_" + str(key)] = seasonal_water_tank_stratisfied
+    components[heat_grid_id]["seasonal_water_tank_input_bus_" + str(key)] = seasonal_water_tank_input_bus
+    components[heat_grid_id]["seasonal_water_tank_output_bus_" + str(key)] = seasonal_water_tank_output_bus
 
     for key, config in air_heat_pump_config.items():
         air_heat_pump_config_building =  copy.deepcopy(config)
@@ -472,6 +504,21 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                             return model.GenericInvestmentStorageBlock.invest[storage_child, 0]  <= model.GenericInvestmentStorageBlock.invest[storage_father, 0]* share_stratisfied
 
                         setattr(model, "eq"+components[building_id]["hot_water_tank_stratisfied_"+str(key)][temperature].label, po.Constraint(rule=equate_variables_rule(share_stratisfied)))
+            if building_id == "heat_grid":
+                for key, config in seasonal_hot_water_tank_config.items():
+                    for temperature, stratisfied_storage in components[building_id][
+                        "seasonal_water_tank_stratisfied_" + str(key)].items():
+                        storage_father = es.groups[components[building_id]["seasonal_water_tank_" + str(key)].label]
+                        storage_child = stratisfied_storage
+                        share_stratisfied = \
+                        dataclasses[building_id]["seasonal_water_tank_stratisfied_temp_levels_" + str(key)][temperature]
+
+                        def equate_variables_rule(share_stratisfied):
+                            return model.GenericInvestmentStorageBlock.invest[storage_child, 0] <= \
+                                model.GenericInvestmentStorageBlock.invest[storage_father, 0] * share_stratisfied
+
+                        setattr(model, "eq" + components[building_id]["seasonal_water_tank_stratisfied_" + str(key)][
+                            temperature].label, po.Constraint(rule=equate_variables_rule(share_stratisfied)))
     if len(pv_system_config) > 1:
         print("PV SYSTEM ÜBERARTBEITEN SODASS DER CONSTRAINT FÜR JEDES GEBÄUDE GEMACHT WIRD IN BUILDING ID")
         for key, config in pv_system_config.items():
@@ -685,8 +732,8 @@ def check_possible_buildings_for_heat_grid_temp(building_row, building_type, epw
                 buildung_dict["advanced_refurbishment"] = building
                 matching_buildings = buildung_dict
             elif building.level_heating_demand ==70:
-                building.capex_annuity = building.capex_annuity * 1.8
-                building.co2_cost = building.co2_cost * 1.8
+                building.capex_annuity = building.capex_annuity * 1.75
+                building.co2_cost = building.co2_cost * 1.75
                 building.level_heating_demand = 40
                 buildung_dict["advanced_refurbishment"] = building
                 matching_buildings = buildung_dict
@@ -1219,8 +1266,7 @@ def run_main(heat_grid_temperature,ueu,heat_grid_length,sfh_k_value,mfh_k_value,
                     co2_reduction_factors = [round(x, 3) for x in
                                              [1 - i * step for i in range(int((1.0 - (-0.1)) / step) + 1)]]
 
-            co2_reduction_factors = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2,
-                                     0.2, 0.1, 0.05, 0.01, -0.01, -0.05, -0.1]
+            co2_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2]
                 # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
              #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2]
             references = ["co2"]#["co2","peak"]

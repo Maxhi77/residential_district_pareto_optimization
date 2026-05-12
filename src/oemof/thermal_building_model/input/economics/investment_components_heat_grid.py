@@ -20,27 +20,27 @@ if True:
         1: InvestmentComponents(
             maximum_capacity=300,
             minimum_capacity=10,
-            cost_per_unit=256,#856.272931
-            cost_offset=8125,#2568
+            cost_per_unit=856.272931,
+            cost_offset=2568,
             co2_per_capacity=3.53*100,
             lifetime=30,
             operational_cost_relative_to_capacity=0.01
         )}
     seasonal_hot_water_tank_config = {
         1: InvestmentComponents(
-            maximum_capacity=3000,
+            maximum_capacity=5000,
             minimum_capacity=500,
-            cost_per_unit=856.272931,#856.272931
-            cost_offset=2568,#2568
-            co2_per_capacity=3.53*100,
-            lifetime=30,
-            operational_cost_relative_to_capacity=0.01
+            cost_per_unit=640,#856.272931
+            cost_offset=0,#2568
+            co2_per_capacity=3.0*100,
+            lifetime=40,
+            operational_cost_relative_to_capacity=0.001
         )}
     pv_system_config = {1:
             InvestmentComponents(
                 maximum_capacity=100 * 1000 / PhysicalBaseUnit.factor,
                 minimum_capacity=0,
-                cost_per_unit=1200 / 1000 * PhysicalBaseUnit.factor,
+                cost_per_unit=1000 / 1000 * PhysicalBaseUnit.factor,
                 cost_offset=500,
                 operational_cost_relative_to_capacity=0.02,
                 co2_per_capacity=0.91 * PhysicalBaseUnit.factor,
@@ -77,7 +77,7 @@ gas_heater_config={
         cost_per_unit=119 / 1000 * PhysicalBaseUnit.factor,
         cost_offset=20000,
         operational_cost_relative_to_capacity=0.001,
-        co2_per_capacity=0.00809 * PhysicalBaseUnit.factor*0.8,
+        co2_per_capacity=0.00809 * PhysicalBaseUnit.factor,
         lifetime=25),
 }
 
