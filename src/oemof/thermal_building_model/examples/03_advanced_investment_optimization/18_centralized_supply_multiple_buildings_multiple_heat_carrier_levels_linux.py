@@ -24,6 +24,7 @@ from oemof.network.graph import create_nx_graph
 import os
 import pickle
 import argparse
+from urllib.parse import urlparse
 from oemof.thermal_building_model.helpers import calculate_gain_by_sun
 from oemof.thermal_building_model.helpers.path_helper import get_project_root
 from oemof.thermal_building_model.input.economics.investment_components_heat_grid import battery_config,hot_water_tank_config,air_heat_pump_config,gas_heater_config,pv_system_config,chp_config, seasonal_hot_water_tank_config
@@ -900,11 +901,46 @@ def _load_cluster_for_type(base_path, cluster_name, building_type, k_value):
 
 def _build_centralized_output_dir(base_path, cluster_name, sfh_k_value, mfh_k_value):
     cluster_root = os.path.join(base_path, cluster_name)
-    sfh_token = "ref" if _is_reference_k(sfh_k_value) else f"k{int(sfh_k_value):02d}"
-    mfh_token = "ref" if _is_reference_k(mfh_k_value) else f"k{int(mfh_k_value):02d}"
-    output_dir = os.path.join(cluster_root, f"cen_s{sfh_token}_m{mfh_token}")
+    sfh_token = _format_k_for_folder(sfh_k_value)
+    mfh_token = _format_k_for_folder(mfh_k_value)
+    output_dir = os.path.join(cluster_root, f"combined_cluster_sfh_{sfh_token}_mfh_{mfh_token}", "centralized")
     os.makedirs(output_dir, exist_ok=True)
     return output_dir
+
+
+def _script_base_path():
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _normalize_result_root(raw_value, base_path):
+    if raw_value is None:
+        return None
+
+    value = str(raw_value).strip()
+    if not value or value.lower() in {"none", "default"}:
+        return None
+
+    if len(value) >= 2 and value[1] == ":":
+        normalized = value
+    else:
+        parsed = urlparse(value)
+        if parsed.scheme and parsed.scheme != "file":
+            if not parsed.path:
+                raise ValueError(f"Invalid storage URL without path: {value}")
+            normalized = parsed.path
+        elif parsed.scheme == "file":
+            normalized = parsed.path
+        else:
+            normalized = value
+
+    if not os.path.isabs(normalized):
+        normalized = os.path.abspath(os.path.join(base_path, normalized))
+
+    return os.path.normpath(normalized)
+
+
+def _get_result_storage_root():
+    return RESULT_STORAGE_ROOT if RESULT_STORAGE_ROOT else _script_base_path()
 
 
 def _co2_factor_to_suffix(factor):
@@ -1046,7 +1082,8 @@ def _select_scenarios_for_mode(scenarios, scenario_mode):
 
 
 def run_main(heat_grid_temperature,ueu,heat_grid_length,sfh_k_value,mfh_k_value,scenario_mode="all"):
-    base_path = os.path.dirname(os.path.abspath(__file__))
+    base_path = _script_base_path()
+    result_storage_root = _get_result_storage_root()
     directory_path =os.path.join(base_path, ueu)
     number_of_time_steps = 8760
     sfh_cluster = _load_cluster_for_type(base_path, ueu, "SFH", sfh_k_value)
@@ -1059,7 +1096,7 @@ def run_main(heat_grid_temperature,ueu,heat_grid_length,sfh_k_value,mfh_k_value,
     print("BUILDING CLUSTER:")
     print(combined_frames)
     combined_cluster = pd.concat(combined_frames, ignore_index=True)
-    output_dir = _build_centralized_output_dir(base_path, ueu, sfh_k_value, mfh_k_value)
+    output_dir = _build_centralized_output_dir(result_storage_root, ueu, sfh_k_value, mfh_k_value)
     ev = "no_EV"
     if True:
 
@@ -1405,6 +1442,7 @@ DEFAULT_UEU_CASES = [
 DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference"]
 DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference"]
 DEFAULT_SCENARIO_MODE = "capex_min_only"  # "all" | "capex_min_only"
+RESULT_STORAGE_ROOT = None
 
 ERROR_DIR = "error_logs"
 os.makedirs(ERROR_DIR, exist_ok=True)
@@ -1564,6 +1602,15 @@ if __name__ == "__main__":
         default=",".join(f"{name}:{length}" for name, length in DEFAULT_UEU_CASES),
         help="Comma-separated UEU cases as <ueu>:<heat_grid_length>.",
     )
+    parser.add_argument(
+        "--result-storage-root",
+        type=str,
+        default="default",
+        help=(
+            "Base directory for centralized results. "
+            "Use 'default' to store near this script."
+        ),
+    )
     args = parser.parse_args()
 
     if args.job_start < 0:
@@ -1584,8 +1631,13 @@ if __name__ == "__main__":
     if not sfh_requested and not mfh_requested:
         raise ValueError("Both --sfh-k and --mfh-k are empty.")
 
+    script_base = _script_base_path()
+    RESULT_STORAGE_ROOT = _normalize_result_root(args.result_storage_root, script_base)
+    if RESULT_STORAGE_ROOT:
+        os.makedirs(RESULT_STORAGE_ROOT, exist_ok=True)
+
     SOLVER_THREADS = args.solver_threads
-    base_path = os.path.dirname(os.path.abspath(__file__))
+    base_path = script_base
     all_jobs_raw = _build_all_jobs(
         base_path=base_path,
         ueu_cases=ueu_cases,
