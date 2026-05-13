@@ -558,11 +558,11 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
     try:
 
         if True:
-            model.solve(solver=solver, solve_kwargs={"tee": True},
-                                                  cmdline_options={"mipgap": 0.005,"threads":SOLVER_THREADS}
+            solve_result=model.solve(solver=solver, solve_kwargs={"tee": True},
+                                                  cmdline_options={"limits/gap": 0.005,"threads":SOLVER_THREADS}
             )
         else:
-            model.solve(solver=solver, solve_kwargs={"tee": True},
+            solve_result=model.solve(solver=solver, solve_kwargs={"tee": True},
                                                   cmdline_options={"mipgap": 0.005}
             )
         meta_results = solph.processing.meta_results(model)
@@ -584,6 +584,11 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
                 for key,_ in hot_water_tank_config.items():
 
                     final_results[building_id][dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)].name] = dataclasses[building_id]["hot_water_tank_dataclass_"+str(key)].post_process(results,components[building_id]["hot_water_tank_"+str(key)])
+
+                for key,_ in seasonal_hot_water_tank_config.items():
+
+                    final_results[building_id][dataclasses[building_id]["seasonal_water_tank_dataclass_"+str(key)].name] = dataclasses[building_id]["seasonal_water_tank_dataclass_"+str(key)].post_process(results,components[building_id]["seasonal_water_tank_"+str(key)])
+
                 for key,_ in battery_config.items():
                     final_results[building_id][dataclasses[building_id]["battery_dataclass_"+str(key)].name] = dataclasses[building_id]["battery_dataclass_"+str(key)].post_process(results,components[building_id]["battery_"+str(key)])
                 for key,_ in gas_heater_config.items():
@@ -661,7 +666,8 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         if solver == "gurobi":
             return final_results, co2_oemof_model, meta_results["solver"]["Wall time"]
         else:
-            return final_results, co2_oemof_model, None
+            solver_time_s = float(solve_result.solver.time)
+            return final_results, co2_oemof_model, solver_time_s
     except Exception as e:
         print(e)
         return None, None, None

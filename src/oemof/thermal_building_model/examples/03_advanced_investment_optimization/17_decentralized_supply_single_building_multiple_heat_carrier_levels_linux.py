@@ -717,7 +717,7 @@ def run_model(
     try:
 
 
-        model.solve(solver=SOLVER, solve_kwargs={"tee": True},
+        solve_result = model.solve(solver=SOLVER, solve_kwargs={"tee": True},
                                               cmdline_options={"mipgap": 0.005,
                                                                "threads": SOLVER_THREADS},
         )
@@ -823,7 +823,8 @@ def run_model(
         final_results["totex"] = meta_results["objective"]
         final_results["totex_oemof_model"] = meta_results["objective"]
         if SOLVER == "scip":
-            return final_results, co2_oemof_model, None
+            solver_time_s = float(getattr(solve_result.solver, "time", float("nan")))
+            return final_results, co2_oemof_model, solver_time_s
         else:
             return final_results, co2_oemof_model, meta_results["solver"]["Wall time"]
 
