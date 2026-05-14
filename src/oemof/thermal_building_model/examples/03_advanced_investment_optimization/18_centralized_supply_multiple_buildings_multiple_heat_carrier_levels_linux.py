@@ -75,19 +75,24 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
             total_heat_demand_year =  total_heat_demand_year_per_building_cluster
         else:
             total_heat_demand_year = total_heat_demand_year + total_heat_demand_year_per_building_cluster
-    print(heat_transfer_station_max_kW)
-    demand = 0
+    print("total_heat_demand_year_per_building_cluster :" +str(total_heat_demand_year_per_building_cluster))
+    print("total_heat_demand_year :" +str(total_heat_demand_year))
 
+    max_required_heating=float(max(total_heat_demand_year)) * 3
+    heat_demand_annual = float(total_heat_demand_year.sum())
+    demand = 0
+    print("max_required_heating :" +str(max_required_heating))
+    print("heat_demand_annual :" +str(heat_demand_annual))
     fictional_heat_grid_demand= data["ww_demand_" + str(building_id)]
     fictional_heat_grid_demand[:]= 1
     total_heat_demand_year_sum=0
-    annual_heat_demand_peak = max(total_heat_demand_year_per_building)
+    annual_heat_demand_peak = max(total_heat_demand_year)
     for cluster, count in cluster_occurence.items():
         # Hole den entsprechenden WW-Demand aus 'data' für das Cluster (erste Zahl in cluster_order entspricht dem Cluster)
         demand = demand + fictional_heat_grid_demand[cluster].sum() * count
         total_heat_demand_year_sum  += total_heat_demand_year[cluster].sum() * count
 
-    if peak_new is False or None:
+    if peak_new is False or peak_new is None:
         electricity_grid_dataclass = ElectricityGrid()
     else:
         electricity_grid_dataclass = ElectricityGrid(max_peak_from_grid=peak_new,
@@ -159,7 +164,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
     for key, config in hot_water_tank_config.items():
         hot_water_tank_config_building = copy.deepcopy(config)
-        hot_water_tank_config_building.maximum_capacity =max(0.25 * heat_demand_worst_case,31)
+        hot_water_tank_config_building.maximum_capacity =min(0.3 * heat_demand_worst_case,hot_water_tank_config_building.maximum_capacity)
         hot_water_tank_input_bus = solph.buses.Bus(label=f"tank_input_bus_{heat_grid_id}_{key}")
         hot_water_tank_output_bus = solph.buses.Bus(label=f"tank_output_bus_{heat_grid_id}_{key}")
         if False:
@@ -201,8 +206,28 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
     components[heat_grid_id]["hot_water_tank_input_bus_" + str(key)] = hot_water_tank_input_bus
     components[heat_grid_id]["hot_water_tank_output_bus_" + str(key)] = hot_water_tank_output_bus
 
+    tank_helper = SeasonalWaterTank(
+        name="tmp_seasonal",
+        investment=False,  # wichtig: keine Config-Mutation
+        max_temperature=90,
+        min_temperature=40,
+    )
+
+    kwh_per_m3 = tank_helper.relative_storage_capacity_in_wh_per_volume(
+        temperature_high=tank_helper.max_temperature,
+        temperature_low=tank_helper.min_temperature,
+    ) / 1000.0
+    seasonal_share = 0.3
+    seasonal_volume_m3_estimate = (heat_demand_annual * seasonal_share) / kwh_per_m3
     for key, config in seasonal_hot_water_tank_config.items():
         seasonal_water_tank_config_building = copy.deepcopy(config)
+
+        seasonal_simplified_maximum_in_m3 = min(
+            seasonal_volume_m3_estimate,
+            seasonal_water_tank_config_building.maximum_capacity,
+        )
+        seasonal_water_tank_config_building.maximum_capacity = seasonal_simplified_maximum_in_m3
+        print("seasonal_max_in_m3: "+str(seasonal_simplified_maximum_in_m3))
         seasonal_water_tank_input_bus = solph.buses.Bus(label=f"seasonal_water_tank_input_bus_{heat_grid_id}_{key}")
         seasonal_water_tank_output_bus = solph.buses.Bus(label=f"seasonal_water_tank_output_bus_{heat_grid_id}_{key}")
         seasonal_water_tank_dataclass = SeasonalWaterTank(
@@ -234,7 +259,8 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
     for key, config in air_heat_pump_config.items():
         air_heat_pump_config_building =  copy.deepcopy(config)
-
+        if air_heat_pump_config_building.maximum_capacity > max_required_heating:
+            air_heat_pump_config_building.maximum_capacity = max_required_heating
         air_heat_pump_dataclass = AirHeatPump(heat_carrier_bus= heat_carrier_dataclass.get_bus(),
                                               investment=True,
                                               name="hp_"+str(heat_grid_id)+"_"+str(key),
@@ -258,7 +284,8 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
     if True:
         for key, config in gas_heater_config.items():
             gas_heater_config_building = copy.deepcopy(config)
-
+            if gas_heater_config_building.maximum_capacity > max_required_heating:
+                gas_heater_config_building.maximum_capacity = max_required_heating
 
             gas_heater_dataclass = GasHeater(investment=True,
                                              name="gas_heater_"+str(heat_grid_id)+"_"+str(key),
@@ -277,6 +304,8 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         for key, config in chp_config.items():
             chp_config_building = copy.deepcopy(config)
 
+            if chp_config_building.maximum_capacity > max_required_heating:
+                chp_config_building.maximum_capacity = max_required_heating
             chp_dataclass = CHP(investment=True,
                                 name="chp_"+str(heat_grid_id)+"_"+str(key),
                                 investment_component=chp_config_building,
@@ -298,7 +327,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
     for key, config in battery_config.items():
         battery_config_building =  copy.deepcopy(config)
 
-        battery_config_building.maximum_capacity = min(number_of_buildings * 100, battery_config_building.maximum_capacity)
+        battery_config_building.maximum_capacity = min(number_of_buildings * 60, battery_config_building.maximum_capacity)
         battery_dataclass = Battery(investment=True,
                                     name="battery_"+str(heat_grid_id)+"_"+str(key),
                                     input_bus = electricity_carrier_bus,
@@ -559,7 +588,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
 
         if True:
             solve_result=model.solve(solver=solver, solve_kwargs={"tee": True},
-                                                  cmdline_options={"limits/gap": 0.005,"threads":SOLVER_THREADS}
+                                                  cmdline_options={"threads":SOLVER_THREADS}
             )
         else:
             solve_result=model.solve(solver=solver, solve_kwargs={"tee": True},
@@ -667,6 +696,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
             return final_results, co2_oemof_model, meta_results["solver"]["Wall time"]
         else:
             solver_time_s = float(solve_result.solver.time)
+            print("solve_time: "+str(solver_time_s))
             return final_results, co2_oemof_model, solver_time_s
     except Exception as e:
         print(e)
@@ -1445,8 +1475,8 @@ DEFAULT_SOLVER_THREADS = 3
 DEFAULT_UEU_CASES = [
     ("processed_bds_in_DENI03403000SEC5658", 1146.15),
 ]
-DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = ["reference"]
-DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = ["reference"]
+DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = [1]
+DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = [1]
 DEFAULT_SCENARIO_MODE = "capex_min_only"  # "all" | "capex_min_only"
 RESULT_STORAGE_ROOT = None
 
@@ -1515,9 +1545,9 @@ def _build_all_jobs(base_path, ueu_cases, heat_grid_supply_temperatures, sfh_req
                 continue
 
             if not sfh_k_values:
-                sfh_k_values = ["reference"]
+                sfh_k_values = [1]
             if not mfh_k_values:
-                mfh_k_values = ["reference"]
+                mfh_k_values = [1]
 
             for sfh_k_value in sfh_k_values:
                 for mfh_k_value in mfh_k_values:
