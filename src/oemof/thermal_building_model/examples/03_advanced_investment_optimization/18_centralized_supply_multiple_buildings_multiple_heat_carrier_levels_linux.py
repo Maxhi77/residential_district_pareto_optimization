@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from oemof.network.graph import create_nx_graph
 import os
+import glob
 import pickle
 import argparse
 from urllib.parse import urlparse
@@ -228,6 +229,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         )
         seasonal_water_tank_config_building.maximum_capacity = seasonal_simplified_maximum_in_m3
         print("seasonal_max_in_m3: "+str(seasonal_simplified_maximum_in_m3))
+        print("seasonal_min:"+str(seasonal_water_tank_config_building.minimum_capacity) )
         seasonal_water_tank_input_bus = solph.buses.Bus(label=f"seasonal_water_tank_input_bus_{heat_grid_id}_{key}")
         seasonal_water_tank_output_bus = solph.buses.Bus(label=f"seasonal_water_tank_output_bus_{heat_grid_id}_{key}")
         seasonal_water_tank_dataclass = SeasonalWaterTank(
@@ -935,13 +937,28 @@ def _load_cluster_for_type(base_path, cluster_name, building_type, k_value):
     return _safe_load_cluster_pickle(os.path.join(cluster_dir, f"{prefix}_cluster.pkl"))
 
 
-def _build_centralized_output_dir(base_path, cluster_name, sfh_k_value, mfh_k_value):
+def _centralized_output_dir_path(base_path, cluster_name, sfh_k_value, mfh_k_value):
     cluster_root = os.path.join(base_path, cluster_name)
     sfh_token = _format_k_for_folder(sfh_k_value)
     mfh_token = _format_k_for_folder(mfh_k_value)
-    output_dir = os.path.join(cluster_root, f"combined_cluster_sfh_{sfh_token}_mfh_{mfh_token}", "centralized")
+    return os.path.join(cluster_root, f"combined_cluster_sfh_{sfh_token}_mfh_{mfh_token}", "centralized")
+
+
+def _build_centralized_output_dir(base_path, cluster_name, sfh_k_value, mfh_k_value):
+    output_dir = _centralized_output_dir_path(base_path, cluster_name, sfh_k_value, mfh_k_value)
     os.makedirs(output_dir, exist_ok=True)
     return output_dir
+
+
+def _has_existing_simple_example(base_path, cluster_name, sfh_k_value, mfh_k_value, heat_grid_temperature):
+    output_dir = _centralized_output_dir_path(base_path, cluster_name, sfh_k_value, mfh_k_value)
+    if not os.path.isdir(output_dir):
+        return False
+    pattern = os.path.join(
+        output_dir,
+        f"res_cen_t{int(heat_grid_temperature)}_*_simple_co2_*.pkl",
+    )
+    return len(glob.glob(pattern)) > 0
 
 
 def _script_base_path():
@@ -1523,7 +1540,15 @@ def _parse_ueu_cases(raw):
     return out
 
 
-def _build_all_jobs(base_path, ueu_cases, heat_grid_supply_temperatures, sfh_requested, mfh_requested, scenario_mode):
+def _build_all_jobs(
+    base_path,
+    result_storage_root,
+    ueu_cases,
+    heat_grid_supply_temperatures,
+    sfh_requested,
+    mfh_requested,
+    scenario_mode,
+):
     jobs = []
     for heat_grid_temperature in heat_grid_supply_temperatures:
         for (ueu, heat_grid_length) in ueu_cases:
@@ -1551,6 +1576,20 @@ def _build_all_jobs(base_path, ueu_cases, heat_grid_supply_temperatures, sfh_req
 
             for sfh_k_value in sfh_k_values:
                 for mfh_k_value in mfh_k_values:
+                    if _has_existing_simple_example(
+                        base_path=result_storage_root,
+                        cluster_name=ueu,
+                        sfh_k_value=sfh_k_value,
+                        mfh_k_value=mfh_k_value,
+                        heat_grid_temperature=heat_grid_temperature,
+                    ):
+                        print(
+                            "skip existing simple: "
+                            f"{ueu} | T={heat_grid_temperature} | "
+                            f"sfh={_format_k_for_folder(sfh_k_value)} | "
+                            f"mfh={_format_k_for_folder(mfh_k_value)}"
+                        )
+                        continue
                     jobs.append(
                         (
                             heat_grid_temperature,
@@ -1676,6 +1715,7 @@ if __name__ == "__main__":
     base_path = script_base
     all_jobs_raw = _build_all_jobs(
         base_path=base_path,
+        result_storage_root=RESULT_STORAGE_ROOT if RESULT_STORAGE_ROOT else base_path,
         ueu_cases=ueu_cases,
         heat_grid_supply_temperatures=heat_grid_supply_temperatures,
         sfh_requested=sfh_requested,
