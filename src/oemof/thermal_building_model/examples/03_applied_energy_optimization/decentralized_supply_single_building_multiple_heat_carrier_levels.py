@@ -910,7 +910,7 @@ DEFAULT_CLUSTER_LIST = [
 DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = [6]
 DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = [1]
 
-# Legacy batches (alter Ablauf):
+# Legacy batches for optional predefined k-value runs.
 # (batch_name, sfh_k_values, mfh_k_values)
 LEGACY_K_VALUE_BATCHES = [
     #("reference_only", ["reference"], ["reference"]),

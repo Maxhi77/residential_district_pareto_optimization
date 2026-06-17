@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# Shared settings
+# Shared settings for distributed decentralized publication runs.
 REMOTE_EXAMPLE_DIR="${REMOTE_EXAMPLE_DIR:-/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/03_applied_energy_optimization}"
-PY_SCRIPT="decentralized_supply_single_building_multiple_heat_carrier_levels_linux.py"
+PY_SCRIPT="${PY_SCRIPT:-decentralized_supply_single_building_multiple_heat_carrier_levels.py}"
 CONDA_SH="${CONDA_SH:-/opt/mambaforge/install_dir/etc/profile.d/conda.sh}"
 CONDA_ENV="${CONDA_ENV:-district_opt}"
 REMOTE_LOG_DIR="${REMOTE_LOG_DIR:-/home/mh}"
@@ -88,8 +88,8 @@ for idx in "${!HOSTS[@]}"; do
       price_scenarios="$PRICE_SCENARIOS"
     fi
   fi
-  out_log="${REMOTE_LOG_DIR}/dec17_${host}.out"
-  err_log="${REMOTE_LOG_DIR}/dec17_${host}_error.log"
+  out_log="${REMOTE_LOG_DIR}/decentralized_${host}.out"
+  err_log="${REMOTE_LOG_DIR}/decentralized_${host}_error.log"
 
   remote_cmd=$(
     cat <<EOF
