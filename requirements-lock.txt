@@ -1,0 +1,14 @@
+# Direct dependency pins for the publication workflow.
+# oemof.network must be installed before the pinned oemof.solph Git commit.
+oemof.network==0.5.0
+oemof.solph @ git+https://github.com/oemof/oemof-solph.git@1a33411d8bbc4363b297cefe1e08ba0ff150a633
+matplotlib==3.10.1
+numpy==2.2.3
+pandas==2.2.3
+pyomo==6.9.1
+geopandas==1.1.3
+networkx==3.4.2
+pvlib==0.10.4
+tsam==2.3.1
+seaborn==0.13.2
+openpyxl==3.1.5

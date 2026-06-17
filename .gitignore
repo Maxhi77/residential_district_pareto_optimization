@@ -1,0 +1,45 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environments and build metadata
+.venv/
+venv/
+env/
+empty/
+*.egg-info/
+build/
+dist/
+
+# IDE and OS metadata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs and solver scratch files
+*.log
+error_logs/
+**/error_logs/
+*.lp
+*.mps
+*.nl
+*.sol
+*.mst
+
+# Generated example outputs
+src/oemof/thermal_building_model/examples/02_investment_optimization/*.pkl
+src/oemof/thermal_building_model/examples/02_investment_optimization/figure.svg
+src/oemof/thermal_building_model/examples/**/_plot_outputs/
+src/oemof/thermal_building_model/examples/**/energy_specific_kpi_results/
+src/oemof/thermal_building_model/examples/**/hypervolume_results/
+src/oemof/thermal_building_model/examples/**/pareto_front/
+src/oemof/thermal_building_model/examples/**/reference_kpi_comparison/
+src/oemof/thermal_building_model/examples/**/post_processed_dec_k_combinations*/
+src/oemof/thermal_building_model/examples/**/results_dec_*.pkl
+src/oemof/thermal_building_model/examples/**/simple_results_dec_*.pkl
+src/oemof/thermal_building_model/examples/**/reference_ueu_building_kpis.csv
