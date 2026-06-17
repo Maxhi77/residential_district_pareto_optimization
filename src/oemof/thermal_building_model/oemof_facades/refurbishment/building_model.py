@@ -127,6 +127,8 @@ class ThermalBuilding(Demand):
     refurbishment_status: str = "no_refurbishment"
     construction_year: Optional[int] = None
     floor_area: Optional[float] = None
+    t_set_heating: Optional[list] = None
+    t_set_cooling: Optional[list] = None
     building_parameters: Optional["BuildingParameters"] = None
     wall_config: EconomicsInvestmentRefurbishment = field(default_factory=lambda:copy.deepcopy(wall_config))
     roof_config: EconomicsInvestmentRefurbishment = field(default_factory=lambda:copy.deepcopy(roof_config))
@@ -179,12 +181,18 @@ class ThermalBuilding(Demand):
             gain_technology_per_hour_in_watt = 200
         # Internal gains of residents, machines (f.e. fridge, computer,...) and lights have to be added manually
         self.internal_gains = []
-        self.t_set_heating = []
-        self.t_set_cooling = []
+        if self.t_set_heating is None:
+            self.t_set_heating = []
+            for hour_counter in range(len(self.time_index) + 1):
+                self.t_set_heating.append(19)
+
+        self.t_set_cooling_simulation = []
+        for hour_counter in range(len(self.time_index) + 1):
+            self.t_set_cooling.append(40)
+
         for hour_counter in range(len(self.time_index)+1):
             self.internal_gains.append(self.number_of_occupants*50+ gain_technology_per_hour_in_watt)
-            self.t_set_heating.append(19)
-            self.t_set_cooling.append(40)
+
 
         self.t_set_heating_max = 24
         self.t_inital=20
@@ -194,7 +202,7 @@ class ThermalBuilding(Demand):
             t_outside=self.t_outside,
             internal_gains=self.internal_gains,
             t_set_heating=self.t_set_heating,
-            t_set_cooling=self.t_set_cooling,
+            t_set_cooling=self.t_set_cooling_simulation,
             t_set_heating_max=self.t_set_heating_max,
             building_config=self.building_object.building_config,
             t_inital=self.t_inital,
@@ -272,7 +280,7 @@ class ThermalBuilding(Demand):
                 t_outside=self.t_outside[:self.peak_index],
                 internal_gains=self.internal_gains[:self.peak_index],
                 t_set_heating=self.t_set_heating[:self.peak_index],
-                t_set_cooling=self.t_set_cooling[:self.peak_index],
+                t_set_cooling=self.t_set_cooling_simulation[:self.peak_index],
                 t_set_heating_max=self.t_set_heating_max,
                 building_config=self.reference_building.building_config,
                 t_inital=self.t_inital,
@@ -290,7 +298,7 @@ class ThermalBuilding(Demand):
                 solar_gains=self.solar_gains[0:self.peak_index],  #: List, List,
                 internal_gains=self.internal_gains[0:self.peak_index],  # [0], # ecos.household_internal_heat_gains,
                 t_set_heating=self.t_set_heating,  # t_set_heating,
-                t_set_cooling=self.t_set_cooling,  # t_set_cooling,
+                t_set_cooling=self.t_set_cooling_simulation,  # t_set_cooling,
                 t_set_heating_max=self.t_set_heating_max,
                 t_inital=self.t_inital,
                 max_power_heating=self.max_power_heating,
