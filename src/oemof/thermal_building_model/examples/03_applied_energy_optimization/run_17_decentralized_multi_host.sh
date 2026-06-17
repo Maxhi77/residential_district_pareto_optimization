@@ -3,7 +3,7 @@ set -uo pipefail
 
 # Shared settings
 REMOTE_EXAMPLE_DIR="${REMOTE_EXAMPLE_DIR:-/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/03_applied_energy_optimization}"
-PY_SCRIPT="17_decentralized_supply_single_building_multiple_heat_carrier_levels_linux.py"
+PY_SCRIPT="decentralized_supply_single_building_multiple_heat_carrier_levels_linux.py"
 CONDA_SH="${CONDA_SH:-/opt/mambaforge/install_dir/etc/profile.d/conda.sh}"
 CONDA_ENV="${CONDA_ENV:-district_opt}"
 REMOTE_LOG_DIR="${REMOTE_LOG_DIR:-/home/mh}"
