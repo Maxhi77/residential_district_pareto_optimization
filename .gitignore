@@ -40,6 +40,7 @@ src/oemof/thermal_building_model/examples/**/hypervolume_results/
 src/oemof/thermal_building_model/examples/**/pareto_front/
 src/oemof/thermal_building_model/examples/**/reference_kpi_comparison/
 src/oemof/thermal_building_model/examples/**/post_processed_dec_k_combinations*/
+src/oemof/thermal_building_model/examples/04_post_processed_cen_*/
 src/oemof/thermal_building_model/examples/**/results_dec_*.pkl
 src/oemof/thermal_building_model/examples/**/simple_results_dec_*.pkl
 src/oemof/thermal_building_model/examples/**/reference_ueu_building_kpis.csv

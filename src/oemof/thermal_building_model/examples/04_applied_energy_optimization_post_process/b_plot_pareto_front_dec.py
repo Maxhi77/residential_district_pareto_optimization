@@ -3306,11 +3306,11 @@ def _is_front_like_list(obj):
 
 def _extract_combined_front_from_loaded_object(loaded_obj):
     """
-    Accepts different pickle layouts and returns a combined_front list[dict].
+    Accepts different pickle layouts and returns a front list[dict].
     Supports:
-      - direct combined_front list
-      - tuple/list where index 2 is combined_front (legacy)
-      - dict with key 'combined_front'
+      - direct front list
+      - tuple/list containing a front list
+      - dict with key 'combined_front' or 'centralized_front'
     """
     if _is_front_like_list(loaded_obj):
         return loaded_obj
@@ -3323,6 +3323,8 @@ def _extract_combined_front_from_loaded_object(loaded_obj):
                 return item
 
     if isinstance(loaded_obj, dict):
+        if _is_front_like_list(loaded_obj.get("centralized_front")):
+            return loaded_obj["centralized_front"]
         if _is_front_like_list(loaded_obj.get("combined_front")):
             return loaded_obj["combined_front"]
         for item in loaded_obj.values():
@@ -3330,7 +3332,7 @@ def _extract_combined_front_from_loaded_object(loaded_obj):
                 return item
 
     raise ValueError(
-        "Could not extract 'combined_front' from pickle payload. "
+        "Could not extract front list from pickle payload. "
         f"Top-level type: {type(loaded_obj)}"
     )
 
@@ -3343,11 +3345,11 @@ def resolve_combined_front_path(
     combined_front_input_override=None,
 ):
     """
-    Resolve combined_front input path.
+    Resolve combined/centralized front input path.
 
     combined_front_input_override can be:
       - file path to a pickle
-      - directory containing combined_front.pkl (or combined_package.pkl / building_dict.pkl)
+      - directory containing centralized_front.pkl, combined_front.pkl, or a package pickle
       - template containing {ueu_short}
     """
     if combined_front_input_override:
@@ -3359,7 +3361,13 @@ def resolve_combined_front_path(
         override_fs = _to_windows_long_path(override)
 
         if os.path.isdir(override_fs):
-            for candidate_name in ("combined_front.pkl", "combined_package.pkl", "building_dict.pkl"):
+            for candidate_name in (
+                "centralized_front.pkl",
+                "centralized_package.pkl",
+                "combined_front.pkl",
+                "combined_package.pkl",
+                "building_dict.pkl",
+            ):
                 candidate = os.path.join(override_fs, candidate_name)
                 if os.path.exists(_to_windows_long_path(candidate)):
                     return _to_windows_long_path(candidate)
@@ -3369,8 +3377,14 @@ def resolve_combined_front_path(
 
         return _to_windows_long_path(override)
 
-    default_path = os.path.join(input_dir, f"{result_name}{ueu_short}.pkl")
-    return _to_windows_long_path(default_path)
+    default_candidates = [
+        os.path.join(input_dir, f"{result_name}.pkl"),
+        os.path.join(input_dir, f"{result_name}{ueu_short}.pkl"),
+    ]
+    for default_path in default_candidates:
+        if os.path.exists(_to_windows_long_path(default_path)):
+            return _to_windows_long_path(default_path)
+    return _to_windows_long_path(default_candidates[-1])
 
 
 def load_combined_front_from_path(pkl_path):
@@ -3428,8 +3442,8 @@ if __name__ == "__main__":# ====================================================
     #     r"\sfh_reference_mfh_reference"
     # )
     combined_front_input_override = None
-    if False:
-        result_name = "combined_front"
+    if True:
+        result_name = "centralized_front"
         cen_or_dec = "cen"
     else:
         result_name = "combined_front"  # cen
