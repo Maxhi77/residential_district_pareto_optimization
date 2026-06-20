@@ -9,9 +9,9 @@ CONDA_ENV="${CONDA_ENV:-district_opt}"
 REMOTE_LOG_DIR="${REMOTE_LOG_DIR:-/home/mh}"
 EV_MODE="${EV_MODE:-no_EV}"
 PRICE_SCENARIOS="${PRICE_SCENARIOS:-ref}"
-COMBINED_OPTIMIZATION="${COMBINED_OPTIMIZATION:-false}"
-RESULT_CHECK_ROOT="${RESULT_CHECK_ROOT:-$REMOTE_EXAMPLE_DIR}"
 RESULT_STORAGE_ROOT="${RESULT_STORAGE_ROOT:-/jump/mh}"
+RESULT_CHECK_ROOT="${RESULT_CHECK_ROOT:-$RESULT_STORAGE_ROOT}"
+COMBINED_OPTIMIZATION="${COMBINED_OPTIMIZATION:-false}"
 
 if [[ "$COMBINED_OPTIMIZATION" == "true" ]]; then
   combined_flag="--combined-optimization"
@@ -45,22 +45,24 @@ PRICE_SCENARIOS_PER_HOST=(
 )
 # Multiple scenarios per host are supported as comma-separated values,
 # e.g. "ref,electricity_plus20,gas_minus20".
-# Set k-lists per host
+# Standard rerun set from failed_pickle_loads.csv, without combined optimization:
+# SFH k={1,2,4,6,8,10,14,18,reference}, MFH k={1,2,3,4,5,6,reference}.
+# The values are split across hosts so each SFH/MFH cluster is started once.
 SFH_K_PER_HOST=(
-  "1,2,4"
-  ""
-  "14"
+  "1,2"
   "4,6"
-  "18,8"
-  "reference,10"
+  "8,10"
+  "14"
+  "18"
+  "reference"
 )
 MFH_K_PER_HOST=(
-  "1,reference"
+  "1"
   "2"
-  ""
-  ""
-  ""
-  ""
+  "3"
+  "4"
+  "5"
+  "6,reference"
 )
 
 if [[ ${#HOSTS[@]} -ne ${#WORKERS_PER_HOST[@]} || ${#HOSTS[@]} -ne ${#SFH_K_PER_HOST[@]} || ${#HOSTS[@]} -ne ${#MFH_K_PER_HOST[@]} || ${#HOSTS[@]} -ne ${#PRICE_SCENARIOS_PER_HOST[@]} || ${#HOSTS[@]} -ne ${#EV_MODE_PER_HOST[@]} ]]; then
