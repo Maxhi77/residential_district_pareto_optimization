@@ -186,9 +186,12 @@ class ThermalBuilding(Demand):
             for hour_counter in range(len(self.time_index) + 1):
                 self.t_set_heating.append(19)
 
-        self.t_set_cooling_simulation = []
-        for hour_counter in range(len(self.time_index) + 1):
-            self.t_set_cooling.append(40)
+        if self.t_set_cooling is None:
+            self.t_set_cooling_simulation = []
+            for hour_counter in range(len(self.time_index) + 1):
+                self.t_set_cooling_simulation.append(40)
+        else:
+            self.t_set_cooling_simulation = self.t_set_cooling
 
         for hour_counter in range(len(self.time_index)+1):
             self.internal_gains.append(self.number_of_occupants*50+ gain_technology_per_hour_in_watt)
