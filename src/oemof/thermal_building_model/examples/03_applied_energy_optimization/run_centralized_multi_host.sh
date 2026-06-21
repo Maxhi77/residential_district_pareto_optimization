@@ -11,8 +11,8 @@ CONDA_ENV="${CONDA_ENV:-final_umgebung}"
 
 REMOTE_LOG_DIR="${REMOTE_LOG_DIR:-/home/hill_mx}"
 
-# Check/write results in the advanced investment folder, where the previous centralized results live.
-RESULT_STORAGE_ROOT="${RESULT_STORAGE_ROOT:-/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/03_advanced_investment_optimization}"
+# Check/write results where the centralized script runs (03_applied_energy_optimization).
+RESULT_STORAGE_ROOT="${RESULT_STORAGE_ROOT:-default}"
 
 SCENARIO_MODE="${SCENARIO_MODE:-capex_min_only}"   # all | capex_min_only
 SOLVER="${SOLVER:-gurobi}"
