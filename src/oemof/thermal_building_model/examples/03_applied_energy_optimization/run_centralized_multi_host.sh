@@ -18,7 +18,7 @@ SCENARIO_MODE="${SCENARIO_MODE:-capex_min_only}"   # all | capex_min_only
 SOLVER="${SOLVER:-gurobi}"
 SOLVER_THREADS="${SOLVER_THREADS:-3}"
 TEMPS="${TEMPS:-50,80}"
-UEU_CASES="${UEU_CASES:-processed_bds_in_DENI03403000SEC4580:2723.29}"
+UEU_CASES="${UEU_CASES:-processed_bds_in_DENI03403000SEC5101:2723.29}"
 CO2_FACTORS="${CO2_FACTORS:-1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2}"
 
 # Requested k values (use "reference", not "ref").
@@ -76,8 +76,8 @@ for idx in "${!HOSTS[@]}"; do
     continue
   fi
 
-  out_log="${REMOTE_LOG_DIR}/cen_sec4580_${host}.out"
-  err_log="${REMOTE_LOG_DIR}/cen_sec4580_${host}_error.log"
+  out_log="${REMOTE_LOG_DIR}/cen_sec5101_${host}.out"
+  err_log="${REMOTE_LOG_DIR}/cen_sec5101_${host}_error.log"
 
   remote_cmd=$(
     cat <<EOF
