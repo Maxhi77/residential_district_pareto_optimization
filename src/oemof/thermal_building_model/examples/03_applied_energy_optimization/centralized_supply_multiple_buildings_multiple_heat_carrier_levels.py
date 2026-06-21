@@ -41,7 +41,6 @@ import tsam.timeseriesaggregation as tsam
 import pandas as pd
 #  create solver
 def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combined_cluster,heat_grid_temperature,cluster_occurence,heat_demand_worst_case,heat_grid_length):
-    solver = "scip"
     es = solph.EnergySystem(
         timeindex=t1_agg,
         timeincrement=[1] * len(t1_agg),
@@ -592,11 +591,11 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
     try:
 
         if True:
-            solve_result=model.solve(solver=solver, solve_kwargs={"tee": True},
+            solve_result=model.solve(solver=SOLVER, solve_kwargs={"tee": True},
                                                   cmdline_options={"threads":SOLVER_THREADS}
             )
         else:
-            solve_result=model.solve(solver=solver, solve_kwargs={"tee": True},
+            solve_result=model.solve(solver=SOLVER, solve_kwargs={"tee": True},
                                                   cmdline_options={"mipgap": 0.005}
             )
         meta_results = solph.processing.meta_results(model)
@@ -697,7 +696,7 @@ def run_model(co2_new,peak_new,data,aggregation1,t1_agg,data_classes_comp,combin
         final_results["co2_investment"] = co2_investment
         final_results["totex"] = meta_results["objective"]
         final_results["totex_oemof_model"] = meta_results["objective"]
-        if solver == "gurobi":
+        if SOLVER == "gurobi":
             return final_results, co2_oemof_model, meta_results["solver"]["Wall time"]
         else:
             solver_time_s = float(solve_result.solver.time)
@@ -1539,7 +1538,8 @@ import traceback
 from datetime import datetime
 
 DEFAULT_HEAT_GRID_SUPPLY_TEMPERATURES = [50, 80]
-DEFAULT_SOLVER_THREADS = 3
+DEFAULT_SOLVER = "gurobi"
+DEFAULT_SOLVER_THREADS = "auto"
 DEFAULT_UEU_CASES = [
     ("processed_bds_in_DENI03403000SEC5658", 1146.15),
 ]
@@ -1577,6 +1577,7 @@ RESULT_STORAGE_ROOT = None
 
 ERROR_DIR = "error_logs"
 os.makedirs(ERROR_DIR, exist_ok=True)
+SOLVER = DEFAULT_SOLVER
 SOLVER_THREADS = DEFAULT_SOLVER_THREADS
 
 
@@ -1614,6 +1615,21 @@ def _parse_float_values(raw, label):
         except Exception as exc:
             raise ValueError(f"Invalid {label} value '{token}'") from exc
     return values
+
+
+def _resolve_solver_threads(raw_value, n_cores, requested_workers):
+    value = str(raw_value).strip().lower()
+    if not value or value == "auto":
+        if requested_workers is None:
+            return 1
+        return max(1, n_cores // max(1, int(requested_workers)))
+    try:
+        threads = int(value)
+    except Exception as exc:
+        raise ValueError("--solver-threads must be a positive integer or 'auto'") from exc
+    if threads <= 0:
+        raise ValueError("--solver-threads must be > 0")
+    return threads
 
 
 def _parse_ueu_cases(raw):
@@ -1704,9 +1720,12 @@ def _build_all_jobs(
 
 
 def wrapper(args):
+    global SOLVER, SOLVER_THREADS
     (
         job_idx,
         host_name,
+        solver,
+        solver_threads,
         heat_grid_temperature,
         ueu,
         heat_grid_length,
@@ -1715,11 +1734,14 @@ def wrapper(args):
         scenario_mode,
         missing_co2_factors,
     ) = args
+    SOLVER = solver
+    SOLVER_THREADS = solver_threads
     try:
         print(
             f"host={host_name} job={job_idx} start: temp={heat_grid_temperature} | ueu={ueu} | length={heat_grid_length} "
             f"| sfh={_format_k_for_folder(sfh_k_value)} | mfh={_format_k_for_folder(mfh_k_value)} "
-            f"| scenario_mode={scenario_mode} | co2={','.join(str(x) for x in missing_co2_factors)}"
+            f"| scenario_mode={scenario_mode} | solver={SOLVER} | solver_threads={SOLVER_THREADS} "
+            f"| co2={','.join(str(x) for x in missing_co2_factors)}"
         )
         run_main(
             heat_grid_temperature,
@@ -1749,6 +1771,8 @@ def wrapper(args):
             f.write(f"sfh_k_value: {sfh_k_value}\n")
             f.write(f"mfh_k_value: {mfh_k_value}\n")
             f.write(f"scenario_mode: {scenario_mode}\n")
+            f.write(f"solver: {SOLVER}\n")
+            f.write(f"solver_threads: {SOLVER_THREADS}\n")
             f.write(f"missing_co2_factors: {missing_co2_factors}\n")
             f.write(f"exception: {repr(e)}\n\n")
             f.write("traceback:\n")
@@ -1763,7 +1787,13 @@ if __name__ == "__main__":
     parser.add_argument("--max-jobs", type=int, default=None, help="Maximum number of jobs this host should run.")
     parser.add_argument("--workers", type=int, default=None, help="Number of parallel worker processes on this host.")
     parser.add_argument("--serial", action="store_true", help="Run selected jobs sequentially.")
-    parser.add_argument("--solver-threads", type=int, default=DEFAULT_SOLVER_THREADS, help="Solver threads per job.")
+    parser.add_argument("--solver", type=str, default=DEFAULT_SOLVER, help="MILP solver backend, e.g. gurobi or scip.")
+    parser.add_argument(
+        "--solver-threads",
+        type=str,
+        default=DEFAULT_SOLVER_THREADS,
+        help="Solver threads per job, or 'auto' to divide CPU cores by --workers.",
+    )
     parser.add_argument("--scenario-mode", type=str, default=DEFAULT_SCENARIO_MODE, choices=["all", "capex_min_only"])
     parser.add_argument(
         "--temps",
@@ -1812,8 +1842,8 @@ if __name__ == "__main__":
         raise ValueError("--max-jobs must be > 0 when provided")
     if args.workers is not None and args.workers <= 0:
         raise ValueError("--workers must be > 0 when provided")
-    if args.solver_threads <= 0:
-        raise ValueError("--solver-threads must be > 0")
+    if not str(args.solver).strip():
+        raise ValueError("--solver must not be empty")
 
     heat_grid_supply_temperatures = _parse_int_values(args.temps, "temperature")
     sfh_requested = _parse_k_values(args.sfh_k)
@@ -1832,7 +1862,7 @@ if __name__ == "__main__":
     if RESULT_STORAGE_ROOT:
         os.makedirs(RESULT_STORAGE_ROOT, exist_ok=True)
 
-    SOLVER_THREADS = args.solver_threads
+    SOLVER = str(args.solver).strip()
     base_path = script_base
     all_jobs_raw = _build_all_jobs(
         base_path=base_path,
@@ -1859,20 +1889,21 @@ if __name__ == "__main__":
         print("No selected jobs after slicing.")
         raise SystemExit(0)
 
-    selected_jobs = [
-        (args.job_start + idx, args.host_name, *job)
-        for idx, job in enumerate(selected_jobs_raw)
-    ]
-
     n_cores = os.cpu_count() or 1
+    SOLVER_THREADS = _resolve_solver_threads(args.solver_threads, n_cores, args.workers)
     default_workers = max(1, n_cores // SOLVER_THREADS)
     workers = args.workers if args.workers is not None else default_workers
-    workers = max(1, min(workers, len(selected_jobs)))
+    workers = max(1, min(workers, len(selected_jobs_raw)))
+
+    selected_jobs = [
+        (args.job_start + idx, args.host_name, SOLVER, SOLVER_THREADS, *job)
+        for idx, job in enumerate(selected_jobs_raw)
+    ]
 
     print(
         f"host={args.host_name} total_jobs={total_jobs} "
         f"selected_range=[{args.job_start},{end_idx}) selected_jobs={len(selected_jobs)} "
-        f"workers={workers} solver_threads={SOLVER_THREADS}"
+        f"workers={workers} solver={SOLVER} solver_threads={SOLVER_THREADS}"
     )
 
     if args.serial or workers == 1:
