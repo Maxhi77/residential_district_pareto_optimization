@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Shared settings
-REMOTE_EXAMPLE_DIR="${REMOTE_EXAMPLE_DIR:-/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/03_advanced_investment_optimization}"
+REMOTE_EXAMPLE_DIR="${REMOTE_EXAMPLE_DIR:-/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/03_applied_energy_optimization}"
 PY_SCRIPT="${PY_SCRIPT:-centralized_supply_multiple_buildings_multiple_heat_carrier_levels.py}"
 
 # Leave empty to use current env; set explicitly if needed.
@@ -11,8 +11,8 @@ CONDA_ENV="${CONDA_ENV:-final_umgebung}"
 
 REMOTE_LOG_DIR="${REMOTE_LOG_DIR:-/home/hill_mx}"
 
-# Write results where the script runs (Python side interprets "default").
-RESULT_STORAGE_ROOT="${RESULT_STORAGE_ROOT:-default}"
+# Check/write results in the advanced investment folder, where the previous centralized results live.
+RESULT_STORAGE_ROOT="${RESULT_STORAGE_ROOT:-/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/03_advanced_investment_optimization}"
 
 SCENARIO_MODE="${SCENARIO_MODE:-capex_min_only}"   # all | capex_min_only
 SOLVER="${SOLVER:-gurobi}"
