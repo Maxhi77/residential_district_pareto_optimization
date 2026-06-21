@@ -61,14 +61,14 @@ DRY_RUN="$DRY_RUN"
 FORCE="$FORCE"
 
 pids=()
-while read -r pid cmd; do
-  if [[ -z "\${pid:-}" || -z "\${cmd:-}" ]]; then
+while read -r pid comm cmd; do
+  if [[ -z "\${pid:-}" || -z "\${comm:-}" || -z "\${cmd:-}" ]]; then
     continue
   fi
-  if [[ "\$cmd" == *python* && "\$cmd" == *"\$PY_SCRIPT"* ]]; then
+  if [[ "\$comm" == python* && "\$cmd" == *"\$PY_SCRIPT"* ]]; then
     pids+=("\$pid")
   fi
-done < <(ps -u "\$USER" -o pid= -o args=)
+done < <(ps -u "\$USER" -o pid= -o comm= -o args=)
 
 if [[ \${#pids[@]} -eq 0 ]]; then
   echo "No matching decentralized Python runs found."
