@@ -953,15 +953,43 @@ def _build_centralized_output_dir(base_path, cluster_name, sfh_k_value, mfh_k_va
     return output_dir
 
 
-def _has_existing_simple_example(base_path, cluster_name, sfh_k_value, mfh_k_value, heat_grid_temperature):
+def _expected_scenario_tokens_for_mode(scenario_mode):
+    if scenario_mode == "capex_min_only":
+        return ["cmin"]
+    return None
+
+
+def _missing_simple_co2_factors(
+    base_path,
+    cluster_name,
+    sfh_k_value,
+    mfh_k_value,
+    heat_grid_temperature,
+    scenario_mode,
+    co2_reduction_factors,
+):
     output_dir = _centralized_output_dir_path(base_path, cluster_name, sfh_k_value, mfh_k_value)
-    if not os.path.isdir(output_dir):
-        return False
-    pattern = os.path.join(
-        output_dir,
-        f"res_cen_t{int(heat_grid_temperature)}_*_simple_co2_*.pkl",
-    )
-    return len(glob.glob(pattern)) > 0
+    scenario_tokens = _expected_scenario_tokens_for_mode(scenario_mode)
+    if scenario_tokens is None:
+        # For "all" mode the generated scenario names are only known after preprocessing,
+        # so do not skip jobs based on an incomplete filesystem heuristic.
+        return list(co2_reduction_factors)
+
+    missing = []
+    for co2_reduction_factor in co2_reduction_factors:
+        co2_suffix = _co2_factor_to_suffix(co2_reduction_factor)
+        all_expected_files_exist = True
+        for scenario_token in scenario_tokens:
+            simple_file_path = os.path.join(
+                output_dir,
+                f"res_cen_t{int(heat_grid_temperature)}_{scenario_token}_simple_co2_{co2_suffix}.pkl",
+            )
+            if not os.path.exists(simple_file_path):
+                all_expected_files_exist = False
+                break
+        if not all_expected_files_exist:
+            missing.append(co2_reduction_factor)
+    return missing
 
 
 def _script_base_path():
@@ -1137,7 +1165,15 @@ def _select_scenarios_for_mode(scenarios, scenario_mode):
     raise ValueError(f"Unknown scenario_mode: {scenario_mode}")
 
 
-def run_main(heat_grid_temperature,ueu,heat_grid_length,sfh_k_value,mfh_k_value,scenario_mode="all"):
+def run_main(
+        heat_grid_temperature,
+        ueu,
+        heat_grid_length,
+        sfh_k_value,
+        mfh_k_value,
+        scenario_mode="all",
+        co2_reduction_factors_to_run=None,
+):
     base_path = _script_base_path()
     result_storage_root = _get_result_storage_root()
     directory_path =os.path.join(base_path, ueu)
@@ -1359,9 +1395,21 @@ def run_main(heat_grid_temperature,ueu,heat_grid_length,sfh_k_value,mfh_k_value,
                     co2_reduction_factors = [round(x, 3) for x in
                                              [1 - i * step for i in range(int((1.0 - (-0.1)) / step) + 1)]]
 
-            co2_reduction_factors = [1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2]
-                # [0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.5] [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
-             #[1,0.9,0.8,0.7,0.6,0.5,0.4][1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2]
+            co2_reduction_factors = list(DEFAULT_CO2_REDUCTION_FACTORS)
+            if co2_reduction_factors_to_run is not None:
+                requested_co2_factors = {
+                    round(float(co2_reduction_factor), 6)
+                    for co2_reduction_factor in co2_reduction_factors_to_run
+                }
+                co2_reduction_factors = [
+                    co2_reduction_factor
+                    for co2_reduction_factor in co2_reduction_factors
+                    if round(float(co2_reduction_factor), 6) in requested_co2_factors
+                ]
+                print(f"CO2 factors selected for this job: {co2_reduction_factors}")
+            if not co2_reduction_factors:
+                print("No CO2 factors selected for this job.")
+                continue
             references = ["co2"]#["co2","peak"]
             for ref in references:
                 if ref=="co2":
@@ -1498,6 +1546,33 @@ DEFAULT_UEU_CASES = [
 DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = [1]
 DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = [1]
 DEFAULT_SCENARIO_MODE = "capex_min_only"  # "all" | "capex_min_only"
+DEFAULT_CO2_REDUCTION_FACTORS = [
+    1,
+    0.95,
+    0.9,
+    0.85,
+    0.8,
+    0.75,
+    0.7,
+    0.65,
+    0.6,
+    0.55,
+    0.5,
+    0.45,
+    0.4,
+    0.35,
+    0.3,
+    0.25,
+    0.2,
+    0.15,
+    0.1,
+    0.05,
+    0.01,
+    -0.01,
+    -0.05,
+    -0.1,
+    -0.2,
+]
 RESULT_STORAGE_ROOT = None
 
 ERROR_DIR = "error_logs"
@@ -1531,6 +1606,16 @@ def _parse_int_values(raw, label):
     return values
 
 
+def _parse_float_values(raw, label):
+    values = []
+    for token in _parse_csv_tokens(raw):
+        try:
+            values.append(float(token))
+        except Exception as exc:
+            raise ValueError(f"Invalid {label} value '{token}'") from exc
+    return values
+
+
 def _parse_ueu_cases(raw):
     if not raw:
         return list(DEFAULT_UEU_CASES)
@@ -1551,6 +1636,7 @@ def _build_all_jobs(
     sfh_requested,
     mfh_requested,
     scenario_mode,
+    co2_reduction_factors,
 ):
     jobs = []
     for heat_grid_temperature in heat_grid_supply_temperatures:
@@ -1579,20 +1665,30 @@ def _build_all_jobs(
 
             for sfh_k_value in sfh_k_values:
                 for mfh_k_value in mfh_k_values:
-                    if _has_existing_simple_example(
+                    missing_co2_factors = _missing_simple_co2_factors(
                         base_path=result_storage_root,
                         cluster_name=ueu,
                         sfh_k_value=sfh_k_value,
                         mfh_k_value=mfh_k_value,
                         heat_grid_temperature=heat_grid_temperature,
-                    ):
+                        scenario_mode=scenario_mode,
+                        co2_reduction_factors=co2_reduction_factors,
+                    )
+                    if not missing_co2_factors:
                         print(
-                            "skip existing simple: "
+                            "skip complete simple: "
                             f"{ueu} | T={heat_grid_temperature} | "
                             f"sfh={_format_k_for_folder(sfh_k_value)} | "
                             f"mfh={_format_k_for_folder(mfh_k_value)}"
                         )
                         continue
+                    print(
+                        "missing simple co2 factors: "
+                        f"{ueu} | T={heat_grid_temperature} | "
+                        f"sfh={_format_k_for_folder(sfh_k_value)} | "
+                        f"mfh={_format_k_for_folder(mfh_k_value)} | "
+                        f"co2={','.join(str(x) for x in missing_co2_factors)}"
+                    )
                     jobs.append(
                         (
                             heat_grid_temperature,
@@ -1601,18 +1697,29 @@ def _build_all_jobs(
                             sfh_k_value,
                             mfh_k_value,
                             scenario_mode,
+                            missing_co2_factors,
                         )
                     )
     return jobs
 
 
 def wrapper(args):
-    job_idx, host_name, heat_grid_temperature, ueu, heat_grid_length, sfh_k_value, mfh_k_value, scenario_mode = args
+    (
+        job_idx,
+        host_name,
+        heat_grid_temperature,
+        ueu,
+        heat_grid_length,
+        sfh_k_value,
+        mfh_k_value,
+        scenario_mode,
+        missing_co2_factors,
+    ) = args
     try:
         print(
             f"host={host_name} job={job_idx} start: temp={heat_grid_temperature} | ueu={ueu} | length={heat_grid_length} "
             f"| sfh={_format_k_for_folder(sfh_k_value)} | mfh={_format_k_for_folder(mfh_k_value)} "
-            f"| scenario_mode={scenario_mode}"
+            f"| scenario_mode={scenario_mode} | co2={','.join(str(x) for x in missing_co2_factors)}"
         )
         run_main(
             heat_grid_temperature,
@@ -1621,6 +1728,7 @@ def wrapper(args):
             sfh_k_value,
             mfh_k_value,
             scenario_mode=scenario_mode,
+            co2_reduction_factors_to_run=missing_co2_factors,
         )
     except Exception as e:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1641,6 +1749,7 @@ def wrapper(args):
             f.write(f"sfh_k_value: {sfh_k_value}\n")
             f.write(f"mfh_k_value: {mfh_k_value}\n")
             f.write(f"scenario_mode: {scenario_mode}\n")
+            f.write(f"missing_co2_factors: {missing_co2_factors}\n")
             f.write(f"exception: {repr(e)}\n\n")
             f.write("traceback:\n")
             f.write(traceback.format_exc())
@@ -1681,6 +1790,12 @@ if __name__ == "__main__":
         help="Comma-separated UEU cases as <ueu>:<heat_grid_length>.",
     )
     parser.add_argument(
+        "--co2-factors",
+        type=str,
+        default=",".join(str(x) for x in DEFAULT_CO2_REDUCTION_FACTORS),
+        help="Comma-separated CO2 reduction factors expected as simple result files.",
+    )
+    parser.add_argument(
         "--result-storage-root",
         type=str,
         default="default",
@@ -1704,10 +1819,13 @@ if __name__ == "__main__":
     sfh_requested = _parse_k_values(args.sfh_k)
     mfh_requested = _parse_k_values(args.mfh_k)
     ueu_cases = _parse_ueu_cases(args.ueu_cases)
+    co2_reduction_factors = _parse_float_values(args.co2_factors, "CO2 reduction factor")
     if not heat_grid_supply_temperatures:
         raise ValueError("No temperatures provided.")
     if not sfh_requested and not mfh_requested:
         raise ValueError("Both --sfh-k and --mfh-k are empty.")
+    if not co2_reduction_factors:
+        raise ValueError("No CO2 reduction factors provided.")
 
     script_base = _script_base_path()
     RESULT_STORAGE_ROOT = _normalize_result_root(args.result_storage_root, script_base)
@@ -1724,6 +1842,7 @@ if __name__ == "__main__":
         sfh_requested=sfh_requested,
         mfh_requested=mfh_requested,
         scenario_mode=args.scenario_mode,
+        co2_reduction_factors=co2_reduction_factors,
     )
     if not all_jobs_raw:
         print("No jobs to run.")
