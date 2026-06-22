@@ -2,14 +2,14 @@
 set -euo pipefail
 
 # Shared settings
-REMOTE_EXAMPLE_DIR="${REMOTE_EXAMPLE_DIR:-/home/hill_mx/thermal_building_clone/src/oemof/thermal_building_model/examples/03_applied_energy_optimization}"
+REMOTE_EXAMPLE_DIR="${REMOTE_EXAMPLE_DIR:-/home/mh/thermal_building_clone/src/oemof/thermal_building_model/examples/03_applied_energy_optimization}"
 PY_SCRIPT="${PY_SCRIPT:-centralized_supply_multiple_buildings_multiple_heat_carrier_levels.py}"
 
 # Leave empty to use current env; set explicitly if needed.
 CONDA_SH="${CONDA_SH:-}"
 CONDA_ENV="${CONDA_ENV:-final_umgebung}"
 
-REMOTE_LOG_DIR="${REMOTE_LOG_DIR:-/home/hill_mx}"
+REMOTE_LOG_DIR="${REMOTE_LOG_DIR:-/home/mh}"
 
 # Check/write results where the centralized script runs (03_applied_energy_optimization).
 RESULT_STORAGE_ROOT="${RESULT_STORAGE_ROOT:-default}"
@@ -18,12 +18,12 @@ SCENARIO_MODE="${SCENARIO_MODE:-capex_max_only}"   # all | capex_min_only | cape
 SOLVER="${SOLVER:-gurobi}"
 SOLVER_THREADS="${SOLVER_THREADS:-3}"
 TEMPS="${TEMPS:-50,80}"
-UEU_CASES="${UEU_CASES:-processed_bds_in_DENI03403000SEC4580:2723.29}"
+UEU_CASES="${UEU_CASES:-processed_bds_in_DENI03403000SEC5658:1146.15}"
 CO2_FACTORS="${CO2_FACTORS:-1,0.95,0.9,0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2,0.15,0.1,0.05,0.01,-0.01,-0.05,-0.1,-0.2}"
 
 # Requested k values (use "reference", not "ref").
-SFH_K="${SFH_K:-1,2,4,6,8,10,reference}"
-MFH_K="${MFH_K:-1,2,3,4,6,10,reference}"
+SFH_K="${SFH_K:-1,2,4,6,8,10,14,18,reference}"
+MFH_K="${MFH_K:-1,2,3,4,5,6,reference}"
 
 # Optional remote hosts. Empty => run locally only.
 HOSTS_CSV="${HOSTS_CSV:-}"
