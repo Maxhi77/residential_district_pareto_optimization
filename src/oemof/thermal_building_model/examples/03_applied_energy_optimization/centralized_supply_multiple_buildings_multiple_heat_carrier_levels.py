@@ -955,6 +955,8 @@ def _build_centralized_output_dir(base_path, cluster_name, sfh_k_value, mfh_k_va
 def _expected_scenario_tokens_for_mode(scenario_mode):
     if scenario_mode == "capex_min_only":
         return ["cmin"]
+    if scenario_mode == "capex_max_only":
+        return ["cmax"]
     return None
 
 
@@ -1161,6 +1163,11 @@ def _select_scenarios_for_mode(scenarios, scenario_mode):
         if selected:
             return selected[:1]
         raise ValueError("Scenario mode 'capex_min_only' requested, but 'capex_min_per_building' was not found.")
+    if scenario_mode == "capex_max_only":
+        selected = [scenario for scenario in scenarios if scenario.get("name") == "capex_max_per_building"]
+        if selected:
+            return selected[:1]
+        raise ValueError("Scenario mode 'capex_max_only' requested, but 'capex_max_per_building' was not found.")
     raise ValueError(f"Unknown scenario_mode: {scenario_mode}")
 
 
@@ -1545,7 +1552,7 @@ DEFAULT_UEU_CASES = [
 ]
 DEFAULT_K_VALUES_TO_OPTIMIZE_SFH = [1]
 DEFAULT_K_VALUES_TO_OPTIMIZE_MFH = [1]
-DEFAULT_SCENARIO_MODE = "capex_min_only"  # "all" | "capex_min_only"
+DEFAULT_SCENARIO_MODE = "capex_min_only"  # "all" | "capex_min_only" | "capex_max_only"
 DEFAULT_CO2_REDUCTION_FACTORS = [
     1,
     0.95,
@@ -1794,7 +1801,12 @@ if __name__ == "__main__":
         default=DEFAULT_SOLVER_THREADS,
         help="Solver threads per job, or 'auto' to divide CPU cores by --workers.",
     )
-    parser.add_argument("--scenario-mode", type=str, default=DEFAULT_SCENARIO_MODE, choices=["all", "capex_min_only"])
+    parser.add_argument(
+        "--scenario-mode",
+        type=str,
+        default=DEFAULT_SCENARIO_MODE,
+        choices=["all", "capex_min_only", "capex_max_only"],
+    )
     parser.add_argument(
         "--temps",
         type=str,
