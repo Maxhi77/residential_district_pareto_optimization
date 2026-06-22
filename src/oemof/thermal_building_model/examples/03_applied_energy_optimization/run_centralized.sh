@@ -11,7 +11,7 @@ REMOTE_LOG_DIR="${REMOTE_LOG_DIR:-/home/mh}"
 RESULT_STORAGE_ROOT="${RESULT_STORAGE_ROOT:-/jump/mh}"
 
 SCENARIO_MODE="${SCENARIO_MODE:-capex_max_only}"   # all | capex_min_only | capex_max_only
-SOLVER="${SOLVER:-gurobi}"
+SOLVER="${SOLVER:-scip}"
 SOLVER_THREADS="${SOLVER_THREADS:-3}"
 TEMPS="${TEMPS:-50,80}"
 UEU_CASES="${UEU_CASES:-processed_bds_in_DENI03403000SEC5658:1146.15}"

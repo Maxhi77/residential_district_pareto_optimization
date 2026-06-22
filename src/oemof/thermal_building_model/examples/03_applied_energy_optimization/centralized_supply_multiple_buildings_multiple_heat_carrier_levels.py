@@ -1167,7 +1167,12 @@ def _select_scenarios_for_mode(scenarios, scenario_mode):
         selected = [scenario for scenario in scenarios if scenario.get("name") == "capex_max_per_building"]
         if selected:
             return selected[:1]
-        raise ValueError("Scenario mode 'capex_max_only' requested, but 'capex_max_per_building' was not found.")
+        print(
+            "skip scenario_mode=capex_max_only: "
+            "'capex_max_per_building' was not found after duplicate removal. "
+            "This usually means cmax is identical to another scenario for this cluster/temperature/k combination."
+        )
+        return []
     raise ValueError(f"Unknown scenario_mode: {scenario_mode}")
 
 
@@ -1269,6 +1274,14 @@ def run_main(
 
         scenarios = remove_duplicate_scenarios(scenarios)
         scenarios = _select_scenarios_for_mode(scenarios, scenario_mode)
+        if not scenarios:
+            print(
+                "No scenarios selected after scenario-mode filtering. "
+                f"Skipping optimization for T={heat_grid_temperature}, cluster={cluster_name}, "
+                f"sfh={_format_k_for_folder(sfh_k_value)}, mfh={_format_k_for_folder(mfh_k_value)}, "
+                f"scenario_mode={scenario_mode}."
+            )
+            return
 
         path = os.path.join(output_dir, "cen_optimizations_scenarios_"+str(heat_grid_temperature)+".pkl")
 
