@@ -91,6 +91,116 @@ def _remove_series(obj: Any) -> Any:
     return obj
 
 
+def _matching_full_result_path(path: Path, info: Dict[str, Any]) -> Optional[Path]:
+    if info["result_kind"] != "simple":
+        return path
+    full_name = path.name.replace("_simple_", "_", 1)
+    full_path = path.with_name(full_name)
+    return full_path if full_path.exists() else None
+
+
+def _load_matching_full_results(
+    path: Path,
+    info: Dict[str, Any],
+    cache: Dict[Path, Optional[Dict[Any, Any]]],
+    skipped: List[Dict[str, Any]],
+) -> Optional[Dict[Any, Any]]:
+    full_path = _matching_full_result_path(path, info)
+    if full_path is None:
+        return None
+    if full_path in cache:
+        return cache[full_path]
+
+    try:
+        raw = _load_pickle(full_path)
+    except Exception as exc:
+        skipped.append({"file": str(full_path), "reason": f"technology_load_error: {exc}"})
+        cache[full_path] = None
+        return None
+
+    if not isinstance(raw, dict):
+        skipped.append(
+            {
+                "file": str(full_path),
+                "reason": f"technology_unexpected_type: {type(raw).__name__}",
+            }
+        )
+        cache[full_path] = None
+        return None
+
+    cache[full_path] = raw
+    return raw
+
+
+def _is_building_results_block(key: Any, value: Any) -> bool:
+    if not isinstance(key, str) or not isinstance(value, dict):
+        return False
+    if "buildings_in_cluster" in value:
+        return True
+    return any(component_key.startswith(f"building_{key}") for component_key in value)
+
+
+def _prepare_building_results_block(value: Dict[str, Any]) -> Dict[str, Any]:
+    prepared = dict(value)
+    if "strategy" not in prepared and "refurbishment_status" in prepared:
+        prepared["strategy"] = prepared["refurbishment_status"]
+    return prepared
+
+
+def _extract_centralized_selection(record: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    results = record.get("results")
+    if not isinstance(results, dict):
+        return {}, {}
+
+    selection: Dict[str, Any] = {}
+    buildings: Dict[str, Any] = {}
+    for key, value in results.items():
+        if key in {"Electricity", "NaturalGas", "BioGas", "Hydrogen", "heat_grid"}:
+            selection[key] = value
+            continue
+        if _is_building_results_block(key, value):
+            building_block = _prepare_building_results_block(value)
+            selection[key] = building_block
+            buildings[key] = building_block
+
+    return selection, buildings
+
+
+def _technology_payload(
+    record: Dict[str, Any],
+    technology_record: Optional[Dict[str, Any]],
+    keep_series: bool,
+) -> Tuple[Dict[str, Any], Dict[str, Any], Optional[str]]:
+    source_record = technology_record if isinstance(technology_record, dict) else record
+    selection, buildings = _extract_centralized_selection(source_record)
+    if not keep_series:
+        selection = _remove_series(selection)
+        buildings = _remove_series(buildings)
+    technology_source = "record" if isinstance(record.get("results"), dict) else None
+    if technology_record is not None and technology_record is not record:
+        technology_source = "matching_full_file"
+    return selection, buildings, technology_source
+
+
+def _electricity_grid_compat(record: Dict[str, Any], keep_series: bool) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    electricity_grid = record.get("electricity_grid")
+    if not isinstance(electricity_grid, dict):
+        return {}, {}
+
+    cleaned = electricity_grid if keep_series else _remove_series(electricity_grid)
+    compat = {
+        "investment_cost": cleaned.get("investment_cost", 0.0),
+        "investment_co2": cleaned.get("investment_co2", 0.0),
+        "added_trafo_capacity": cleaned.get("capacity", 0.0),
+        "added_line_length": 0.0,
+        "added_trafo_cost": cleaned.get("investment_cost", 0.0),
+        "added_line_cost": 0.0,
+        "added_trafo_co2": cleaned.get("investment_co2", 0.0),
+        "added_line_co2": 0.0,
+    }
+    return cleaned, compat
+
+
 def _as_float(value: Any) -> Optional[float]:
     try:
         out = float(value)
@@ -152,6 +262,7 @@ def _load_centralized_records_for_dir(
 ) -> Tuple[Dict[Tuple[Any, ...], Dict[str, Any]], List[Dict[str, Any]]]:
     records: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
     skipped: List[Dict[str, Any]] = []
+    full_result_cache: Dict[Path, Optional[Dict[Any, Any]]] = {}
 
     for path, info in _iter_result_files(centralized_dir, result_kind, temperature_levels):
         try:
@@ -163,6 +274,10 @@ def _load_centralized_records_for_dir(
         if not isinstance(raw, dict):
             skipped.append({"file": str(path), "reason": f"unexpected_type: {type(raw).__name__}"})
             continue
+
+        full_results = None
+        if info["result_kind"] == "simple":
+            full_results = _load_matching_full_results(path, info, full_result_cache, skipped)
 
         for key, record in raw.items():
             if not _is_valid_record(record):
@@ -176,6 +291,13 @@ def _load_centralized_records_for_dir(
                 continue
 
             cleaned = record if keep_series else _remove_series(record)
+            technology_record = full_results.get(key) if isinstance(full_results, dict) else None
+            selection, buildings, technology_source = _technology_payload(
+                record=record,
+                technology_record=technology_record,
+                keep_series=keep_series,
+            )
+            electricity_grid, electricity_grid_compat = _electricity_grid_compat(record, keep_series)
             metadata = {
                 "ueu_case": ueu_case,
                 "combined_cluster": combined_cluster,
@@ -186,6 +308,12 @@ def _load_centralized_records_for_dir(
                 "result_kind": info["result_kind"],
                 "source_file": path.name,
                 "source_dir": str(centralized_dir),
+                "technology_source": technology_source,
+                "technology_source_file": (
+                    _matching_full_result_path(path, info).name
+                    if technology_source == "matching_full_file" and _matching_full_result_path(path, info) is not None
+                    else path.name if technology_source == "record" else None
+                ),
             }
             entry = {
                 "key": key,
@@ -199,6 +327,12 @@ def _load_centralized_records_for_dir(
                 "time": _as_float(record.get("time")),
                 "metadata": metadata,
                 "record": cleaned,
+                "selection": selection,
+                "buildings": buildings,
+                "building_ids": sorted(buildings),
+                "heat_grid": selection.get("heat_grid", {}),
+                "electricity_grid": electricity_grid,
+                "Electricity_Grid": electricity_grid_compat,
             }
             record_key = (
                 combined_cluster,
@@ -356,6 +490,11 @@ def _front_summary_rows(front: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "refurbish": entry["refurbish"],
                 "time": entry["time"],
                 "source_file": metadata["source_file"],
+                "technology_source": metadata.get("technology_source"),
+                "technology_source_file": metadata.get("technology_source_file"),
+                "building_count": len(entry.get("building_ids", [])),
+                "has_heat_grid": bool(entry.get("heat_grid")),
+                "has_electricity_grid": bool(entry.get("electricity_grid")),
             }
         )
     return rows
