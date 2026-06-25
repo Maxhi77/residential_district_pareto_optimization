@@ -1024,6 +1024,14 @@ def _normalize_result_root(raw_value, base_path):
     return os.path.normpath(normalized)
 
 
+def _normalize_input_root(raw_value, base_path):
+    return _normalize_result_root(raw_value, base_path)
+
+
+def _get_input_root():
+    return INPUT_ROOT if INPUT_ROOT else _script_base_path()
+
+
 def _get_result_storage_root():
     return RESULT_STORAGE_ROOT if RESULT_STORAGE_ROOT else _script_base_path()
 
@@ -1185,7 +1193,7 @@ def run_main(
         scenario_mode="all",
         co2_reduction_factors_to_run=None,
 ):
-    base_path = _script_base_path()
+    base_path = _get_input_root()
     result_storage_root = _get_result_storage_root()
     directory_path =os.path.join(base_path, ueu)
     number_of_time_steps = 8760
@@ -1594,6 +1602,7 @@ DEFAULT_CO2_REDUCTION_FACTORS = [
     -0.2,
 ]
 RESULT_STORAGE_ROOT = None
+INPUT_ROOT = None
 
 ERROR_DIR = "error_logs"
 os.makedirs(ERROR_DIR, exist_ok=True)
@@ -1851,6 +1860,15 @@ if __name__ == "__main__":
         help="Comma-separated CO2 reduction factors expected as simple result files.",
     )
     parser.add_argument(
+        "--input-root",
+        type=str,
+        default="default",
+        help=(
+            "Base directory containing processed_bds input folders. "
+            "Use 'default' to read near this script."
+        ),
+    )
+    parser.add_argument(
         "--result-storage-root",
         type=str,
         default="default",
@@ -1883,12 +1901,13 @@ if __name__ == "__main__":
         raise ValueError("No CO2 reduction factors provided.")
 
     script_base = _script_base_path()
+    INPUT_ROOT = _normalize_input_root(args.input_root, script_base)
     RESULT_STORAGE_ROOT = _normalize_result_root(args.result_storage_root, script_base)
     if RESULT_STORAGE_ROOT:
         os.makedirs(RESULT_STORAGE_ROOT, exist_ok=True)
 
     SOLVER = str(args.solver).strip()
-    base_path = script_base
+    base_path = INPUT_ROOT if INPUT_ROOT else script_base
     all_jobs_raw = _build_all_jobs(
         base_path=base_path,
         result_storage_root=RESULT_STORAGE_ROOT if RESULT_STORAGE_ROOT else base_path,
@@ -1928,7 +1947,8 @@ if __name__ == "__main__":
     print(
         f"host={args.host_name} total_jobs={total_jobs} "
         f"selected_range=[{args.job_start},{end_idx}) selected_jobs={len(selected_jobs)} "
-        f"workers={workers} solver={SOLVER} solver_threads={SOLVER_THREADS}"
+        f"workers={workers} solver={SOLVER} solver_threads={SOLVER_THREADS} "
+        f"input_root={base_path} result_storage_root={RESULT_STORAGE_ROOT if RESULT_STORAGE_ROOT else base_path}"
     )
 
     if args.serial or workers == 1:

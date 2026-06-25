@@ -8,6 +8,7 @@ CONDA_SH="${CONDA_SH:-/opt/mambaforge/install_dir/etc/profile.d/conda.sh}"
 CONDA_ENV="${CONDA_ENV:-district_opt}"
 REMOTE_LOG_DIR="${REMOTE_LOG_DIR:-/home/mh}"
 
+INPUT_ROOT="${INPUT_ROOT:-/jump/mh}"
 RESULT_STORAGE_ROOT="${RESULT_STORAGE_ROOT:-/jump/mh}"
 
 SCENARIO_MODE="${SCENARIO_MODE:-capex_max_only}"   # all | capex_min_only | capex_max_only
@@ -31,12 +32,12 @@ SFH_K_PER_HOST=(
   "reference"
 )
 MFH_K_PER_HOST=(
-  "1"
-  "2"
-  "3"
-  "4"
-  "5"
-  "6,reference"
+  "1,2,3,4,5,6,reference"
+  "1,2,3,4,5,6,reference"
+  "1,2,3,4,5,6,reference"
+  "1,2,3,4,5,6,reference"
+  "1,2,3,4,5,6,reference"
+  "1,2,3,4,5,6,reference"
 )
 
 if [[ ${#HOSTS[@]} -ne ${#WORKERS_PER_HOST[@]} || ${#HOSTS[@]} -ne ${#SFH_K_PER_HOST[@]} || ${#HOSTS[@]} -ne ${#MFH_K_PER_HOST[@]} ]]; then
@@ -53,8 +54,8 @@ for idx in "${!HOSTS[@]}"; do
   sfh_k="${SFH_K_PER_HOST[$idx]}"
   mfh_k="${MFH_K_PER_HOST[$idx]}"
 
-  out_log="${REMOTE_LOG_DIR}/centralized_${host}.out"
-  err_log="${REMOTE_LOG_DIR}/centralized_${host}_error.log"
+  out_log="${REMOTE_LOG_DIR}/centralized_5658_${host}.out"
+  err_log="${REMOTE_LOG_DIR}/centralized_5658_${host}_error.log"
 
   remote_cmd=$(
     cat <<EOF
@@ -74,13 +75,14 @@ nohup python "$PY_SCRIPT" \
   --mfh-k "$mfh_k" \
   --ueu-cases "$UEU_CASES" \
   --co2-factors "$CO2_FACTORS" \
+  --input-root "$INPUT_ROOT" \
   --result-storage-root "$RESULT_STORAGE_ROOT" \
   > "$out_log" 2> "$err_log" &
 echo Started PID: \$!
 EOF
   )
 
-  echo "Launching on $host: workers=$workers solver=$SOLVER solver_threads=$SOLVER_THREADS sfh_k=$sfh_k mfh_k=$mfh_k scenario_mode=$SCENARIO_MODE temps=$TEMPS ueu=$UEU_CASES result_storage_root=$RESULT_STORAGE_ROOT"
+  echo "Launching on $host: workers=$workers solver=$SOLVER solver_threads=$SOLVER_THREADS sfh_k=$sfh_k mfh_k=$mfh_k scenario_mode=$SCENARIO_MODE temps=$TEMPS ueu=$UEU_CASES input_root=$INPUT_ROOT result_storage_root=$RESULT_STORAGE_ROOT"
   if ssh "$host" "bash -lc '$remote_cmd'"; then
     successful_hosts+=("$host")
   else
