@@ -1285,7 +1285,7 @@ def run_main(
         if not scenarios:
             print(
                 "No scenarios selected after scenario-mode filtering. "
-                f"Skipping optimization for T={heat_grid_temperature}, cluster={cluster_name}, "
+                f"Skipping optimization for T={heat_grid_temperature}, cluster={ueu}, "
                 f"sfh={_format_k_for_folder(sfh_k_value)}, mfh={_format_k_for_folder(mfh_k_value)}, "
                 f"scenario_mode={scenario_mode}."
             )
