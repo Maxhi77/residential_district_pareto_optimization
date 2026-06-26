@@ -8,7 +8,9 @@ CONDA_SH="${CONDA_SH:-/opt/mambaforge/install_dir/etc/profile.d/conda.sh}"
 CONDA_ENV="${CONDA_ENV:-district_opt}"
 REMOTE_LOG_DIR="${REMOTE_LOG_DIR:-/home/mh}"
 
-INPUT_ROOT="${INPUT_ROOT:-/jump/mh}"
+# Read cluster input from the clone's example directory on each host.
+INPUT_ROOT="${INPUT_ROOT:-$REMOTE_EXAMPLE_DIR}"
+# Keep result files and completion checks on the shared jump storage.
 RESULT_STORAGE_ROOT="${RESULT_STORAGE_ROOT:-/jump/mh}"
 
 SCENARIO_MODE="${SCENARIO_MODE:-capex_max_only}"   # all | capex_min_only | capex_max_only

@@ -1699,14 +1699,12 @@ def _build_all_jobs(
                 building_type="MFH",
             )
 
-            if not sfh_k_values and not mfh_k_values:
-                print(f"No runnable k-values for cluster {ueu}")
-                continue
-
             if not sfh_k_values:
-                sfh_k_values = [1]
+                print(f"No runnable SFH k-values for cluster {ueu}")
+                continue
             if not mfh_k_values:
-                mfh_k_values = [1]
+                print(f"No runnable MFH k-values for cluster {ueu}")
+                continue
 
             for sfh_k_value in sfh_k_values:
                 for mfh_k_value in mfh_k_values:
