@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 
 handles = []  # to collect legend handles
 labels = []  # to collect legend labels
+PDF_EXPORT_WIDTH_CM = 11.8
+# Plot-width contract: any PDF export added to this plot script must be exactly 11.8 cm wide.
+# Do not use bbox_inches="tight" for PDF output; it changes the final PDF bounding box.
 
 def plot_stacked_bars(refurbishment_status, results_dict, cost_refurbishment):
 
@@ -13,7 +16,7 @@ def plot_stacked_bars(refurbishment_status, results_dict, cost_refurbishment):
     font = FontProperties()
     font.set_family("Times New Roman")
     font.set_size(12)
-    fig, ax = plt.subplots(figsize=(15.99773 / 2.54, 8 / 2.54))
+    fig, ax = plt.subplots(figsize=(PDF_EXPORT_WIDTH_CM / 2.54, 8 / 2.54))
     handle = []
 
     # Specify the number of unique colors you want
@@ -88,7 +91,7 @@ def plot_stacked_bars(refurbishment_status, results_dict, cost_refurbishment):
     ax.tick_params(axis="y", labelsize=12)
     # Shrink current axis by 20%
     plt.tight_layout(pad=1.08)
-    # Save the figure in PDF format with specified dpi
+    # Save the figure with specified dpi.
     plt.savefig("figure.svg", format="svg", dpi=1000, bbox_inches="tight")
     plt.rcParams.update({"font.size": 12})
     # Show the plot (optional)
