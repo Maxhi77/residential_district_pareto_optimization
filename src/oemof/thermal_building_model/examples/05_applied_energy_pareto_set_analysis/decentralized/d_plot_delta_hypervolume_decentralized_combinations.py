@@ -13,12 +13,14 @@ import matplotlib.pyplot as plt
 
 
 UEU_CASES_TO_PROCESS = [
-    #"processed_bds_in_DENI03403000SEC4580",
-    #"processed_bds_in_DENI03403000SEC5101",
+    "processed_bds_in_DENI03403000SEC4580",
+    "processed_bds_in_DENI03403000SEC5101",
     "processed_bds_in_DENI03403000SEC5658",
 ]
 POST_PROCESS_ROOT_PATTERN = "post_processed_dec_k_combinations_*"
 DEFAULT_BASE_DIR = Path(__file__).resolve().parent / "hypervolume_results"
+DEFAULT_PLOT_OUTPUT_ROOT = Path(__file__).resolve().parent / "plot_outputs"
+WINDOWS_OPENABLE_PATH_LIMIT = 240
 CSV_CANDIDATE_NAMES = [
     "delta_hypervolume_vs_reference.csv",
     "delta_hv_vs_ref.csv",
@@ -29,10 +31,13 @@ IGD_CSV_CANDIDATE_NAMES = [
 ]
 JOURNAL_FONT_FAMILY = "TeX Gyre Termes"
 JOURNAL_FONT_SIZE = 9
-JOURNAL_FIG_WIDTH_CM = 15.11293
+JOURNAL_TICK_FONT_SIZE = 8
+JOURNAL_FIG_WIDTH_CM = 11.8
 JOURNAL_FIGSIZE = (JOURNAL_FIG_WIDTH_CM / 2.54, 2.8)
 JOURNAL_DPI = 600
 JOURNAL_CMAP = "viridis"
+# PDF export contract: every saved PDF page from this plot script must be 11.8 cm wide.
+# Do not pass bbox_inches="tight" for PDF output; it changes the final PDF bounding box.
 HEIGHT_VARIANTS: list[tuple[str, float]] = [
     ("h100", 1.00),
     ("h90", 0.90),
@@ -42,15 +47,17 @@ HEIGHT_VARIANTS: list[tuple[str, float]] = [
     ("h50", 0.50),
     ("h40", 0.40),
 ]
-HORIZONTAL_CLOSER_VARIANTS: list[tuple[str, float]] = [
-    ("c10", 0.90),  # 10% closer
-    ("c20", 0.80),  # 20% closer
-    ("c30", 0.70),  # 30% closer
-    ("c40", 0.60),  # 40% closer
+HORIZONTAL_CLOSER_VARIANTS: list[tuple[str, float, float]] = [
+    # suffix, individual panel width scale, spacing scale
+    ("c10", 0.95, 1.00),
+    ("c20", 0.90, 1.15),
+    ("c30", 0.85, 1.30),
+    ("c40", 0.80, 1.45),
 ]
-X_AXIS_LABEL = r"Number of clusters $k_{\mathrm{SFH}}$"
-Y_AXIS_LABEL = r"Number of clusters $k_{\mathrm{MFH}}$"
-DELTA_CBAR_LABEL = "Delta hypervolume in %"
+REFERENCE_XTICK_LABEL_PREFIX = "  "
+X_AXIS_LABEL = r"$k_{\mathrm{SFH}}$"
+Y_AXIS_LABEL = r"$k_{\mathrm{MFH}}$"
+DELTA_CBAR_LABEL = "Delta hypervolume\nin %"
 DELTA_TITLE = "Normalized delta hypervolume vs ref."
 IGD_CBAR_LABEL = "IGD in -"
 IGD_TITLE = "Normalized IGD vs ref."
@@ -65,8 +72,8 @@ def _set_journal_style(font_family: str = JOURNAL_FONT_FAMILY, font_size: int = 
             "font.size": font_size,
             "axes.titlesize": font_size,
             "axes.labelsize": font_size,
-            "xtick.labelsize": font_size,
-            "ytick.labelsize": font_size,
+            "xtick.labelsize": JOURNAL_TICK_FONT_SIZE,
+            "ytick.labelsize": JOURNAL_TICK_FONT_SIZE,
             "legend.fontsize": font_size,
             "mathtext.fontset": "cm",
             "pdf.fonttype": 42,
@@ -119,6 +126,13 @@ def _token_label(token: str) -> str:
     return str(int(token[1:]))
 
 
+def _xtick_label(token: str) -> str:
+    label = _token_label(token)
+    if _is_reference_token(token):
+        return f"{REFERENCE_XTICK_LABEL_PREFIX}{label}"
+    return label
+
+
 def _to_long_path(path: Path) -> str:
     resolved = path.resolve()
     path_str = str(resolved)
@@ -129,6 +143,10 @@ def _to_long_path(path: Path) -> str:
             return "\\\\?\\UNC\\" + path_str[2:]
         return "\\\\?\\" + path_str
     return path_str
+
+
+def _path_len(path: Path) -> int:
+    return len(str(path.resolve()))
 
 
 def _path_exists(path: Path) -> bool:
@@ -144,6 +162,12 @@ def _path_exists(path: Path) -> bool:
 
 
 def _safe_save_figure(fig: plt.Figure, preferred_path: Path, fallback_name: str) -> Path:
+    def _save(path: Path) -> None:
+        if path.suffix.lower() == ".pdf":
+            height = fig.get_size_inches()[1]
+            fig.set_size_inches(JOURNAL_FIG_WIDTH_CM / 2.54, height, forward=False)
+        fig.savefig(str(path), dpi=JOURNAL_DPI)
+
     def _build_height_aware_fallback_name() -> str:
         base = Path(fallback_name)
         stem = base.stem
@@ -159,23 +183,23 @@ def _safe_save_figure(fig: plt.Figure, preferred_path: Path, fallback_name: str)
             stem = f"{stem}_{'_'.join(tags)}"
         return f"{stem}{suffix}"
 
-    preferred_len = len(str(preferred_path.resolve()))
-    if os.name == "nt" and preferred_len >= 240:
+    preferred_len = _path_len(preferred_path)
+    if os.name == "nt" and preferred_len >= WINDOWS_OPENABLE_PATH_LIMIT:
         fallback_same_dir = preferred_path.parent / _build_height_aware_fallback_name()
         _ensure_dir(fallback_same_dir.parent)
-        fig.savefig(_to_long_path(fallback_same_dir), dpi=JOURNAL_DPI)
+        _save(fallback_same_dir)
         print(f"path fallback used: {preferred_path} -> {fallback_same_dir}")
         return fallback_same_dir
 
     _ensure_dir(preferred_path.parent)
     try:
-        fig.savefig(_to_long_path(preferred_path), dpi=JOURNAL_DPI)
+        _save(preferred_path)
         return preferred_path
     except (FileNotFoundError, OSError):
         fallback_same_dir = preferred_path.parent / _build_height_aware_fallback_name()
         _ensure_dir(fallback_same_dir.parent)
         try:
-            fig.savefig(_to_long_path(fallback_same_dir), dpi=JOURNAL_DPI)
+            _save(fallback_same_dir)
             print(f"path fallback used: {preferred_path} -> {fallback_same_dir}")
             return fallback_same_dir
         except (FileNotFoundError, OSError) as exc:
@@ -190,6 +214,28 @@ def _ensure_dir(path: Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
     except OSError:
         os.makedirs(_to_long_path(path), exist_ok=True)
+
+
+def _extract_post_process_date(path: Path) -> str | None:
+    for part in reversed(path.parts):
+        parsed = _parse_date_suffix(part)
+        if parsed is not None:
+            return f"{parsed[0]:04d}_{parsed[1]:02d}_{parsed[2]:02d}"
+    return None
+
+
+def _default_output_dir(csv_path: Path, ueu_case: str) -> Path:
+    candidate = csv_path.parent
+    test_name = "delta_hypervolume_igd_vs_reference_heatmap_values_DENI03403000SEC0000_h100.pdf"
+    if os.name != "nt" or _path_len(candidate / test_name) < WINDOWS_OPENABLE_PATH_LIMIT:
+        return candidate
+
+    short4 = _extract_ueu_short4(ueu_case)
+    ueu_token = short4 if short4 is not None else _extract_ueu_filename_suffix(ueu_case)
+    date_token = _extract_post_process_date(candidate) or "latest"
+    fallback = DEFAULT_PLOT_OUTPUT_ROOT / f"{ueu_token}_{date_token}"
+    print(f"output path fallback used: {candidate} -> {fallback}")
+    return fallback
 
 
 def _discover_latest_post_process_root(base_dir: Path, ueu_case: str) -> Path:
@@ -504,11 +550,11 @@ def _apply_heatmap_axes(
     mfh_tokens: list[str],
     title: str,
 ) -> None:
-    ax.set_xlabel(X_AXIS_LABEL)
-    ax.set_ylabel(Y_AXIS_LABEL)
+    ax.set_xlabel(X_AXIS_LABEL, labelpad=0)
+    ax.set_ylabel(Y_AXIS_LABEL, labelpad=0)
     ax.set_title(title)
     ax.set_xticks(np.arange(len(sfh_tokens)))
-    ax.set_xticklabels([_token_label(t) for t in sfh_tokens], rotation=0, ha="center")
+    ax.set_xticklabels([_xtick_label(t) for t in sfh_tokens], rotation=0, ha="center")
     ax.set_yticks(np.arange(len(mfh_tokens)))
     ax.set_yticklabels([_token_label(t) for t in mfh_tokens])
     ax.set_xlim(-0.5, len(sfh_tokens) - 0.5)
@@ -634,22 +680,21 @@ def _plot_delta_igd_horizontal(
     width_inch = width_cm / 2.54
     # Keep width fixed but use a bit more height so x-axis labels are not clipped.
     height_inch = JOURNAL_FIGSIZE[1] * 0.74 * float(height_scale)
-    base_wspace = 0.058
+    base_wspace = 0.20
     wspace = base_wspace * float(wspace_scale)
     fig, axes = plt.subplots(
         ncols=2,
         figsize=(width_inch, height_inch),
         gridspec_kw={"wspace": wspace},
     )
-    # Make each panel ~20% wider than the previous narrow setting (additional +10% step).
     for ax in axes:
         ax.set_box_aspect(0.96)
-    effective_panel_width_scale = float(panel_width_scale) * 1.05
+    effective_panel_width_scale = float(panel_width_scale)
     if not np.isclose(effective_panel_width_scale, 1.0):
-        for ax in axes:
+        for idx, ax in enumerate(axes):
             pos = ax.get_position()
             new_w = pos.width * effective_panel_width_scale
-            shift = 0.5 * (pos.width - new_w)
+            shift = 0.0 if idx == 0 else pos.width - new_w
             ax.set_position([pos.x0 + shift, pos.y0, new_w, pos.height])
 
     delta_pivot, delta_sfh_tokens, delta_mfh_tokens = _build_heatmap_pivot(
@@ -669,6 +714,8 @@ def _plot_delta_igd_horizontal(
     _apply_heatmap_axes(axes[0], delta_sfh_tokens, delta_mfh_tokens, title=DELTA_TITLE)
     cbar_delta = fig.colorbar(im_delta, ax=axes[0], pad=0.022, shrink=1.00)
     cbar_delta.set_label(DELTA_CBAR_LABEL, labelpad=2)
+    cbar_delta.ax.yaxis.set_label_position("right")
+    cbar_delta.ax.yaxis.tick_right()
     cbar_delta.ax.tick_params(labelsize=JOURNAL_FONT_SIZE)
 
     im_igd = axes[1].imshow(
@@ -683,8 +730,14 @@ def _plot_delta_igd_horizontal(
     cbar_igd.set_label(IGD_CBAR_LABEL, labelpad=2)
     cbar_igd.ax.tick_params(labelsize=JOURNAL_FONT_SIZE)
 
-    fig.subplots_adjust(left=0.05, right=0.965, bottom=0.24, top=0.90, wspace=wspace)
-    saved_path = _safe_save_figure(fig, output_path, "dhv_igd_horizontal_5658.pdf")
+    fig.subplots_adjust(left=0.055, right=0.915, bottom=0.24, top=0.82, wspace=wspace)
+    ueu_match = re.search(r"(DENI[0-9A-Za-z]+)", output_path.stem)
+    fallback_suffix = ueu_match.group(1) if ueu_match else "ueu"
+    saved_path = _safe_save_figure(
+        fig,
+        output_path,
+        f"dhv_igd_horizontal_{fallback_suffix}.pdf",
+    )
     plt.close(fig)
     return saved_path
 
@@ -785,7 +838,7 @@ def main() -> None:
                 metric_name="delta hypervolume",
             )
 
-            output_dir = Path(args.output_dir) if args.output_dir else csv_path.parent
+            output_dir = Path(args.output_dir) if args.output_dir else _default_output_dir(csv_path, ueu_case)
             if args.output_dir and len(ueu_cases) > 1:
                 output_dir = output_dir / ueu_case
             _ensure_dir(output_dir)
@@ -851,7 +904,7 @@ def main() -> None:
             saved_igd_heatmap_paths = []
             saved_igd_heatmap_values_paths = []
             saved_horizontal_paths = []
-            panel_width_scale = 0.90 if _extract_ueu_short4(ueu_case) == "4580" else 1.00
+            ueu_panel_width_scale = 0.90 if _extract_ueu_short4(ueu_case) == "4580" else 1.00
             for h_suffix, h_scale in HEIGHT_VARIANTS:
                 out_igd_heatmap = output_dir / f"{args.prefix}_igd_vs_reference_heatmap_{ueu_suffix}_{h_suffix}.pdf"
                 saved_igd_heatmap_paths.append(
@@ -879,7 +932,7 @@ def main() -> None:
                         height_scale=h_scale,
                     )
                 )
-                for c_suffix, wspace_scale in HORIZONTAL_CLOSER_VARIANTS:
+                for c_suffix, panel_width_scale, wspace_scale in HORIZONTAL_CLOSER_VARIANTS:
                     out_horizontal = (
                         output_dir
                         / f"{args.prefix}_delta_hv_and_igd_horizontal_{ueu_suffix}_{h_suffix}_{c_suffix}.pdf"
@@ -893,7 +946,7 @@ def main() -> None:
                             output_path=out_horizontal,
                             high_to_low=high_to_low,
                             height_scale=h_scale,
-                            panel_width_scale=panel_width_scale,
+                            panel_width_scale=ueu_panel_width_scale * panel_width_scale,
                             wspace_scale=wspace_scale,
                         )
                     )

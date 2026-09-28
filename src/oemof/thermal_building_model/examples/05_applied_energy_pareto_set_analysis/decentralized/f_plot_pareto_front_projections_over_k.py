@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 
 
 UEU_CASES_TO_PROCESS = [
-    # "processed_bds_in_DENI03403000SEC4580",
-    # "processed_bds_in_DENI03403000SEC5101",
+    "processed_bds_in_DENI03403000SEC4580",
+    "processed_bds_in_DENI03403000SEC5101",
     "processed_bds_in_DENI03403000SEC5658",
 ]
 POST_PROCESS_ROOT_PATTERN = re.compile(r"^post_processed_dec_k_combinations_(\d{4})_(\d{2})_(\d{2})$")
@@ -24,13 +24,28 @@ COMBINED_FRONT_FILENAME = "combined_front.pkl"
 
 DEFAULT_BASE_DIR = Path(__file__).resolve().parent / "hypervolume_results"
 DEFAULT_OUTPUT_ROOT = Path(__file__).resolve().parent / "pareto_front"
-DEFAULT_CLUSTER_SOURCE_DIR = Path(__file__).resolve().parents[1] / "03_applied_energy_optimization"
+DEFAULT_CLUSTER_SOURCE_DIR = Path(__file__).resolve().parents[2] / "03_applied_energy_optimization"
+REFERENCE_BUILDING_KPI_CSV = Path(__file__).resolve().parents[1] / "reference_ueu_building_kpis.csv"
 JOURNAL_FONT_FAMILY = "TeX Gyre Termes"
 JOURNAL_FONT_SIZE = 9
+JOURNAL_AXIS_FONT_SIZE = 8
+JOURNAL_TICK_FONT_SIZE = 8
 JOURNAL_DPI = 600
 JOURNAL_CMAP = "viridis"
-JOURNAL_FIG_WIDTH_CM = 15.11293
+JOURNAL_FIG_WIDTH_CM = 11.8
 JOURNAL_FIG_HEIGHT_CM = 5.270992
+# PDF export contract: every saved PDF page from this plot script must be 11.8 cm wide.
+# Do not pass bbox_inches="tight" for PDF output; it changes the final PDF bounding box.
+PANEL_WIDTH_SCALE = 0.88
+PANEL_HEIGHT_SCALE = 0.90
+HEIGHT_VARIANTS: list[tuple[str, float]] = [
+    ("h80", 0.80),
+    ("h90", 0.90),
+    ("h100", 1.00),
+    ("h110", 1.10),
+    ("h120", 1.20),
+    ("h130", 1.30),
+]
 
 PAIR_DEFS = [
     ("totex", "co2"),
@@ -41,17 +56,20 @@ DIM_META = {
     "co2": {
         "index": 0,
         "scale": 1.0,
-        "label": r"Ann. GWP in kg CO$_2$-eq." + "\n" + r"per 100 m$^2$",
+        "x_label": r"Ann. GWP" + "\n" + r"in kg CO$_2$-eq." + "\n" + r"per 100 m$^2$",
+        "y_label": r"Ann. GWP in kg" + "\n" + r"CO$_2$-eq. per 100 m$^2$",
     },
     "peak": {
         "index": 1,
         "scale": 1.0,
-        "label": r"Peak grid ex. power in kW" + "\n" + r"per 100 m$^2$",
+        "x_label": r"Peak grid ex. power" + "\n" + r"in kW" + "\n" + r"per 100 m$^2$",
+        "y_label": r"Peak grid ex. power" + "\n" + r"in kW per 100 m$^2$",
     },
     "totex": {
         "index": 2,
         "scale": 1.0,
-        "label": r"Ann. TOTEX in EUR" + "\n" + r"per 100 m$^2$",
+        "x_label": r"Ann. TOTEX" + "\n" + r"in EUR" + "\n" + r"per 100 m$^2$",
+        "y_label": r"Ann. TOTEX in EUR" + "\n" + r"per 100 m$^2$",
     },
 }
 DIM_INDEX = {key: int(meta["index"]) for key, meta in DIM_META.items()}
@@ -66,6 +84,27 @@ SFH_CMAP_SEQUENCE = [
     "GnBu",
 ]
 SELECTED_COMBOS_BY_UEU_SUFFIX: dict[str, set[str]] = {
+    "4580": {
+        "sfh_k01_mfh_k01",
+        "sfh_k01_mfh_k02",
+        "sfh_k01_mfh_k03",
+        "sfh_k02_mfh_k01",
+        "sfh_k02_mfh_k02",
+        "sfh_k02_mfh_k03",
+        "sfh_reference_mfh_reference",
+    },
+    "5101": {
+        "sfh_k01_mfh_k01",
+        "sfh_k01_mfh_k02",
+        "sfh_k01_mfh_k03",
+        "sfh_k02_mfh_k01",
+        "sfh_k02_mfh_k02",
+        "sfh_k02_mfh_k03",
+        "sfh_reference_mfh_k01",
+        "sfh_reference_mfh_k02",
+        "sfh_reference_mfh_k03",
+        "sfh_reference_mfh_reference",
+    },
     "5658": {
         "sfh_reference_mfh_reference",
         "sfh_k02_mfh_k01",
@@ -85,9 +124,9 @@ def _set_journal_style(font_family: str = JOURNAL_FONT_FAMILY, font_size: int = 
             "font.family": font_family,
             "font.size": font_size,
             "axes.titlesize": font_size,
-            "axes.labelsize": font_size,
-            "xtick.labelsize": font_size,
-            "ytick.labelsize": font_size,
+            "axes.labelsize": JOURNAL_AXIS_FONT_SIZE,
+            "xtick.labelsize": JOURNAL_TICK_FONT_SIZE,
+            "ytick.labelsize": JOURNAL_TICK_FONT_SIZE,
             "legend.fontsize": font_size,
             "mathtext.fontset": "cm",
             "pdf.fonttype": 42,
@@ -142,7 +181,7 @@ def _token_sort_value(token: str) -> int:
 
 def _token_label(token: str) -> str:
     if _is_reference_token(token):
-        return "ref."
+        return r"\mathrm{ref.}"
     return str(int(str(token)[1:]))
 
 
@@ -174,27 +213,46 @@ def _safe_save_figure(fig: plt.Figure, preferred_path: Path, fallback_name: str)
     short_root = Path(__file__).resolve().parent / "_plot_outputs"
     fallback_short_dir = short_root / fallback_name
 
+    def _save(path: Path) -> None:
+        if path.suffix.lower() == ".pdf":
+            height = fig.get_size_inches()[1]
+            fig.set_size_inches(JOURNAL_FIG_WIDTH_CM / 2.54, height, forward=False)
+        fig.savefig(_to_long_path(path), dpi=JOURNAL_DPI)
+
+    def _save_with_numbered_permission_fallback(path: Path) -> Path:
+        try:
+            _save(path)
+            return path
+        except PermissionError:
+            for idx in range(1, 100):
+                numbered = path.with_name(f"{path.stem}_new{idx}{path.suffix}")
+                if _path_exists(numbered):
+                    continue
+                _save(numbered)
+                print(f"permission fallback used: {path} -> {numbered}")
+                return numbered
+            raise
+
     preferred_len = len(str(preferred_path.resolve()))
     if os.name == "nt" and preferred_len >= 240:
         _ensure_dir(short_root)
-        fig.savefig(_to_long_path(fallback_short_dir), dpi=JOURNAL_DPI)
+        fallback_short_dir = _save_with_numbered_permission_fallback(fallback_short_dir)
         print(f"path fallback used: {preferred_path} -> {fallback_short_dir}")
         return fallback_short_dir
 
     _ensure_dir(preferred_path.parent)
     try:
-        fig.savefig(_to_long_path(preferred_path), dpi=JOURNAL_DPI)
-        return preferred_path
+        return _save_with_numbered_permission_fallback(preferred_path)
     except (FileNotFoundError, OSError):
         fallback_same_dir = preferred_path.parent / fallback_name
         _ensure_dir(fallback_same_dir.parent)
         try:
-            fig.savefig(_to_long_path(fallback_same_dir), dpi=JOURNAL_DPI)
+            fallback_same_dir = _save_with_numbered_permission_fallback(fallback_same_dir)
             print(f"path fallback used: {preferred_path} -> {fallback_same_dir}")
             return fallback_same_dir
         except (FileNotFoundError, OSError):
             _ensure_dir(short_root)
-            fig.savefig(_to_long_path(fallback_short_dir), dpi=JOURNAL_DPI)
+            fallback_short_dir = _save_with_numbered_permission_fallback(fallback_short_dir)
             print(f"path fallback used: {preferred_path} -> {fallback_short_dir}")
             return fallback_short_dir
 
@@ -206,12 +264,29 @@ def _ensure_dir(path: Path) -> None:
         os.makedirs(_to_long_path(path), exist_ok=True)
 
 
+def _iter_child_dirs(path: Path) -> list[Path]:
+    child_dirs: list[Path] = []
+    try:
+        with os.scandir(_to_long_path(path)) as entries:
+            for entry in entries:
+                try:
+                    if entry.is_dir(follow_symlinks=False):
+                        child_dirs.append(path / entry.name)
+                except OSError:
+                    continue
+    except OSError:
+        for child in path.iterdir():
+            if _path_exists(child) and child.is_dir():
+                child_dirs.append(child)
+    return sorted(child_dirs, key=lambda p: p.name)
+
+
 def _discover_latest_post_process_root(base_dir: Path, ueu_case: str) -> Path:
     cluster_root = Path(str(ueu_case)) if Path(str(ueu_case)).is_absolute() else (base_dir / ueu_case)
     if not cluster_root.exists():
         raise FileNotFoundError(f"UEU folder not found: {cluster_root}")
 
-    candidates = [p for p in sorted(cluster_root.iterdir()) if p.is_dir() and _parse_date_suffix(p.name) is not None]
+    candidates = [p for p in _iter_child_dirs(cluster_root) if _parse_date_suffix(p.name) is not None]
     if not candidates:
         raise FileNotFoundError(f"No post-process folders found below: {cluster_root}")
     candidates = sorted(candidates, key=lambda p: _parse_date_suffix(p.name))
@@ -264,9 +339,7 @@ def _extract_points_from_combined_front(path: Path) -> np.ndarray:
 
 def _load_all_combo_fronts(post_process_root: Path, allowed_combos: set[str] | None = None) -> list[dict]:
     fronts: list[dict] = []
-    for combo_dir in sorted(post_process_root.iterdir()):
-        if not combo_dir.is_dir():
-            continue
+    for combo_dir in _iter_child_dirs(post_process_root):
         if allowed_combos is not None and combo_dir.name not in allowed_combos:
             continue
         parsed = _parse_combo_name(combo_dir.name)
@@ -326,13 +399,16 @@ def _load_total_floor_area_from_cluster_pickle(path: Path) -> float:
 
 
 def _per_100m2_divisor_for_ueu(ueu_case: str) -> float:
-    ueu_data_dir = _resolve_ueu_data_dir(ueu_case)
+    try:
+        ueu_data_dir = _resolve_ueu_data_dir(ueu_case)
+    except FileNotFoundError:
+        return _per_100m2_divisor_from_reference_kpis(ueu_case)
     sfh_path = ueu_data_dir / "sfh_cluster.pkl"
     mfh_path = ueu_data_dir / "mfh_cluster.pkl"
     if not _path_exists(sfh_path):
-        raise FileNotFoundError(f"Missing SFH cluster file: {sfh_path}")
+        return _per_100m2_divisor_from_reference_kpis(ueu_case)
     if not _path_exists(mfh_path):
-        raise FileNotFoundError(f"Missing MFH cluster file: {mfh_path}")
+        return _per_100m2_divisor_from_reference_kpis(ueu_case)
 
     total_floor_area = (
         _load_total_floor_area_from_cluster_pickle(sfh_path)
@@ -342,6 +418,31 @@ def _per_100m2_divisor_for_ueu(ueu_case: str) -> float:
     if not np.isfinite(divisor) or divisor <= 0:
         raise ValueError(f"Invalid floor-area divisor for UEU '{ueu_case}': {divisor}")
     return float(divisor)
+
+
+def _per_100m2_divisor_from_reference_kpis(ueu_case: str) -> float:
+    if not _path_exists(REFERENCE_BUILDING_KPI_CSV):
+        raise FileNotFoundError(
+            f"Missing cluster pickles and reference KPI CSV for UEU '{ueu_case}': "
+            f"{REFERENCE_BUILDING_KPI_CSV}"
+        )
+
+    import pandas as pd
+
+    df = pd.read_csv(_to_long_path(REFERENCE_BUILDING_KPI_CSV))
+    if "ueu_case" not in df.columns or "net_floor_area" not in df.columns:
+        raise ValueError(
+            f"Reference KPI CSV must contain 'ueu_case' and 'net_floor_area': "
+            f"{REFERENCE_BUILDING_KPI_CSV}"
+        )
+
+    mask = df["ueu_case"].astype(str) == str(ueu_case)
+    total_floor_area = pd.to_numeric(df.loc[mask, "net_floor_area"], errors="coerce").dropna().sum()
+    divisor = float(total_floor_area) / 100.0
+    if not np.isfinite(divisor) or divisor <= 0:
+        raise ValueError(f"Invalid reference-KPI floor-area divisor for UEU '{ueu_case}': {divisor}")
+    print(f"floor-area fallback used for {ueu_case}: {REFERENCE_BUILDING_KPI_CSV}")
+    return divisor
 
 
 def _normalise_fronts_per_100m2(fronts: list[dict], divisor: float) -> list[dict]:
@@ -384,7 +485,7 @@ def _build_sfh_palette_map(fronts: list[dict]) -> Dict[str, object]:
     palette_idx = 0
     for token in tokens:
         if _is_reference_token(token):
-            mapping[token] = plt.get_cmap("Greys")
+            mapping[token] = plt.get_cmap("Purples")
             continue
         cmap_name = SFH_CMAP_SEQUENCE[palette_idx % len(SFH_CMAP_SEQUENCE)]
         mapping[token] = plt.get_cmap(cmap_name)
@@ -403,12 +504,29 @@ def _get_mfh_shade_value(mfh_k: int | None, mfh_min: int, mfh_span: int) -> floa
     return 0.30 + 0.65 * rel
 
 
-def _axis_label(dim_key: str) -> str:
-    return str(DIM_META[dim_key]["label"])
+def _axis_label(dim_key: str, axis: str) -> str:
+    label_key = "x_label" if axis == "x" else "y_label"
+    return str(DIM_META[dim_key][label_key])
 
 
 def _scaled_dim_values(values: np.ndarray, dim_key: str) -> np.ndarray:
     return np.asarray(values, dtype=float) * float(DIM_META[dim_key]["scale"])
+
+
+def _legend_mfh_entries_for_ueu(ueu_case: str | Path | None) -> int:
+    suffix = _extract_ueu_sector_suffix(ueu_case)
+    if suffix in {"4580", "5101"}:
+        return 3
+    return 2
+
+
+def _shrink_axes_box(ax: plt.Axes, width_scale: float, height_scale: float) -> None:
+    pos = ax.get_position()
+    new_w = pos.width * float(width_scale)
+    new_h = pos.height * float(height_scale)
+    new_x0 = pos.x0 + 0.5 * (pos.width - new_w)
+    new_y0 = pos.y0 + 0.5 * (pos.height - new_h)
+    ax.set_position([new_x0, new_y0, new_w, new_h])
 
 
 def _plot_front_pair(
@@ -464,9 +582,9 @@ def _plot_front_pair(
             zorder=3,
         )
 
-    ax.set_xlabel(_axis_label(x_key))
-    ax.set_ylabel(_axis_label(y_key), labelpad=5.0)
-    ax.tick_params(axis="both", which="major", pad=1.5)
+    ax.set_xlabel(_axis_label(x_key, axis="x"))
+    ax.set_ylabel(_axis_label(y_key, axis="y"), labelpad=5.0)
+    ax.tick_params(axis="both", which="major", pad=1.5, labelsize=JOURNAL_TICK_FONT_SIZE)
     ax.grid(True, alpha=0.3, linewidth=0.6)
 
 
@@ -474,9 +592,9 @@ def _collect_legend_data(fronts: list[dict], max_groups: int = 3) -> tuple[list[
     mfh_tokens_by_sfh: Dict[str, set[str]] = {}
     for row in fronts:
         sfh_token = str(row["sfh_k_token"])
-        if _is_reference_token(sfh_token):
-            continue
         mfh_token = str(row["mfh_k_token"])
+        if _is_reference_token(sfh_token) and _is_reference_token(mfh_token):
+            continue
         mfh_tokens_by_sfh.setdefault(sfh_token, set()).add(mfh_token)
 
     ordered_sfh_tokens = sorted(mfh_tokens_by_sfh.keys(), key=_token_sort_value)
@@ -662,6 +780,7 @@ def _add_top_column_legend(
     palette_map: Dict[str, object],
     mfh_min: int,
     mfh_span: int,
+    max_mfh_entries: int = 2,
 ) -> None:
     legend_ax.axis("off")
     legend_font_size = max(7, JOURNAL_FONT_SIZE - 1)
@@ -674,7 +793,7 @@ def _add_top_column_legend(
             {
                 "title": rf"$k_{{\mathrm{{SFH}}}} = {_token_label(sfh_token)}$",
                 "sfh_token": sfh_token,
-                "mfh_tokens": cols[:2],
+                "mfh_tokens": cols[:max_mfh_entries],
             }
         )
     if has_ref_ref:
@@ -692,7 +811,10 @@ def _add_top_column_legend(
 
     ncols = len(columns)
     y_title = 0.93
-    y_rows = [0.60, 0.33]
+    if max_mfh_entries <= 2:
+        y_rows = [0.52, 0.26]
+    else:
+        y_rows = [0.56, 0.36, 0.16]
 
     for i, col in enumerate(columns):
         col_left = i / ncols
@@ -716,7 +838,7 @@ def _add_top_column_legend(
 
         sfh_token = col["sfh_token"]
         mfh_tokens = list(col["mfh_tokens"])
-        for ridx, mfh_token in enumerate(mfh_tokens[:2]):
+        for ridx, mfh_token in enumerate(mfh_tokens[:max_mfh_entries]):
             y = y_rows[ridx]
             if sfh_token is None:
                 color = "black"
@@ -759,22 +881,32 @@ def _add_top_column_legend(
         )
 
 
-def _plot_all_projections(fronts: list[dict], output_path: Path, ueu_case: str) -> Path:
+def _plot_all_projections(
+    fronts: list[dict],
+    output_path: Path,
+    ueu_case: str,
+    height_scale: float = 1.0,
+) -> Path:
     _set_journal_style()
     palette_map = _build_sfh_palette_map(fronts)
+    max_mfh_entries = _legend_mfh_entries_for_ueu(ueu_case)
     mfh_numeric_values = [int(row["mfh_k"]) for row in fronts if row["mfh_k"] is not None]
     mfh_min = min(mfh_numeric_values) if mfh_numeric_values else 1
     mfh_max = max(mfh_numeric_values) if mfh_numeric_values else mfh_min
     mfh_span = max(mfh_max - mfh_min, 1)
 
-    fig = plt.figure(figsize=(JOURNAL_FIG_WIDTH_CM / 2.54, JOURNAL_FIG_HEIGHT_CM / 2.54))
+    fig = plt.figure(
+        figsize=(JOURNAL_FIG_WIDTH_CM / 2.54, JOURNAL_FIG_HEIGHT_CM * float(height_scale) / 2.54)
+    )
+    legend_height_ratio = 0.56 if max_mfh_entries >= 3 else 0.34
+    legend_hspace = 0.12 if max_mfh_entries >= 3 else 0.03
     outer_gs = fig.add_gridspec(
         nrows=2,
         ncols=1,
-        height_ratios=[0.34, 1.0],
-        hspace=0.03,
+        height_ratios=[legend_height_ratio, 1.0],
+        hspace=legend_hspace,
     )
-    plot_gs = outer_gs[1, 0].subgridspec(nrows=1, ncols=3, wspace=0.54)
+    plot_gs = outer_gs[1, 0].subgridspec(nrows=1, ncols=3, wspace=0.70)
     plot_axes = [fig.add_subplot(plot_gs[0, i]) for i in range(3)]
     legend_ax = fig.add_subplot(outer_gs[0, 0])
 
@@ -793,17 +925,25 @@ def _plot_all_projections(fronts: list[dict], output_path: Path, ueu_case: str) 
             if ymax >= 4.0:
                 ax.set_yticks([2.0, 4.0])
                 ax.set_yticklabels(["2.0", "4.0"])
+                ax.tick_params(axis="y", which="major", labelsize=JOURNAL_TICK_FONT_SIZE)
+        if _extract_ueu_sector_suffix(ueu_case) == "5101" and x_key == "totex" and y_key == "peak":
+            ax.set_xticks([2250, 2750])
+            ax.set_xticklabels(["2250", "2750"])
+            ax.tick_params(axis="x", which="major", labelsize=JOURNAL_TICK_FONT_SIZE)
     # Move the leftmost y-axis label slightly inward to avoid clipping.
     if plot_axes:
-        plot_axes[0].yaxis.set_label_coords(-0.26, 0.5)
+        plot_axes[0].yaxis.set_label_coords(-0.42, 0.5)
     _add_top_column_legend(
         legend_ax=legend_ax,
         fronts=fronts,
         palette_map=palette_map,
         mfh_min=mfh_min,
         mfh_span=mfh_span,
+        max_mfh_entries=max_mfh_entries,
     )
-    fig.subplots_adjust(left=0.11, right=0.99, bottom=0.26, top=0.95)
+    fig.subplots_adjust(left=0.17, right=0.985, bottom=0.34, top=0.95)
+    for ax in plot_axes:
+        _shrink_axes_box(ax, PANEL_WIDTH_SCALE, PANEL_HEIGHT_SCALE)
 
     saved_path = _safe_save_figure(fig, output_path, output_path.name)
     plt.close(fig)
@@ -872,8 +1012,8 @@ def main() -> None:
             if allowed_combos is not None:
                 available_combo_dirs = {
                     p.name
-                    for p in post_process_root.iterdir()
-                    if p.is_dir() and _parse_combo_name(p.name) is not None
+                    for p in _iter_child_dirs(post_process_root)
+                    if _parse_combo_name(p.name) is not None
                 }
                 missing_selected_combos = sorted(allowed_combos - available_combo_dirs)
             fronts = _load_all_combo_fronts(post_process_root, allowed_combos=allowed_combos)
@@ -891,8 +1031,17 @@ def main() -> None:
                 else (DEFAULT_OUTPUT_ROOT / Path(str(ueu_case)).name)
             )
             _ensure_dir(output_dir)
-            out_path = output_dir / f"{args.prefix}_{ueu_suffix}.pdf"
-            saved = _plot_all_projections(fronts=fronts, output_path=out_path, ueu_case=ueu_case)
+            saved_paths = []
+            for height_suffix, height_scale in HEIGHT_VARIANTS:
+                out_path = output_dir / f"{args.prefix}_{ueu_suffix}_{height_suffix}.pdf"
+                saved_paths.append(
+                    _plot_all_projections(
+                        fronts=fronts,
+                        output_path=out_path,
+                        ueu_case=ueu_case,
+                        height_scale=height_scale,
+                    )
+                )
 
             print(f"\nprocessing UEU: {ueu_case}")
             print(f"post-process root: {post_process_root}")
@@ -904,7 +1053,8 @@ def main() -> None:
                     )
             print(f"normalisation divisor (A/100): {per_100m2_divisor:.6f}")
             print(f"loaded combos with fronts: {len(fronts)}")
-            print(f"saved: {saved}")
+            for saved in saved_paths:
+                print(f"saved: {saved}")
         except Exception as exc:
             failures.append((ueu_case, str(exc)))
             print(f"\nERROR for UEU '{ueu_case}': {exc}")

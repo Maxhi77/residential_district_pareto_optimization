@@ -6,6 +6,24 @@ import numpy as np
 import pandas as pd
 
 
+PDF_EXPORT_WIDTH_CM = 11.8
+PDF_EXPORT_WIDTH_INCH = PDF_EXPORT_WIDTH_CM / 2.54
+FIG_HEIGHT_INCH = 4.2
+# PDF export contract: every saved PDF page from this plot script must be 11.8 cm wide.
+# Do not pass bbox_inches="tight" for PDF output; it changes the final PDF bounding box.
+
+
+def _savefig_fixed_pdf_width(fig, filename, *args, **kwargs):
+    file_suffix = Path(filename).suffix.lower() if filename is not None else ""
+    fmt = str(kwargs.get("format", "")).lower()
+    if file_suffix == ".pdf" or fmt == "pdf":
+        height = fig.get_size_inches()[1]
+        fig.set_size_inches(PDF_EXPORT_WIDTH_INCH, height, forward=False)
+        kwargs.pop("bbox_inches", None)
+        kwargs["format"] = "pdf"
+    fig.savefig(filename, *args, **kwargs)
+
+
 EXAMPLES_BASE_DIR = (
     Path(__file__).resolve().parents[1] / "03_applied_energy_optimization"
 )
@@ -186,7 +204,7 @@ def _plot_ratio_comparison(summary_df: pd.DataFrame, title: str, save_path: Path
         "sfh_plus_mfh": "tab:green",
     }
 
-    fig, axes = plt.subplots(1, 2, figsize=(11.8, 4.2), constrained_layout=True)
+    fig, axes = plt.subplots(1, 2, figsize=(PDF_EXPORT_WIDTH_INCH, FIG_HEIGHT_INCH), constrained_layout=True)
     bar_width = 0.18
 
     def _draw_panel(ax, cols, labels, panel_title):
@@ -217,7 +235,7 @@ def _plot_ratio_comparison(summary_df: pd.DataFrame, title: str, save_path: Path
     handles, labels = axes[1].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=len(scenarios), frameon=False, bbox_to_anchor=(0.5, 1.06))
     fig.suptitle(title, y=1.12, fontsize=10)
-    fig.savefig(save_path, bbox_inches="tight")
+    _savefig_fixed_pdf_width(fig, save_path)
     plt.close(fig)
 
 
@@ -235,7 +253,7 @@ def _plot_absolute_comparison(summary_df: pd.DataFrame, title: str, save_path: P
         "sfh_plus_mfh": "tab:green",
     }
 
-    fig, axes = plt.subplots(1, 2, figsize=(11.8, 4.2), constrained_layout=True)
+    fig, axes = plt.subplots(1, 2, figsize=(PDF_EXPORT_WIDTH_INCH, FIG_HEIGHT_INCH), constrained_layout=True)
     bar_width = 0.18
 
     def _draw_panel(ax, cols, panel_title):
@@ -264,7 +282,7 @@ def _plot_absolute_comparison(summary_df: pd.DataFrame, title: str, save_path: P
     handles, legend_labels = axes[1].get_legend_handles_labels()
     fig.legend(handles, legend_labels, loc="upper center", ncol=len(scenarios), frameon=False, bbox_to_anchor=(0.5, 1.06))
     fig.suptitle(title, y=1.12, fontsize=10)
-    fig.savefig(save_path, bbox_inches="tight")
+    _savefig_fixed_pdf_width(fig, save_path)
     plt.close(fig)
 
 

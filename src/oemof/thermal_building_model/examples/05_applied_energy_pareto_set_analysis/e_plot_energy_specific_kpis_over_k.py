@@ -10,10 +10,10 @@ from matplotlib.lines import Line2D
 from matplotlib.ticker import FormatStrFormatter
 
 
-EXAMPLES_BASE_DIR = (
-    Path(__file__).resolve().parents[1] / "03_applied_energy_optimization"
+EXAMPLES_BASE_DIR = Path(
+    r"C:\Users\hill_mx\Desktop\From Luis\Case Studies\Small New"
 )
-OUTPUT_BASE_DIR = Path(__file__).resolve().parent / "energy_specific_kpi_results"
+OUTPUT_BASE_DIR = EXAMPLES_BASE_DIR / "energy_specific_kpi_results"
 CLUSTER_FOLDER_PATTERN = re.compile(r"^(sfh|mfh)_cluster_k(\d+)$")
 DEMANDS_PKL_NAME = "demands_and_pv_potential.pkl"
 COLOR_ELECTRICITY = "tab:blue"
@@ -34,6 +34,21 @@ HEIGHT_VARIANTS: list[tuple[str, float]] = [
     ("h70", 0.70),
     ("h60", 0.60),
 ]
+PDF_EXPORT_WIDTH_CM = 11.8
+PDF_EXPORT_WIDTH_INCH = PDF_EXPORT_WIDTH_CM / 2.54
+# PDF export contract: every saved PDF page from this plot script must be 11.8 cm wide.
+# Do not pass bbox_inches="tight" for PDF output; it changes the final PDF bounding box.
+
+
+def _savefig_fixed_pdf_width(fig, filename, *args, **kwargs):
+    file_suffix = Path(filename).suffix.lower() if filename is not None else ""
+    fmt = str(kwargs.get("format", "")).lower()
+    if file_suffix == ".pdf" or fmt == "pdf":
+        height = fig.get_size_inches()[1]
+        fig.set_size_inches(PDF_EXPORT_WIDTH_INCH, height, forward=False)
+        kwargs.pop("bbox_inches", None)
+        kwargs["format"] = "pdf"
+    fig.savefig(filename, *args, **kwargs)
 
 
 def compute_smart_k_ticks(valid_k: np.ndarray, max_ticks: int = 5) -> np.ndarray:
@@ -373,7 +388,7 @@ def plot_energy_kpis_over_k(
     ueu_identifier: str | None = None,
     font_family: str = "TeX Gyre Termes",
     font_size: int = 9,
-    width_cm: float = 15.11293,
+    width_cm: float = 11.8,
     height_cm: float = 4.8,
     marker_size: float = 2.4,
     line_width: float = 1.2,
@@ -570,7 +585,7 @@ def plot_energy_kpis_over_k(
     ax_leg.legend(
         handles=legend_handles,
         loc="center",
-        ncol=4,
+        ncol=2,
         frameon=False,
         handlelength=1.8,
         columnspacing=1.8,
@@ -578,7 +593,7 @@ def plot_energy_kpis_over_k(
     fig.subplots_adjust(left=0.09, right=0.985, bottom=0.14, top=0.95)
 
     if save_path is not None:
-        fig.savefig(save_path)
+        _savefig_fixed_pdf_width(fig, save_path)
 
     return fig, axes
 
@@ -668,7 +683,7 @@ def _plot_energy_kpi_row(
     )
     ax_total.axhline(1.0, color="0.35", linestyle=":", linewidth=1.0)
     _add_highlight(ax_total)
-    ax_total.set_title(f"{building_type}: Annual Totals")
+    ax_total.set_title(f"{building_type}: Annual Totals", pad=0.0)
     ax_total.set_ylabel("Ratio to ref in -", labelpad=6)
     ax_total.grid(True, alpha=0.3)
 
@@ -728,7 +743,7 @@ def _plot_energy_kpi_row(
     )
     ax_peak.axhline(1.0, color="0.35", linestyle=":", linewidth=1.0)
     _add_highlight(ax_peak)
-    ax_peak.set_title(f"{building_type}: Annual Peaks")
+    ax_peak.set_title(f"{building_type}: Annual Peaks", pad=0.0)
     ax_peak.set_ylabel("Ratio to ref in -", labelpad=6)
     ax_peak.grid(True, alpha=0.3)
 
@@ -738,7 +753,12 @@ def _plot_energy_kpi_row(
         ax.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
         ax.tick_params(axis="both", pad=2)
         if show_xlabel:
-            ax.set_xlabel(r"Number of clusters $k$", labelpad=1.0)
+            if building_type.upper() == "SFH":
+                ax.set_xlabel(r"$k_{\mathrm{SFH}}$", labelpad=0.0)
+            elif building_type.upper() == "MFH":
+                ax.set_xlabel(r"$k_{\mathrm{MFH}}$", labelpad=0.0)
+            else:
+                ax.set_xlabel(r"Number of clusters $k$", labelpad=0.0)
         else:
             ax.set_xlabel("")
 
@@ -752,7 +772,7 @@ def plot_energy_kpis_over_k_sfh_mfh(
     ueu_identifier: str | None = None,
     font_family: str = "TeX Gyre Termes",
     font_size: int = 9,
-    width_cm: float = 15.11293,
+    width_cm: float = 11.8,
     height_cm: float = 8.2,
     marker_size: float = 2.4,
     line_width: float = 1.2,
@@ -795,7 +815,7 @@ def plot_energy_kpis_over_k_sfh_mfh(
         ueu_identifier=ueu_identifier,
         marker_size=marker_size,
         line_width=line_width,
-        show_xlabel=False,
+        show_xlabel=True,
     )
     _plot_energy_kpi_row(
         axes_row=axes[1],
@@ -861,18 +881,35 @@ def plot_energy_kpis_over_k_sfh_mfh(
     fig.legend(
         handles=legend_handles,
         loc="upper center",
-        ncol=4,
+        ncol=2,
         frameon=False,
         handlelength=1.8,
         columnspacing=1.8,
-        bbox_to_anchor=(0.5, 1.01),
+        labelspacing=0.30,
+        bbox_to_anchor=(0.5, 0.99),
     )
 
     # Keep all labels and the figure legend inside the fixed canvas.
-    fig.subplots_adjust(left=0.10, right=0.98, bottom=0.13, top=0.82)
+    fig.subplots_adjust(
+        left=0.15,
+        right=0.98,
+        bottom=0.13,
+        top=0.73,
+        hspace=2.20,
+        wspace=0.48,
+    )
+    row_gap_extra = 0.018
+    for ax in axes[0]:
+        pos = ax.get_position()
+        ax.set_position(
+            [pos.x0, pos.y0 + row_gap_extra, pos.width, pos.height - row_gap_extra]
+        )
+    for ax in axes[1]:
+        pos = ax.get_position()
+        ax.set_position([pos.x0, pos.y0, pos.width, pos.height - row_gap_extra])
 
     if save_path is not None:
-        fig.savefig(save_path)
+        _savefig_fixed_pdf_width(fig, save_path)
 
     return fig, axes
 

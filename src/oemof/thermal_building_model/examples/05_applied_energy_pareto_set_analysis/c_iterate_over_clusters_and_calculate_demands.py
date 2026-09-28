@@ -16,8 +16,8 @@ from oemof.thermal_building_model.oemof_facades.refurbishment.building_model imp
 from oemof.thermal_building_model.oemof_facades.technologies.renewable_energy_source import PVSystem
 
 
-EXAMPLES_BASE_DIR = (
-    Path(__file__).resolve().parents[1] / "03_applied_energy_optimization"
+EXAMPLES_BASE_DIR = Path(
+    r"C:\Users\hill_mx\Desktop\From Luis\Case Studies\Small New"
 )
 CLUSTER_FOLDER_PATTERN = re.compile(r"^(sfh|mfh)_cluster_k\d+$")
 OUTPUT_FILENAME = "demands_and_pv_potential.pkl"
@@ -31,11 +31,22 @@ WARM_WATER_COLD_TEMP_C = 10.0
 WARM_WATER_DEMAND_TEMP_C = 50.0
 WATER_HEAT_CAPACITY_KJ_PER_KG_K = 4.18
 UEU_CASES_TO_PROCESS = [
-    "processed_bds_in_DENI03403000SEC5101",
-    "processed_bds_in_DENI03403000SEC4580",
+    #"processed_bds_in_DENI03403000SEC5101",
+    #"processed_bds_in_DENI03403000SEC4580",
     "processed_bds_in_DENI03403000SEC5658"
 ]
 REQUIRE_EV_DIFFERENCE_PER_CLUSTER = True
+REQUIRED_OUTPUT_KEYS = (
+    "electricity_demand_no_ev",
+    "electricity_demand_yes_ev",
+    "electricity_demand",
+    "warm_water_demand",
+    "building_heating_demand_no_refurbishment",
+    "building_heating_demand_advanced_refurbishment",
+    "building_heating_demand",
+    "pv_potential",
+    "buildings_in_cluster",
+)
 
 
 def _year_from_tabula(tabula_year_class):
@@ -309,6 +320,42 @@ def _append_building_output(output, building_id, profiles):
     output["buildings_in_cluster"][building_id] = profiles["buildings_in_cluster"]
 
 
+def _has_existing_complete_output(output_dir):
+    output_path = output_dir / OUTPUT_FILENAME
+    if not output_path.exists():
+        return False
+    if output_path.stat().st_size == 0:
+        print(f"existing output is empty, recalculating: {output_path}")
+        return False
+
+    try:
+        with open(output_path, "rb") as fh:
+            payload = pickle.load(fh)
+    except Exception as exc:
+        print(f"existing output is not readable, recalculating: {output_path} ({exc})")
+        return False
+
+    if not isinstance(payload, dict):
+        print(f"existing output has unexpected format, recalculating: {output_path}")
+        return False
+
+    missing_keys = [key for key in REQUIRED_OUTPUT_KEYS if key not in payload]
+    if missing_keys:
+        print(
+            f"existing output is incomplete, recalculating: {output_path} "
+            f"(missing keys: {missing_keys})"
+        )
+        return False
+
+    processed_count = len(payload["electricity_demand_no_ev"])
+    if processed_count == 0:
+        print(f"existing output contains no buildings, recalculating: {output_path}")
+        return False
+
+    print(f"skip existing output: {output_path}")
+    return True
+
+
 def _process_cluster_frame(
     cluster_df,
     building_type,
@@ -378,6 +425,9 @@ def _process_cluster_frame(
 
 
 def _process_cluster_folder(cluster_folder, demand_dir, epw_path, time_index):
+    if _has_existing_complete_output(cluster_folder):
+        return
+
     cluster_df, building_type = _load_cluster_frame(cluster_folder)
     _process_cluster_frame(
         cluster_df=cluster_df,
@@ -410,6 +460,8 @@ def _process_reference_cluster(cluster_root, epw_path, time_index):
         cluster_df["buildings_in_cluster"] = 1
         reference_output_dir = cluster_root / f"{building_type.lower()}_reference"
         reference_output_dir.mkdir(parents=True, exist_ok=True)
+        if _has_existing_complete_output(reference_output_dir):
+            continue
         _process_cluster_frame(
             cluster_df=cluster_df,
             building_type=building_type,
