@@ -1,3 +1,14 @@
+"""Run the centralized district-level optimization workflow.
+
+This executable builds combined SFH/MFH district optimization models for
+selected UEU cluster combinations and heat-carrier temperature levels. It uses
+the same processed building, demand, weather, cost, emission, and price-scenario
+inputs as the decentralized workflow, but optimizes a shared district supply
+system with centralized heat-grid components. Output files are centralized full
+and reduced pickle results for the CO2 and peak-reduction sweeps used in the
+Applied Energy manuscript and thesis analyses.
+"""
+
 from oemof.thermal_building_model.oemof_facades.base_component import  PhysicalBaseUnit
 from oemof.solph.components import Converter
 import copy

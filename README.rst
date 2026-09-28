@@ -53,6 +53,12 @@ The main execution entry points for reproducing the manuscript workflows are in
     and reduced pickle results for CO2 and peak-reduction sweeps. This is the
     currently maintained manuscript workflow.
 
+``centralized_supply_multiple_buildings_multiple_heat_carrier_levels.py``
+    Runs the centralized district-level workflow from
+    ``03_applied_energy_optimization``. It uses the same processed UEU and
+    cluster data basis, but optimizes combined district supply systems for
+    selected SFH/MFH cluster combinations and heat-carrier temperature levels.
+
 Model-building facades
 ======================
 
@@ -266,7 +272,7 @@ inputs with:
 
 .. code:: bash
 
-    python ../04_applied_energy_optimization_post_process/a_post_process_decentralized_k_combinations.py \
+    python ../04_applied_energy_optimization_post_process/decentralized/a_post_process_decentralized_k_combinations.py \
       --ueu-case processed_bds_in_DENI03403000SEC5658 \
       --base-dir demo_results \
       --cluster-base-dir . \
@@ -296,6 +302,21 @@ directory. Then run:
 
 The plotting step produces manuscript-style Pareto-front and technology
 contribution figures from the post-processed decentralized result set.
+
+Centralized result files can be consolidated with:
+
+.. code:: bash
+
+    python ../04_applied_energy_optimization_post_process/centralized/a_post_process_centralized_results.py \
+      --ueu-case processed_bds_in_DENI03403000SEC5658 \
+      --result-kind simple \
+      --temperature-levels 50,80
+
+The centralized post-processing step reads district-level centralized result
+records and writes ``centralized_records.pkl``, ``centralized_front.pkl``,
+``centralized_package.pkl``, ``meta.pkl``, ``summary.csv``, and diagnostic CSV
+files. In contrast to the decentralized post-processing, it does not combine
+single-building fronts and does not apply Pareto pruning.
 
 Minimal example and full manuscript reproduction
 ------------------------------------------------

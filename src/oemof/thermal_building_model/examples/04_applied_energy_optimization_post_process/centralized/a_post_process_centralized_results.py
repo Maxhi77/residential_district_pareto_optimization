@@ -1,3 +1,13 @@
+"""Consolidate centralized district optimization result files.
+
+Centralized optimization result files already represent complete district-level
+solutions. This script therefore loads the selected result records, extracts
+objective values and metadata, filters invalid or incomplete files, and writes
+one consolidated package per UEU, combined-cluster case, and heat-carrier
+temperature level. No building-level recombination or Pareto pruning is applied
+in this step.
+"""
+
 import argparse
 import csv
 import pickle

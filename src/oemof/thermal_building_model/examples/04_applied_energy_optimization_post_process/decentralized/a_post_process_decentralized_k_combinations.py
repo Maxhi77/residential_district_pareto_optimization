@@ -1,3 +1,13 @@
+"""Aggregate decentralized building-level results into district Pareto fronts.
+
+The decentralized optimization workflow writes one result set per building
+representative, refurbishment case, price scenario, EV setting, and constraint
+factor. This script combines those building-level result files for selected
+SFH/MFH cluster-count combinations, constructs district-level Pareto packages,
+and writes the post-processed files consumed by the Applied Energy and thesis
+plotting scripts.
+"""
+
 import argparse
 import json
 import multiprocessing

@@ -1,3 +1,12 @@
+"""Evaluate decentralized Pareto-set quality over cluster-count combinations.
+
+This analysis reads post-processed decentralized Pareto fronts and compares
+SFH/MFH cluster-count combinations using normalized hypervolume, delta
+hypervolume, and IGD against a reference Pareto set. The resulting tables are
+used by the downstream heatmap and Pareto-projection scripts for the Applied
+Energy manuscript and thesis analyses.
+"""
+
 import pickle
 import re
 import os
