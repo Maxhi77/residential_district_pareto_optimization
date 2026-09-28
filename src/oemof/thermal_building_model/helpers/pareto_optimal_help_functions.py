@@ -3,6 +3,8 @@ import math
 import numpy as np
 
 Number = float
+ARCHIVE_OBJECTIVE_KEYS = ('co2', 'peak', 'totex')
+REPRESENTATIVE_SELECTION_STRATEGIES = ('raw_sum', 'transformed_sum')
 
 # ---------- Utilities ----------
 def _quantile(xs: List[float], q: float) -> float:
@@ -241,21 +243,72 @@ def epsilon_bucket_key(
         bucket(k, ez, modes[2], scales[2]),
     )
 
+
+def transformed_bucket_objective_value(value: Number, scale: Number) -> Number:
+    """
+    Objective transformation used by the optional scale-independent bucket
+    representative rule.
+
+    Negative values are clipped to zero, matching the current bucket assignment.
+    """
+    value = float(value)
+    scale = float(scale)
+    if not math.isfinite(value):
+        raise ValueError(f"Objective value must be finite, got {value!r}.")
+    if not math.isfinite(scale) or scale <= 0:
+        raise ValueError(f"Objective scale must be finite and > 0, got {scale!r}.")
+    return math.log1p(max(value, 0.0) / scale)
+
+
+def _validate_representative_selection(representative_selection: str) -> str:
+    if representative_selection not in REPRESENTATIVE_SELECTION_STRATEGIES:
+        valid = ", ".join(REPRESENTATIVE_SELECTION_STRATEGIES)
+        raise ValueError(
+            f"Invalid representative_selection={representative_selection!r}. "
+            f"Valid values are: {valid}."
+        )
+    return representative_selection
+
+
+def bucket_representative_score(
+    record: Dict[str, Any],
+    scales: Tuple[float, float, float],
+    representative_selection: str = 'raw_sum',
+) -> Number:
+    representative_selection = _validate_representative_selection(representative_selection)
+    if representative_selection == 'raw_sum':
+        return record['co2'] + record['peak'] + record['totex']
+    return sum(
+        transformed_bucket_objective_value(record[key], scale)
+        for key, scale in zip(ARCHIVE_OBJECTIVE_KEYS, scales)
+    )
+
 def epsilon_reduce(
     records: List[Dict[str,Any]],
     eps_rel: Tuple[float,float,float]=(0.01,0.01,0.01),
     modes: Tuple[str,str,str]=('log','log','log'),
     scales: Tuple[float,float,float]=(1.0,1.0,1.0),
+    representative_selection: str = 'raw_sum',
 ) -> List[Dict[str,Any]]:
     """
-    Pro Rasterzelle behalte den 'besten' Vertreter (hier: geringste Summe).
+    Pro Rasterzelle behalte einen Vertreter.
+
+    Default bleibt die bestehende Produktionslogik: geringste rohe Summe aus
+    co2 + peak + totex. Optional kann eine skalierte, transformierte Summe
+    explizit aktiviert werden.
+
     Nutzt epsilon_bucket_key(..., modes, scales).
     """
+    _validate_representative_selection(representative_selection)
     buckets: Dict[Tuple[int,int,int], Dict[str,Any]] = {}
     for r in records:
+        candidate_score = bucket_representative_score(r, scales, representative_selection)
         key = epsilon_bucket_key(r['co2'], r['peak'], r['totex'], eps_rel, modes, scales)
         best = buckets.get(key)
-        if best is None or (r['co2'] + r['peak'] + r['totex']) < (best['co2'] + best['peak'] + best['totex']):
+        if best is None or (
+            candidate_score
+            < bucket_representative_score(best, scales, representative_selection)
+        ):
             buckets[key] = r
     return list(buckets.values())
 
@@ -297,13 +350,14 @@ def combine_two_fronts(
     modes: Tuple[str,str,str]=('log','log','lin'),
     scales: Tuple[float,float,float]=(1.0,1.0,10000.0),
     max_points: Optional[int] = None,
+    representative_selection: str = 'raw_sum',
 ) -> List[Dict[str,Any]]:
     # Vorab ε-Reduktion auf A und B (falls gewünscht)
     A = frontA
     B = frontB
     if eps_rel is not None:
-        A = epsilon_reduce(A, eps_rel, modes, scales)
-        B = epsilon_reduce(B, eps_rel, modes, scales)
+        A = epsilon_reduce(A, eps_rel, modes, scales, representative_selection=representative_selection)
+        B = epsilon_reduce(B, eps_rel, modes, scales, representative_selection=representative_selection)
 
     merged: List[Dict[str,Any]] = []
     for a in A:
@@ -327,7 +381,7 @@ def combine_two_fronts(
 
     # Nach dem Merge ggf. erneut ε-Reduktion
     if eps_rel is not None:
-        merged = epsilon_reduce(merged, eps_rel, modes, scales)
+        merged = epsilon_reduce(merged, eps_rel, modes, scales, representative_selection=representative_selection)
 
     # Pareto
     pts = [(m['co2'], m['peak'], m['totex']) for m in merged]
@@ -354,6 +408,7 @@ def combine_all_buildings(
     scales_merge: Optional[Tuple[float,float,float]] = None,
 
     max_points_after_each_merge: Optional[int] = 5000,
+    representative_selection: str = 'raw_sum',
 ) -> Tuple[Dict[str,List[Dict[str,Any]]], List[Dict[str,Any]]]:
 
     # --- NEU: globale Skalen einmal bestimmen, wenn nicht gesetzt
@@ -373,7 +428,13 @@ def combine_all_buildings(
         front = pareto_prune_building(bdata, refurbishment_strategies, tau=tau)
 
         if eps_rel_each is not None and len(front) > 0:
-            front = epsilon_reduce(front, eps_rel_each, modes_each, scales_each)
+            front = epsilon_reduce(
+                front,
+                eps_rel_each,
+                modes_each,
+                scales_each,
+                representative_selection=representative_selection,
+            )
             pts = [(r['co2'], r['peak'], r['totex']) for r in front]
             keep = pareto_prune_points(pts, tau=tau)
             front = [front[i] for i in keep]
@@ -396,6 +457,7 @@ def combine_all_buildings(
             modes=modes_merge,
             scales=scales_merge,
             max_points=max_points_after_each_merge,
+            representative_selection=representative_selection,
         )
 
     # 3) finaler strenger Pareto-Schritt
