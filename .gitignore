@@ -31,16 +31,43 @@ error_logs/
 *.sol
 *.mst
 
+# Local audit, rerun, and availability artifacts
+tmp/
+audit_tmp/
+_post_process_group_check/
+_post_process_group_fixture/
+centralized_availability_*.csv
+sec*_centralized_solution_counts.csv
+check_missing_*.txt
+rerun_missing_*.txt
+pareto_recombination_*report*
+pareto_recombination_*audit*
+computational_setup_report.md
+
 # Generated example outputs
 src/oemof/thermal_building_model/examples/02_investment_optimization/*.pkl
 src/oemof/thermal_building_model/examples/02_investment_optimization/figure.svg
 src/oemof/thermal_building_model/examples/**/_plot_outputs/
+src/oemof/thermal_building_model/examples/**/plot_outputs/
 src/oemof/thermal_building_model/examples/**/energy_specific_kpi_results/
 src/oemof/thermal_building_model/examples/**/hypervolume_results/
 src/oemof/thermal_building_model/examples/**/pareto_front/
 src/oemof/thermal_building_model/examples/**/reference_kpi_comparison/
 src/oemof/thermal_building_model/examples/**/post_processed_dec_k_combinations*/
+src/oemof/thermal_building_model/examples/**/centralized_post_processed/
+src/oemof/thermal_building_model/examples/**/heat_grid_planning/
+src/oemof/thermal_building_model/examples/**/pareto_recombination_*/
+src/oemof/thermal_building_model/examples/**/analysis_feature_preservation/
+src/oemof/thermal_building_model/examples/**/plots/
+src/oemof/thermal_building_model/examples/**/results*/
 src/oemof/thermal_building_model/examples/04_post_processed_cen_*/
+src/oemof/thermal_building_model/examples/03_applied_energy_optimization/processed_bds_in_DENI03403000SEC4580/
+src/oemof/thermal_building_model/examples/03_applied_energy_optimization/processed_bds_in_DENI03403000SEC5101/
+src/oemof/thermal_building_model/examples/03_applied_energy_optimization/processed_bds_in_DENI03403000SEC5658/combined_cluster_*/
+src/oemof/thermal_building_model/examples/04_applied_energy_optimization_post_process/computational_time/*.xlsx
+src/oemof/thermal_building_model/examples/04_applied_energy_optimization_post_process/computational_time/*.pdf
+src/oemof/thermal_building_model/examples/04_applied_energy_optimization_post_process/computational_time/*.png
+src/oemof/thermal_building_model/examples/04_applied_energy_optimization_post_process/computational_time/ct_*/
 src/oemof/thermal_building_model/examples/**/results_dec_*.pkl
 src/oemof/thermal_building_model/examples/**/simple_results_dec_*.pkl
 src/oemof/thermal_building_model/examples/**/reference_ueu_building_kpis.csv
