@@ -1,16 +1,40 @@
 import os
 import pickle
 import re
+import time
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
 import pandas as pd
 from matplotlib import cm
 from matplotlib import colors as mcolors
 from matplotlib.lines import Line2D
+
+try:
+    import seaborn as sns
+except ModuleNotFoundError:
+    class _SeabornFallback:
+        _COLORBLIND = [
+            "#0173B2",
+            "#DE8F05",
+            "#029E73",
+            "#D55E00",
+            "#CC78BC",
+            "#CA9161",
+            "#FBAFE4",
+            "#949494",
+        ]
+
+        @classmethod
+        def color_palette(cls, palette=None, n_colors=None):
+            colors = cls._COLORBLIND if palette == "colorblind" else cls._COLORBLIND
+            if n_colors is None:
+                return colors
+            return [colors[i % len(colors)] for i in range(n_colors)]
+
+    sns = _SeabornFallback()
 
 from b_plot_pareto_front_dec import (
     calculate_sums_for_technologies_and_energy_for_a_district,
@@ -18,6 +42,22 @@ from b_plot_pareto_front_dec import (
     process_district_data,
     process_units_for_processed,
 )
+
+PDF_EXPORT_WIDTH_CM = 11.8
+PDF_EXPORT_WIDTH_INCH = PDF_EXPORT_WIDTH_CM / 2.54
+# PDF export contract: every saved PDF page from this plot script must be 11.8 cm wide.
+# Do not pass bbox_inches="tight" for PDF output; it changes the final PDF bounding box.
+
+
+def _savefig_fixed_pdf_width(fig, filename, *args, **kwargs):
+    file_suffix = Path(filename).suffix.lower() if filename is not None else ""
+    fmt = str(kwargs.get("format", "")).lower()
+    if file_suffix == ".pdf" or fmt == "pdf":
+        height = fig.get_size_inches()[1]
+        fig.set_size_inches(PDF_EXPORT_WIDTH_INCH, height, forward=False)
+        kwargs.pop("bbox_inches", None)
+        kwargs["format"] = "pdf"
+    fig.savefig(filename, *args, **kwargs)
 
 # -----------------------------
 # Plot switches / scope
@@ -29,6 +69,38 @@ ENABLE_STD_BAND_PLOTS = True
 STD_BAND_MULTIPLIERS = (1, 2, 3)
 STD_BAND_SCALE_WITHIN_AXIS_ABS_MAX = True
 ENABLE_DEVIATION_NO_STD_PLOTS = True
+SUPPLY_MODE = "cen"
+SENSITIVITY_VARIATION_ROOT = Path(
+    r"C:\Users\hill_mx\Desktop\UEU RESULTS\processed_bds_in_DENI03403000SEC5658_variable"
+)
+CENTRALIZED_PRICE_SCENARIO_ROOT = Path(
+    "M:/04_ArchivMA/Hillen Maximilian/Ver\u00f6ffentlichungen/UEU/centralized_price_scenarios"
+)
+DECENTRALIZED_REFERENCE_ROOT = Path(
+    "M:/04_ArchivMA/Hillen Maximilian/Ver\u00f6ffentlichungen/UEU/processed_bds_in_DENI03403000SEC5658"
+)
+UEU_CASE_NAME = "processed_bds_in_DENI03403000SEC5658"
+DECENTRALIZED_POST_PROCESS_DIR_NAME = "post_processed_dec_k_combinations_2026_07_07"
+RUN_SUBDIR = "sfh_reference_mfh_reference"
+CENTRALIZED_TEMPERATURE_CONSTRAINT_GROUPS = (
+    ("t50", "cmin"),
+    ("t80", "cmax"),
+    ("t80", "cmin"),
+)
+CENTRALIZED_STRATEGY_LABELS = {
+    "t50_cmin": "50 \N{DEGREE SIGN}C min. required",
+    "t80_cmax": "80 \N{DEGREE SIGN}C max. retrofit",
+    "t80_cmin": "80 \N{DEGREE SIGN}C min. required",
+}
+
+
+TECHNOLOGY_DISPLAY_LABELS = {
+    "Heat pump": "ASHP",
+}
+
+
+def _technology_display_label(technology: str) -> str:
+    return TECHNOLOGY_DISPLAY_LABELS.get(technology, technology)
 
 
 def set_journal_style(font_family: str = "TeX Gyre Termes", font_size: int = 9) -> None:
@@ -97,8 +169,35 @@ def _extract_combined_front_from_loaded_object(loaded_obj) -> List[Dict[str, flo
     )
 
 
+def _open_pickle_path_with_retry(pkl_path: Path):
+    candidates = []
+    for raw_path in (str(pkl_path), str(pkl_path.resolve())):
+        for candidate in (raw_path, _to_windows_long_path(raw_path)):
+            if candidate not in candidates:
+                candidates.append(candidate)
+
+    last_exc = None
+    for attempt in range(3):
+        for candidate in candidates:
+            try:
+                return open(candidate, "rb")
+            except (FileNotFoundError, OSError) as exc:
+                last_exc = exc
+        time.sleep(0.25 * (attempt + 1))
+
+    parent = pkl_path.parent
+    try:
+        parent_entries = sorted(child.name for child in parent.iterdir()) if parent.exists() else []
+    except OSError as exc:
+        parent_entries = [f"<could not list parent: {exc}>"]
+    raise FileNotFoundError(
+        "Could not open front pickle after retries. "
+        f"path={pkl_path}; parent_exists={parent.exists()}; parent_entries={parent_entries}"
+    ) from last_exc
+
+
 def load_combined_front_from_path(pkl_path: Path) -> List[Dict[str, float]]:
-    with open(_to_windows_long_path(str(pkl_path)), "rb") as f:
+    with _open_pickle_path_with_retry(pkl_path) as f:
         loaded_obj = pickle.load(f)
     return _extract_combined_front_from_loaded_object(loaded_obj)
 
@@ -231,7 +330,39 @@ def rel_deviation_percent(value: float, ref_value: float) -> float:
     return (value - ref_value) / ref_value * 100.0
 
 
-def ordered_scenarios() -> List[Tuple[str, str]]:
+def ordered_scenarios(cen_or_dec: str = "dec") -> List[Tuple[str, str]]:
+    if str(cen_or_dec).lower() == "cen":
+        return [
+            (f"{UEU_CASE_NAME}_yes_ev_total", "EV penetration 100%"),
+            (f"{UEU_CASE_NAME}_electricity_plus20", "Electricity price +20%"),
+            (f"{UEU_CASE_NAME}_electricity_plus40", "Electricity price +40%"),
+            (f"{UEU_CASE_NAME}_gas_plus20", "Gas price +20%"),
+            (f"{UEU_CASE_NAME}_gas_plus40", "Gas price +40%"),
+            (f"{UEU_CASE_NAME}_hydrogen_plus20", "Hydrogen price +20%"),
+            (f"{UEU_CASE_NAME}_hydrogen_plus40", "Hydrogen price +40%"),
+            (
+                f"{UEU_CASE_NAME}_electricity_feed_in_plus20",
+                "Electricity feed-in revenue +20%",
+            ),
+            (
+                f"{UEU_CASE_NAME}_electricity_feed_in_plus40",
+                "Electricity feed-in revenue +40%",
+            ),
+            (f"{UEU_CASE_NAME}_electricity_minus20", "Electricity price -20%"),
+            (f"{UEU_CASE_NAME}_electricity_minus40", "Electricity price -40%"),
+            (f"{UEU_CASE_NAME}_gas_minus20", "Gas price -20%"),
+            (f"{UEU_CASE_NAME}_gas_minus40", "Gas price -40%"),
+            (f"{UEU_CASE_NAME}_hydrogen_minus20", "Hydrogen price -20%"),
+            (f"{UEU_CASE_NAME}_hydrogen_minus40", "Hydrogen price -40%"),
+            (
+                f"{UEU_CASE_NAME}_electricity_feed_in_minus20",
+                "Electricity feed-in revenue -20%",
+            ),
+            (
+                f"{UEU_CASE_NAME}_electricity_feed_in_minus40",
+                "Electricity feed-in revenue -40%",
+            ),
+        ]
     return [
         ("processed_bds_in_DENI03403000SEC5658_yes_ev_total", "EV penetration 100%"),
         ("processed_bds_in_DENI03403000SEC5658_electricity_plus20", "Electricity price +20%"),
@@ -265,6 +396,57 @@ def ordered_scenarios() -> List[Tuple[str, str]]:
     ]
 
 
+def _parallel_axis_specs_for_mode(cen_or_dec: str, compact: bool = False) -> List[Tuple[str, str]]:
+    if compact and str(cen_or_dec).lower() != "cen":
+        return [
+            ("totex", "Ann.\nTOTEX"),
+            ("gwp", "Ann.\nGWP"),
+            ("peak", "Ann.\nPeak"),
+            ("heat_pump_capacity", "ASHP"),
+            ("gas_heater_capacity", "Gas\nheater"),
+            ("chp_capacity", "CHP"),
+            ("battery_capacity", "Battery"),
+            ("thermal_storage_capacity", "Heat\nstorage"),
+            ("pv_capacity", "PV-\nSystem"),
+            ("retrofit_depth", "Retrofit"),
+        ]
+
+    axis_specs = [
+        ("totex", "Ann.\nTOTEX\nin EUR\nper\n100m$^2$"),
+        ("gwp", "Ann.\nGWP\nin kg\nCO$_2$-eq.\nper\n100m$^2$"),
+        ("peak", "Peak\ngrid ex.\npower\nin kW\nper\n100m$^2$"),
+        ("heat_pump_capacity", "ASHP\nin kW\nper\n100m$^2$"),
+        ("gas_heater_capacity", "Gas\nheater\nin kW\nper\n100m$^2$"),
+        ("chp_capacity", "CHP\nin kW\nper\n100m$^2$"),
+        ("battery_capacity", "Battery\nin kWh\nper\n100m$^2$"),
+        ("thermal_storage_capacity", "Heat\nstorage\nin kWh\nper\n100m$^2$"),
+        ("pv_capacity", "PV-\nSystem\nin kW\nper\n100m$^2$"),
+        ("retrofit_depth", "Retrofit\ndepth\nin -"),
+    ]
+    if str(cen_or_dec).lower() == "cen":
+        axis_specs.extend(
+            [
+                ("seasonal_storage_capacity", "Sea-\nsonal\nstorage\nin kWh\nper\n100m$^2$"),
+                (
+                    "heat_grid_retrofit_temp_case",
+                    "Heat\ngrid\nsupply\nstra-\ntegy\nin -",
+                ),
+            ]
+        )
+    return axis_specs
+
+
+def _heat_grid_retrofit_temp_case_value(strategy_label: str) -> float:
+    label = str(strategy_label).lower()
+    if label.startswith("50") and "min" in label:
+        return 1.0
+    if label.startswith("80") and "min" in label:
+        return 0.5
+    if label.startswith("80") and ("max" in label or "advanced" in label):
+        return 0.0
+    return np.nan
+
+
 def write_csv(rows: List[Dict[str, float]], out_path: Path, fieldnames: List[str]) -> None:
     import csv
 
@@ -283,9 +465,13 @@ def _parse_k_combo(run_subdir: str) -> Tuple[int, int]:
 
 
 def _load_total_floor_area_from_clusters(reference_case_root: Path, run_subdir: str) -> float:
-    sfh_k, mfh_k = _parse_k_combo(run_subdir)
-    sfh_cluster_pkl = reference_case_root / f"sfh_cluster_k{sfh_k:02d}" / "sfh_cluster.pkl"
-    mfh_cluster_pkl = reference_case_root / f"mfh_cluster_k{mfh_k:02d}" / "mfh_cluster.pkl"
+    if str(run_subdir).strip() == "sfh_reference_mfh_reference":
+        sfh_cluster_pkl = reference_case_root / "sfh_cluster.pkl"
+        mfh_cluster_pkl = reference_case_root / "mfh_cluster.pkl"
+    else:
+        sfh_k, mfh_k = _parse_k_combo(run_subdir)
+        sfh_cluster_pkl = reference_case_root / f"sfh_cluster_k{sfh_k:02d}" / "sfh_cluster.pkl"
+        mfh_cluster_pkl = reference_case_root / f"mfh_cluster_k{mfh_k:02d}" / "mfh_cluster.pkl"
 
     def _sum_total_area(cluster_pkl: Path) -> float:
         with open(_to_windows_long_path(str(cluster_pkl)), "rb") as f:
@@ -315,6 +501,33 @@ def _build_building_name_map_from_record(record: Dict[str, float]) -> Dict[str, 
     return {str(k): str(k) for k in selection.keys()}
 
 
+def _sanitize_processed_electricity_grid(processed: Dict) -> Dict:
+    numeric_grid_keys = (
+        "added_line_length",
+        "added_trafo_capacity",
+        "added_line_cost",
+        "added_trafo_cost",
+        "added_line_co2",
+        "added_trafo_co2",
+    )
+    for district in processed.values():
+        if not isinstance(district, dict):
+            continue
+        grid = district.get("electricity_grid")
+        if not isinstance(grid, dict):
+            continue
+        for key in numeric_grid_keys:
+            value = grid.get(key, 0.0)
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                value = 0.0
+            if not np.isfinite(value):
+                value = 0.0
+            grid[key] = value
+    return processed
+
+
 def _extract_technology_cost_rows_for_record(
     record: Dict[str, float],
     *,
@@ -322,6 +535,7 @@ def _extract_technology_cost_rows_for_record(
     objective_name: str,
     scenario_name: str,
     scenario_label: str,
+    cen_or_dec: str,
 ) -> List[Dict[str, float]]:
     technologies = [
         "PV-System",
@@ -334,26 +548,34 @@ def _extract_technology_cost_rows_for_record(
         "Added line length",
         "Retrofit",
     ]
+    if str(cen_or_dec).lower() == "cen":
+        technologies.extend(["Heat grid", "Seasonal storage"])
     energy_types = ["Electricity", "Bio gas", "Natural gas", "Hydrogen"]
     building_name_map = _build_building_name_map_from_record(record)
+    if str(cen_or_dec).lower() == "cen":
+        building_name_map["heat_grid"] = "Heat grid"
     building_in_cluster = list(building_name_map.keys())
 
     # Same preparation path as in b_plot_pareto_front_dec.py:
     # ensure Electricity_Grid exists for decentralized records.
-    prepared_records = maniupulate_combined_front_elect_grid([dict(record)], True)
-    prepared_record = prepared_records[0]
-    if "Electricity_Grid" not in prepared_record:
-        prepared_record["Electricity_Grid"] = {
-            "added_trafo_cost": 0.0,
-            "added_line_cost": 0.0,
-            "added_line_length": 0.0,
-            "added_line_co2": 0.0,
-            "added_trafo_co2": 0.0,
-            "added_trafo_capacity": 0.0,
-            "investment_cost": 0.0,
-        }
+    if str(cen_or_dec).lower() == "dec":
+        prepared_records = maniupulate_combined_front_elect_grid([dict(record)], True)
+        prepared_record = prepared_records[0]
+        if "Electricity_Grid" not in prepared_record:
+            prepared_record["Electricity_Grid"] = {
+                "added_trafo_cost": 0.0,
+                "added_line_cost": 0.0,
+                "added_line_length": 0.0,
+                "added_line_co2": 0.0,
+                "added_trafo_co2": 0.0,
+                "added_trafo_capacity": 0.0,
+                "investment_cost": 0.0,
+            }
+    else:
+        prepared_record = dict(record)
 
-    processed = process_district_data([prepared_record], building_in_cluster, "dec")
+    processed = process_district_data([prepared_record], building_in_cluster, cen_or_dec)
+    processed = _sanitize_processed_electricity_grid(processed)
     processed = process_units_for_processed(
         processed,
         floor_area=total_floor_area_all / 100.0,
@@ -380,7 +602,7 @@ def _extract_technology_cost_rows_for_record(
                 "totex_per_100m2": float(one.get("totex", np.nan)),
                 "peak_per_100m2": float(one.get("peak", np.nan)),
                 "gwp_per_100m2": float(one.get("co2", np.nan)),
-                "technology": tech,
+                "technology": _technology_display_label(tech),
                 "tech_cost_per_100m2": float(cost_per_100),
                 "tech_cost_abs": float(cost_per_100 * (total_floor_area_all / 100.0)),
                 "tech_share_of_technology_cost_pct": float(share_pct),
@@ -396,6 +618,7 @@ def _extract_parallel_axis_row_for_record(
     objective_name: str,
     scenario_name: str,
     scenario_label: str,
+    cen_or_dec: str,
 ) -> Dict[str, float]:
     technologies = [
         "PV-System",
@@ -408,24 +631,32 @@ def _extract_parallel_axis_row_for_record(
         "Added line length",
         "Retrofit",
     ]
+    if str(cen_or_dec).lower() == "cen":
+        technologies.extend(["Heat grid", "Seasonal storage"])
     energy_types = ["Electricity", "Bio gas", "Natural gas", "Hydrogen"]
     building_name_map = _build_building_name_map_from_record(record)
+    if str(cen_or_dec).lower() == "cen":
+        building_name_map["heat_grid"] = "Heat grid"
     building_in_cluster = list(building_name_map.keys())
 
-    prepared_records = maniupulate_combined_front_elect_grid([dict(record)], True)
-    prepared_record = prepared_records[0]
-    if "Electricity_Grid" not in prepared_record:
-        prepared_record["Electricity_Grid"] = {
-            "added_trafo_cost": 0.0,
-            "added_line_cost": 0.0,
-            "added_line_length": 0.0,
-            "added_line_co2": 0.0,
-            "added_trafo_co2": 0.0,
-            "added_trafo_capacity": 0.0,
-            "investment_cost": 0.0,
-        }
+    if str(cen_or_dec).lower() == "dec":
+        prepared_records = maniupulate_combined_front_elect_grid([dict(record)], True)
+        prepared_record = prepared_records[0]
+        if "Electricity_Grid" not in prepared_record:
+            prepared_record["Electricity_Grid"] = {
+                "added_trafo_cost": 0.0,
+                "added_line_cost": 0.0,
+                "added_line_length": 0.0,
+                "added_line_co2": 0.0,
+                "added_trafo_co2": 0.0,
+                "added_trafo_capacity": 0.0,
+                "investment_cost": 0.0,
+            }
+    else:
+        prepared_record = dict(record)
 
-    processed = process_district_data([prepared_record], building_in_cluster, "dec")
+    processed = process_district_data([prepared_record], building_in_cluster, cen_or_dec)
+    processed = _sanitize_processed_electricity_grid(processed)
     processed = process_units_for_processed(
         processed,
         floor_area=total_floor_area_all / 100.0,
@@ -467,8 +698,11 @@ def _extract_parallel_axis_row_for_record(
         "chp_capacity": float(tech.get("CHP", {}).get("capacity", 0.0)),
         "battery_capacity": float(tech.get("Battery", {}).get("capacity", 0.0)),
         "thermal_storage_capacity": float(tech.get("Heat storage", {}).get("capacity", 0.0)),
+        "seasonal_storage_capacity": float(tech.get("Seasonal storage", {}).get("capacity", 0.0)),
         "pv_capacity": float(tech.get("PV-System", {}).get("capacity", 0.0)),
         "retrofit_depth": retrofit_depth,
+        "heat_grid_totex": float(tech.get("Heat grid", {}).get("cost", 0.0)),
+        "heat_grid_retrofit_temp_case": float(record.get("heat_grid_retrofit_temp_case", np.nan)),
     }
 
 
@@ -485,6 +719,13 @@ def _scenario_visual_meta(scenario_name: str, scenario_label: str):
             "sign": "ref",
             "delta": 0,
             "label": "Reference",
+        }
+    if str(scenario_name).endswith("_bau") or str(scenario_label).upper() == "BAU":
+        return {
+            "carrier": "bau",
+            "sign": "bau",
+            "delta": 0,
+            "label": "BAU",
         }
     ev_match = re.search(r"_yes_ev_(half|full|total)(?:$|_)", str(scenario_name))
     if ev_match:
@@ -539,6 +780,7 @@ def _carrier_shaded_color(meta: Dict[str, float]):
         "hydrogen": cm.get_cmap("Purples"),
         "electricity_feed_in": cm.get_cmap("Greens"),
         "ev_penetration": cm.get_cmap("Reds"),
+        "bau": cm.get_cmap("Greys"),
         "unknown": cm.get_cmap("Greys"),
     }
     cmap = carrier_cmaps.get(meta["carrier"], carrier_cmaps["unknown"])
@@ -585,7 +827,7 @@ def _add_carrier_colorbars(
             ax_cb.imshow(arr, aspect="auto", cmap=custom, interpolation="nearest", vmin=-0.5, vmax=0.5)
             ax_cb.set_yticks([])
             ax_cb.set_xticks([0])
-            ax_cb.set_xticklabels(["100"], fontsize=max(6, font_size - 1))
+            ax_cb.set_xticklabels(["100"], fontsize=font_size)
         elif grouped_sign_colors and carrier_key in grouped_sign_colors:
             dec_col, inc_col = grouped_sign_colors[carrier_key]
             block_colors = [dec_col, dec_col, inc_col, inc_col]
@@ -594,7 +836,7 @@ def _add_carrier_colorbars(
             ax_cb.imshow(arr, aspect="auto", cmap=custom, interpolation="nearest", vmin=-0.5, vmax=3.5)
             ax_cb.set_yticks([])
             ax_cb.set_xticks([0, 1, 2, 3])
-            ax_cb.set_xticklabels(["-40", "-20", "+20", "+40"], fontsize=max(6, font_size - 1))
+            ax_cb.set_xticklabels(["-40", "-20", "+20", "+40"], fontsize=font_size)
         else:
             block_colors = [
                 cmap(shade_positions[0]),
@@ -607,9 +849,9 @@ def _add_carrier_colorbars(
             ax_cb.imshow(arr, aspect="auto", cmap=custom, interpolation="nearest", vmin=-0.5, vmax=3.5)
             ax_cb.set_yticks([])
             ax_cb.set_xticks([0, 1, 2, 3])
-            ax_cb.set_xticklabels(["-40", "-20", "+20", "+40"], fontsize=max(6, font_size - 1))
+            ax_cb.set_xticklabels(["-40", "-20", "+20", "+40"], fontsize=font_size)
         ax_cb.tick_params(axis="x", length=0, pad=1)
-        ax_cb.set_title(name, fontsize=max(6, font_size - 1), pad=1)
+        ax_cb.set_title(name, fontsize=font_size, pad=1)
         for spine in ax_cb.spines.values():
             spine.set_visible(False)
 
@@ -621,8 +863,9 @@ def _scenario_group_label(meta: Dict[str, float]) -> str:
         "hydrogen": "Hydrogen price",
         "electricity_feed_in": "Electricity feed-in revenue",
         "ev_penetration": "EV penetration",
+        "bau": "BAU",
     }.get(str(meta["carrier"]), "Unknown")
-    if str(meta["carrier"]) == "ev_penetration":
+    if str(meta["carrier"]) in {"ev_penetration", "bau"}:
         return carrier_label
     sign_label = "increase" if str(meta["sign"]) == "plus" else "decrease"
     return f"{carrier_label} {sign_label}"
@@ -632,9 +875,15 @@ def _scenario_marker(meta: Dict[str, float]) -> str | None:
     carrier = str(meta.get("carrier"))
     if carrier == "reference":
         return None
+    if carrier == "bau":
+        return "s"
     if carrier == "ev_penetration":
         return "D"
     return "^" if int(meta.get("delta", 0)) == 20 else "o"
+
+
+def _rows_contain_ev_penetration(rows: List[Dict[str, float]]) -> bool:
+    return any("_yes_ev_" in str(row.get("scenario_name", "")) for row in rows)
 
 
 def plot_parallel_axes_sensitivity_by_extreme(
@@ -649,20 +898,11 @@ def plot_parallel_axes_sensitivity_by_extreme(
     draw_mode: str = "lines_points",
     show_colorbars: bool = True,
     marker_size_scale: float = 1.0,
+    cen_or_dec: str = "dec",
+    output_prefix: str = "dec",
 ) -> None:
     set_journal_style(font_size=font_size)
-    axis_specs = [
-        ("totex", "Ann.\nTOTEX\nin EUR\nper\n100m$^2$"),
-        ("gwp", "Ann.\nGWP\nin kg\nCO$_2$-eq.\nper\n100m$^2$"),
-        ("peak", "Peak\ngrid ex.\npower\nin kW\nper\n100m$^2$"),
-        ("heat_pump_capacity", "Heat\npump\nin kW\nper\n100m$^2$"),
-        ("gas_heater_capacity", "Gas\nheater\nin kW\nper\n100m$^2$"),
-        ("chp_capacity", "CHP\nin kW\nper\n100m$^2$"),
-        ("battery_capacity", "Battery\nin kWh\nper\n100m$^2$"),
-        ("thermal_storage_capacity", "Heat\nstorage\nin kWh\nper\n100m$^2$"),
-        ("pv_capacity", "PV-\nSystem\nin kW\nper\n100m$^2$"),
-        ("retrofit_depth", "Retrofit\ndepth\nin -"),
-    ]
+    axis_specs = _parallel_axis_specs_for_mode(cen_or_dec)
 
     group_colors = {
         # High-contrast, colorblind-friendly scientific palette (Okabe-Ito inspired)
@@ -717,6 +957,7 @@ def plot_parallel_axes_sensitivity_by_extreme(
 
         for height_tag, fig_height in local_heights:
             rows_for_plot = [dict(r) for r in rows]
+            has_ev_penetration = _rows_contain_ev_penetration(rows_for_plot)
             if (
                 str(objective_name) == "min_gwp"
                 and str(height_tag) == "h100"
@@ -771,7 +1012,7 @@ def plot_parallel_axes_sensitivity_by_extreme(
                 ax.axvline(x=x_pos, color="#D0D0D0", lw=0.7, zorder=0)
 
             # Keep scenario order consistent with the existing sequence used above.
-            scenario_order = ["reference"] + [name for name, _ in ordered_scenarios()]
+            scenario_order = ["reference"] + [name for name, _ in ordered_scenarios(cen_or_dec)]
             order_index = {name: i for i, name in enumerate(scenario_order)}
             rows_sorted = sorted(rows_for_plot, key=lambda rr: order_index.get(str(rr["scenario_name"]), 9999))
             non_ref_non_ev = []
@@ -833,7 +1074,7 @@ def plot_parallel_axes_sensitivity_by_extreme(
             ax.set_ylim(-0.12, 1.12)
             ax.set_xticks(x)
             ax.set_xticklabels([lbl for _, lbl in axis_specs], rotation=0, ha="center")
-            ax.tick_params(axis="x", labelsize=font_size, pad=14)
+            ax.tick_params(axis="x", labelsize=font_size, pad=8)
             ax.set_yticks(np.linspace(0, 1, 5))
             ax.set_yticklabels([f"{t:.2f}" for t in np.linspace(0, 1, 5)])
             ax.tick_params(axis="y", labelsize=font_size)
@@ -880,12 +1121,13 @@ def plot_parallel_axes_sensitivity_by_extreme(
                 Line2D([0], [0], color="#222222", linestyle="None", marker="o", markersize=3.5, label="±40%"),
                 Line2D([0], [0], color="#111111", linestyle="--", linewidth=1.05, label="Reference"),
             ]
-            color_handles.append(
-                Line2D([0], [0], color=group_colors["EV penetration"], linewidth=1.5, label="EV penetration")
-            )
-            marker_handles = marker_handles[:2] + [
-                Line2D([0], [0], color=group_colors["EV penetration"], linestyle="None", marker="D", markersize=3.6, label="EV penetration 100%"),
-            ] + marker_handles[2:]
+            if has_ev_penetration:
+                color_handles.append(
+                    Line2D([0], [0], color=group_colors["EV penetration"], linewidth=1.5, label="EV penetration")
+                )
+                marker_handles = marker_handles[:2] + [
+                    Line2D([0], [0], color=group_colors["EV penetration"], linestyle="None", marker="D", markersize=3.6, label="EV penetration 100%"),
+                ] + marker_handles[2:]
             if show_colorbars:
                 ax.legend(
                     marker_handles,
@@ -893,7 +1135,7 @@ def plot_parallel_axes_sensitivity_by_extreme(
                     frameon=False,
                     loc="upper center",
                     ncol=3,
-                    bbox_to_anchor=(0.5, 1.28),
+                    bbox_to_anchor=(0.5, 1.36),
                     handlelength=1.5,
                     columnspacing=1.2,
                     borderaxespad=0.0,
@@ -905,41 +1147,41 @@ def plot_parallel_axes_sensitivity_by_extreme(
                     frameon=False,
                     loc="upper center",
                     ncol=2,
-                    bbox_to_anchor=(0.5, 1.46),
+                    bbox_to_anchor=(0.5, 1.55),
                     handlelength=1.6,
                     columnspacing=1.1,
                     borderaxespad=0.0,
                 )
 
-            # Give the 3-row legend more vertical room and shrink the plot area.
+            # Keep bottom labels inside the fixed 11.8 cm PDF page while using the spare top whitespace.
             if show_colorbars:
-                fig.subplots_adjust(left=0.08, right=0.995, bottom=0.24, top=0.58)
+                fig.subplots_adjust(left=0.08, right=0.995, bottom=0.30, top=0.64)
                 _add_carrier_colorbars(
                     fig,
                     font_size=font_size,
                     grouped_sign_colors=grouped_sign_colors,
-                    y_pos=0.72,
+                    y_pos=0.77,
                     bar_height=0.020,
                 )
             else:
-                fig.subplots_adjust(left=0.08, right=0.995, bottom=0.24, top=0.45)
+                fig.subplots_adjust(left=0.08, right=0.995, bottom=0.30, top=0.51)
             safe_obj = str(objective_name).replace(" ", "_")
             mode_tag = "points" if draw_mode == "points_only" else "lines"
             cbar_tag = "cbar" if show_colorbars else "no_cbar"
             marker_tag = ""
             if not np.isclose(float(marker_size_scale), 1.0):
                 marker_tag = f"_ms{int(round(float(marker_size_scale) * 100.0))}"
-            pdf_path = out_dir / f"dec_COMPARE_parallel_axes_sensitivity_{safe_obj}_{height_tag}_{mode_tag}_{cbar_tag}{marker_tag}_global_max.pdf"
-            png_path = out_dir / f"dec_COMPARE_parallel_axes_sensitivity_{safe_obj}_{height_tag}_{mode_tag}_{cbar_tag}{marker_tag}_global_max.png"
-            fig.savefig(_to_windows_long_path(str(pdf_path)), dpi=600, bbox_inches="tight")
-            fig.savefig(_to_windows_long_path(str(png_path)), dpi=300, bbox_inches="tight")
+            pdf_path = out_dir / f"{output_prefix}_COMPARE_parallel_axes_sensitivity_{safe_obj}_{height_tag}_{mode_tag}_{cbar_tag}{marker_tag}_global_max.pdf"
+            png_path = out_dir / f"{output_prefix}_COMPARE_parallel_axes_sensitivity_{safe_obj}_{height_tag}_{mode_tag}_{cbar_tag}{marker_tag}_global_max.png"
+            _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(pdf_path)), dpi=600)
+            _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(png_path)), dpi=300)
 
             if show_colorbars:
                 # Keep backward-compatible file name for the cbar variant.
-                legacy_pdf = out_dir / f"dec_COMPARE_parallel_axes_sensitivity_{safe_obj}_{height_tag}_{mode_tag}_global_max.pdf"
-                legacy_png = out_dir / f"dec_COMPARE_parallel_axes_sensitivity_{safe_obj}_{height_tag}_{mode_tag}_global_max.png"
-                fig.savefig(_to_windows_long_path(str(legacy_pdf)), dpi=600, bbox_inches="tight")
-                fig.savefig(_to_windows_long_path(str(legacy_png)), dpi=300, bbox_inches="tight")
+                legacy_pdf = out_dir / f"{output_prefix}_COMPARE_parallel_axes_sensitivity_{safe_obj}_{height_tag}_{mode_tag}_global_max.pdf"
+                legacy_png = out_dir / f"{output_prefix}_COMPARE_parallel_axes_sensitivity_{safe_obj}_{height_tag}_{mode_tag}_global_max.png"
+                _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(legacy_pdf)), dpi=600)
+                _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(legacy_png)), dpi=300)
             plt.close(fig)
 
     if visual_polish_applied_any:
@@ -957,6 +1199,8 @@ def plot_parallel_axes_sensitivity_triptych(
     height_variants: List[Tuple[str, float]],
     font_size: int,
     height_filter: List[str] | None = None,
+    cen_or_dec: str = "dec",
+    output_prefix: str = "dec",
 ) -> None:
     """
     One combined figure with 3 stacked parallel-axes plots:
@@ -964,18 +1208,8 @@ def plot_parallel_axes_sensitivity_triptych(
     with a single top colorbar row + single top symbol legend.
     """
     set_journal_style(font_size=font_size)
-    axis_specs = [
-        ("totex", "Ann.\nTOTEX\nin EUR\nper\n100m$^2$"),
-        ("gwp", "Ann.\nGWP\nin kg\nCO$_2$-eq.\nper\n100m$^2$"),
-        ("peak", "Peak\ngrid ex.\npower\nin kW\nper\n100m$^2$"),
-        ("heat_pump_capacity", "Heat\npump\nin kW\nper\n100m$^2$"),
-        ("gas_heater_capacity", "Gas\nheater\nin kW\nper\n100m$^2$"),
-        ("chp_capacity", "CHP\nin kW\nper\n100m$^2$"),
-        ("battery_capacity", "Battery\nin kWh\nper\n100m$^2$"),
-        ("thermal_storage_capacity", "Heat\nstorage\nin kWh\nper\n100m$^2$"),
-        ("pv_capacity", "PV-\nSystem\nin kW\nper\n100m$^2$"),
-        ("retrofit_depth", "Retrofit\ndepth\nin -"),
-    ]
+    content_font_size = max(1, font_size - 1)
+    axis_specs = _parallel_axis_specs_for_mode(cen_or_dec)
     objective_order = ["min_totex", "min_gwp", "min_peak"]
     title_map = {
         "min_totex": "Pareto-optimal minimum ann. TOTEX",
@@ -1016,6 +1250,14 @@ def plot_parallel_axes_sensitivity_triptych(
         local_heights = [hv for hv in local_heights if hv[0] in set(height_filter)]
     x = np.arange(len(axis_specs))
     visual_polish_applied_any = False
+    has_ev_penetration = _rows_contain_ev_penetration(parallel_axis_rows)
+    shared_y_label = "Scaled within each axis in -"
+
+    def _format_axis_limit_value(value: float) -> str:
+        label = f"{value:.3g}"
+        if "e+" in label:
+            return f"{value:.1e}"
+        return label
 
     marker_scale_by_height = {
         "h70": 1.00,
@@ -1110,7 +1352,7 @@ def plot_parallel_axes_sensitivity_triptych(
                 for x_pos in x:
                     ax.axvline(x=x_pos, color="#D0D0D0", lw=0.7, zorder=0)
 
-                scenario_order = ["reference"] + [name for name, _ in ordered_scenarios()]
+                scenario_order = ["reference"] + [name for name, _ in ordered_scenarios(cen_or_dec)]
                 order_index = {name: i for i, name in enumerate(scenario_order)}
                 rows_sorted = sorted(rows_for_plot, key=lambda rr: order_index.get(str(rr["scenario_name"]), 9999))
                 non_ref_non_ev = []
@@ -1155,7 +1397,7 @@ def plot_parallel_axes_sensitivity_triptych(
                 ax.set_ylim(-0.12, 1.12)
                 ax.set_yticks(np.linspace(0, 1, 5))
                 ax.set_yticklabels([f"{t:.2f}" for t in np.linspace(0, 1, 5)])
-                ax.tick_params(axis="y", labelsize=font_size)
+                ax.tick_params(axis="y", labelsize=content_font_size)
                 ax.grid(axis="y", alpha=0.22, linewidth=0.5)
                 ax.set_title(
                     title_map.get(objective_name, objective_name),
@@ -1164,15 +1406,12 @@ def plot_parallel_axes_sensitivity_triptych(
                     pad=13,
                 )
 
-                if idx_obj == 1:
-                    ax.set_ylabel("Scaled within each axis in -", fontsize=font_size)
-                else:
-                    ax.set_ylabel("")
+                ax.set_ylabel("")
 
                 ax.set_xticks(x)
                 if idx_obj == 2:
                     ax.set_xticklabels([lbl for _, lbl in axis_specs], rotation=0, ha="center")
-                    ax.tick_params(axis="x", labelsize=font_size, pad=14, labelbottom=True)
+                    ax.tick_params(axis="x", labelsize=content_font_size, pad=12, labelbottom=True)
                 else:
                     ax.set_xticklabels([""] * len(axis_specs))
                     ax.tick_params(axis="x", labelbottom=False)
@@ -1181,23 +1420,23 @@ def plot_parallel_axes_sensitivity_triptych(
                     vmin, vmax = ranges[key]
                     ax.text(
                         x_pos,
-                        -0.11,
-                        f"{vmin:.3g}",
+                        -0.075,
+                        _format_axis_limit_value(vmin),
                         transform=ax.get_xaxis_transform(),
                         ha="center",
                         va="top",
-                        fontsize=font_size,
+                        fontsize=content_font_size,
                         color="#4A4A4A",
                         clip_on=False,
                     )
                     ax.text(
-                        x_pos,
+                        x_pos - 0.18 if key == "totex" else x_pos,
                         1.03,
-                        f"{vmax:.3g}",
+                        _format_axis_limit_value(vmax),
                         transform=ax.get_xaxis_transform(),
                         ha="center",
                         va="bottom",
-                        fontsize=font_size,
+                        fontsize=content_font_size,
                         color="#4A4A4A",
                         clip_on=False,
                     )
@@ -1207,37 +1446,46 @@ def plot_parallel_axes_sensitivity_triptych(
                 Line2D([0], [0], color="#222222", linestyle="None", marker="o", markersize=max(1.0, 3.6 * marker_size_scale), label="+/-40%"),
                 Line2D([0], [0], color="#111111", linestyle="--", linewidth=1.05, label="Reference"),
             ]
-            marker_handles = marker_handles[:2] + [
-                Line2D([0], [0], color=group_colors["EV penetration"], linestyle="None", marker="D", markersize=max(1.0, 3.0 * marker_size_scale), label="EV penetration 100%"),
-            ] + marker_handles[2:]
+            if has_ev_penetration:
+                marker_handles = marker_handles[:2] + [
+                    Line2D([0], [0], color=group_colors["EV penetration"], linestyle="None", marker="D", markersize=max(1.0, 3.0 * marker_size_scale), label="EV penetration 100%"),
+                ] + marker_handles[2:]
+            fig.supylabel(
+                shared_y_label,
+                x=0.055,
+                y=0.49,
+                fontsize=content_font_size,
+            )
             fig.legend(
                 marker_handles,
                 [h.get_label() for h in marker_handles],
                 frameon=False,
                 loc="upper center",
                 ncol=4,
-                bbox_to_anchor=(0.5, 0.83),
+                bbox_to_anchor=(0.5, 0.905),
                 handlelength=1.5,
                 columnspacing=1.2,
                 borderaxespad=0.0,
+                fontsize=font_size,
             )
-            fig.subplots_adjust(left=0.08, right=0.995, bottom=0.11, top=0.74, hspace=0.585)
+            # Leave enough room for the shared y-axis label on the fixed-width page.
+            fig.subplots_adjust(left=0.145, right=0.985, bottom=0.23, top=0.81, hspace=0.55)
             _add_carrier_colorbars(
                 fig,
                 font_size=font_size,
                 grouped_sign_colors=grouped_sign_colors,
-                y_pos=0.855,
+                y_pos=0.925,
                 bar_height=0.018,
             )
 
             file_tag = (
-                f"dec_COMPARE_parallel_axes_sensitivity_min_totex_min_gwp_min_peak_{height_tag}_lines_cbar_global_max"
+                f"{output_prefix}_COMPARE_parallel_axes_sensitivity_min_totex_min_gwp_min_peak_{height_tag}_lines_cbar_global_max"
                 f"{symbol_postfix}"
             )
             pdf_path = out_dir / f"{file_tag}.pdf"
             png_path = out_dir / f"{file_tag}.png"
-            fig.savefig(_to_windows_long_path(str(pdf_path)), dpi=600, bbox_inches="tight")
-            fig.savefig(_to_windows_long_path(str(png_path)), dpi=300, bbox_inches="tight")
+            _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(pdf_path)), dpi=600)
+            _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(png_path)), dpi=300)
             plt.close(fig)
 
     if visual_polish_applied_any:
@@ -1258,6 +1506,8 @@ def plot_parallel_axes_std_bands_by_extreme(
     objective_filter: List[str] | None = None,
     height_filter: List[str] | None = None,
     scale_within_axis_abs_max: bool = True,
+    cen_or_dec: str = "dec",
+    output_prefix: str = "dec",
 ) -> None:
     """
     X-axis = KPI axes, Y-axis = deviation to reference [%] (symlog).
@@ -1265,23 +1515,12 @@ def plot_parallel_axes_std_bands_by_extreme(
     Points inside band are muted gray; outside remain colored by scenario.
     """
     set_journal_style(font_size=font_size)
-    axis_specs = [
-        ("totex", "Ann.\nTOTEX"),
-        ("gwp", "Ann.\nGWP"),
-        ("peak", "Ann.\nPeak"),
-        ("heat_pump_capacity", "Heat\npump"),
-        ("gas_heater_capacity", "Gas\nheater"),
-        ("chp_capacity", "CHP"),
-        ("battery_capacity", "Battery"),
-        ("thermal_storage_capacity", "Heat\nstorage"),
-        ("pv_capacity", "PV-\nSystem"),
-        ("retrofit_depth", "Retrofit"),
-    ]
+    axis_specs = _parallel_axis_specs_for_mode(cen_or_dec, compact=True)
     objectives = sorted({str(r["extreme_point"]) for r in parallel_axis_rows})
     if objective_filter:
         objectives = [o for o in objectives if o in set(objective_filter)]
 
-    scenario_order = ["reference"] + [name for name, _ in ordered_scenarios()]
+    scenario_order = ["reference"] + [name for name, _ in ordered_scenarios(cen_or_dec)]
     order_idx = {s: i for i, s in enumerate(scenario_order)}
     x = np.arange(len(axis_specs))
 
@@ -1461,14 +1700,14 @@ def plot_parallel_axes_std_bands_by_extreme(
             safe_obj = str(objective_name).replace(" ", "_")
             pdf_path = (
                 out_dir
-                / f"dec_COMPARE_parallel_axes_std{std_multiplier}_{safe_obj}_{height_tag}_global_max.pdf"
+                / f"{output_prefix}_COMPARE_parallel_axes_std{std_multiplier}_{safe_obj}_{height_tag}_global_max.pdf"
             )
             png_path = (
                 out_dir
-                / f"dec_COMPARE_parallel_axes_std{std_multiplier}_{safe_obj}_{height_tag}_global_max.png"
+                / f"{output_prefix}_COMPARE_parallel_axes_std{std_multiplier}_{safe_obj}_{height_tag}_global_max.png"
             )
-            fig.savefig(_to_windows_long_path(str(pdf_path)), dpi=600, bbox_inches="tight")
-            fig.savefig(_to_windows_long_path(str(png_path)), dpi=300, bbox_inches="tight")
+            _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(pdf_path)), dpi=600)
+            _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(png_path)), dpi=300)
             plt.close(fig)
 
 
@@ -1481,6 +1720,8 @@ def plot_parallel_axes_deviation_no_std_by_extreme(
     font_size: int,
     objective_filter: List[str] | None = None,
     height_filter: List[str] | None = None,
+    cen_or_dec: str = "dec",
+    output_prefix: str = "dec",
 ) -> None:
     """
     Deviation-to-reference plot without std bands.
@@ -1490,18 +1731,7 @@ def plot_parallel_axes_deviation_no_std_by_extreme(
       circle = 20%, triangle = 40%.
     """
     set_journal_style(font_size=font_size)
-    axis_specs = [
-        ("totex", "Ann.\nTOTEX"),
-        ("gwp", "Ann.\nGWP"),
-        ("peak", "Ann.\nPeak"),
-        ("heat_pump_capacity", "Heat\npump"),
-        ("gas_heater_capacity", "Gas\nheater"),
-        ("chp_capacity", "CHP"),
-        ("battery_capacity", "Battery"),
-        ("thermal_storage_capacity", "Heat\nstorage"),
-        ("pv_capacity", "PV-\nSystem"),
-        ("retrofit_depth", "Retrofit"),
-    ]
+    axis_specs = _parallel_axis_specs_for_mode(cen_or_dec, compact=True)
     group_colors = {
         "Electricity price increase": "#1f77b4",        # blue
         "Electricity price decrease": "#17becf",        # cyan
@@ -1513,7 +1743,7 @@ def plot_parallel_axes_deviation_no_std_by_extreme(
         "Electricity feed-in revenue decrease": "#7F7F7F",  # neutral gray
         "EV penetration": "#8B1E3F",                    # dark scientific red
     }
-    scenario_order = ["reference"] + [name for name, _ in ordered_scenarios()]
+    scenario_order = ["reference"] + [name for name, _ in ordered_scenarios(cen_or_dec)]
     order_idx = {s: i for i, s in enumerate(scenario_order)}
     objectives = sorted({str(r["extreme_point"]) for r in parallel_axis_rows})
     if objective_filter:
@@ -1522,6 +1752,7 @@ def plot_parallel_axes_deviation_no_std_by_extreme(
     if height_filter:
         local_heights = [hv for hv in local_heights if hv[0] in set(height_filter)]
     x = np.arange(len(axis_specs))
+    has_ev_penetration = _rows_contain_ev_penetration(parallel_axis_rows)
 
     for objective_name in objectives:
         rows_obj = [r for r in parallel_axis_rows if str(r["extreme_point"]) == objective_name]
@@ -1631,8 +1862,9 @@ def plot_parallel_axes_deviation_no_std_by_extreme(
                 "Hydrogen price decrease",
                 "Electricity feed-in revenue increase",
                 "Electricity feed-in revenue decrease",
-                "EV penetration",
             ]
+            if has_ev_penetration:
+                legend_color_order.append("EV penetration")
             color_handles = [
                 Line2D([0], [0], color=group_colors[name], linewidth=1.5, label=name)
                 for name in legend_color_order
@@ -1640,9 +1872,14 @@ def plot_parallel_axes_deviation_no_std_by_extreme(
             marker_handles = [
                 Line2D([0], [0], color="#222222", marker="o", linestyle="None", markersize=4, label="20%"),
                 Line2D([0], [0], color="#222222", marker="^", linestyle="None", markersize=4, label="40%"),
-                Line2D([0], [0], color=group_colors["EV penetration"], marker="s", linestyle="None", markersize=4, label="EV 50%"),
-                Line2D([0], [0], color=group_colors["EV penetration"], marker="D", linestyle="None", markersize=4, label="EV 100%"),
             ]
+            if has_ev_penetration:
+                marker_handles.extend(
+                    [
+                        Line2D([0], [0], color=group_colors["EV penetration"], marker="s", linestyle="None", markersize=4, label="EV 50%"),
+                        Line2D([0], [0], color=group_colors["EV penetration"], marker="D", linestyle="None", markersize=4, label="EV 100%"),
+                    ]
+                )
             ax.legend(
                 color_handles + marker_handles,
                 [h.get_label() for h in color_handles + marker_handles],
@@ -1659,14 +1896,14 @@ def plot_parallel_axes_deviation_no_std_by_extreme(
             safe_obj = str(objective_name).replace(" ", "_")
             pdf_path = (
                 out_dir
-                / f"dec_COMPARE_parallel_axes_deviation_no_std_{safe_obj}_{height_tag}_global_max.pdf"
+                / f"{output_prefix}_COMPARE_parallel_axes_deviation_no_std_{safe_obj}_{height_tag}_global_max.pdf"
             )
             png_path = (
                 out_dir
-                / f"dec_COMPARE_parallel_axes_deviation_no_std_{safe_obj}_{height_tag}_global_max.png"
+                / f"{output_prefix}_COMPARE_parallel_axes_deviation_no_std_{safe_obj}_{height_tag}_global_max.png"
             )
-            fig.savefig(_to_windows_long_path(str(pdf_path)), dpi=600, bbox_inches="tight")
-            fig.savefig(_to_windows_long_path(str(png_path)), dpi=300, bbox_inches="tight")
+            _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(pdf_path)), dpi=600)
+            _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(png_path)), dpi=300)
             plt.close(fig)
 
 
@@ -1683,7 +1920,7 @@ def plot_spider_sensitivity_by_extreme(
         ("totex", "TOTEX"),
         ("gwp", "GWP"),
         ("peak", "Peak"),
-        ("heat_pump_capacity", "Heat pump"),
+        ("heat_pump_capacity", "ASHP"),
         ("gas_heater_capacity", "Gas heater"),
         ("chp_capacity", "CHP"),
         ("battery_capacity", "Battery"),
@@ -1801,8 +2038,8 @@ def plot_spider_sensitivity_by_extreme(
             safe_obj = str(objective_name).replace(" ", "_")
             pdf_path = out_dir / f"dec_COMPARE_spider_sensitivity_{safe_obj}_{height_tag}_global_max.pdf"
             png_path = out_dir / f"dec_COMPARE_spider_sensitivity_{safe_obj}_{height_tag}_global_max.png"
-            fig.savefig(_to_windows_long_path(str(pdf_path)), dpi=600, bbox_inches="tight")
-            fig.savefig(_to_windows_long_path(str(png_path)), dpi=300, bbox_inches="tight")
+            _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(pdf_path)), dpi=600)
+            _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(png_path)), dpi=300)
             plt.close(fig)
 
 
@@ -1827,7 +2064,7 @@ def plot_spider_by_scenario_levels(
             ("totex", "Ann. TOTEX"),
             ("gwp", "Ann. GWP"),
             ("peak", "Peak"),
-            ("heat_pump_capacity", "Heat pump"),
+            ("heat_pump_capacity", "ASHP"),
             ("gas_heater_capacity", "Gas heater"),
             ("chp_capacity", "CHP"),
         ],
@@ -1835,7 +2072,7 @@ def plot_spider_by_scenario_levels(
             ("totex", "Ann. TOTEX"),
             ("gwp", "Ann. GWP"),
             ("peak", "Peak"),
-            ("heat_pump_capacity", "Heat pump"),
+            ("heat_pump_capacity", "ASHP"),
             ("gas_heater_capacity", "Gas heater"),
             ("chp_capacity", "CHP"),
             ("battery_capacity", "Battery"),
@@ -2035,8 +2272,8 @@ def plot_spider_by_scenario_levels(
                         out_dir
                         / f"dec_COMPARE_spider_levels_{safe_obj}_{safe_carrier}_{metric_tag}_{height_tag}_global_max.png"
                     )
-                    fig.savefig(_to_windows_long_path(str(pdf_path)), dpi=600, bbox_inches="tight")
-                    fig.savefig(_to_windows_long_path(str(png_path)), dpi=300, bbox_inches="tight")
+                    _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(pdf_path)), dpi=600)
+                    _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(png_path)), dpi=300)
                     plt.close(fig)
 
 
@@ -2060,7 +2297,7 @@ def plot_scenario_deviation_lines_by_extreme(
             ("totex", "Ann. TOTEX"),
             ("gwp", "Ann. GWP"),
             ("peak", "Peak"),
-            ("heat_pump_capacity", "Heat pump"),
+            ("heat_pump_capacity", "ASHP"),
             ("gas_heater_capacity", "Gas heater"),
             ("chp_capacity", "CHP"),
         ],
@@ -2068,7 +2305,7 @@ def plot_scenario_deviation_lines_by_extreme(
             ("totex", "Ann. TOTEX"),
             ("gwp", "Ann. GWP"),
             ("peak", "Peak"),
-            ("heat_pump_capacity", "Heat pump"),
+            ("heat_pump_capacity", "ASHP"),
             ("gas_heater_capacity", "Gas heater"),
             ("chp_capacity", "CHP"),
             ("battery_capacity", "Battery"),
@@ -2162,8 +2399,8 @@ def plot_scenario_deviation_lines_by_extreme(
                     out_dir
                     / f"dec_COMPARE_scenario_deviation_lines_{safe_obj}_{metric_tag}_{height_tag}_global_max.png"
                 )
-                fig.savefig(_to_windows_long_path(str(pdf_path)), dpi=600, bbox_inches="tight")
-                fig.savefig(_to_windows_long_path(str(png_path)), dpi=300, bbox_inches="tight")
+                _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(pdf_path)), dpi=600)
+                _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(png_path)), dpi=300)
                 plt.close(fig)
 
 
@@ -2193,22 +2430,179 @@ def write_excel_outputs(
             pivot.to_excel(writer, sheet_name="tech_cost_per100_wide", index=False)
 
 
+def _resolve_sensitivity_combined_front_path(
+    variation_root: Path,
+    scenario_name: str,
+    post_process_dir_name: str,
+    run_subdir: str,
+) -> Path | None:
+    candidates = [
+        variation_root / scenario_name / post_process_dir_name / run_subdir / "combined_front.pkl",
+        variation_root / scenario_name / run_subdir / "combined_front.pkl",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _centralized_combo_dir_candidates(run_subdir: str) -> List[str]:
+    return [
+        f"combined_cluster_{run_subdir}",
+        "combined_cluster_sfh_reference_mfh_reference",
+        run_subdir,
+    ]
+
+
+def _centralized_strategy_suffix(temperature_dir: str, constraint_dir: str | None) -> str:
+    if constraint_dir:
+        return f"{temperature_dir}_{constraint_dir}"
+    return str(temperature_dir)
+
+
+def _resolve_centralized_front_paths(
+    variation_root: Path,
+    scenario_name: str,
+    run_subdir: str,
+) -> List[Dict[str, object]]:
+    scenario_root = variation_root / scenario_name
+    found: List[Dict[str, object]] = []
+    seen: set[str] = set()
+
+    for combo_name in _centralized_combo_dir_candidates(run_subdir):
+        combo_root = scenario_root / combo_name
+        for temperature_dir, constraint_dir in CENTRALIZED_TEMPERATURE_CONSTRAINT_GROUPS:
+            if constraint_dir:
+                front_path = combo_root / temperature_dir / constraint_dir / "centralized_front.pkl"
+            else:
+                front_path = combo_root / temperature_dir / "centralized_front.pkl"
+            if not front_path.exists():
+                continue
+            strategy_key = _centralized_strategy_suffix(temperature_dir, constraint_dir)
+            strategy_label = CENTRALIZED_STRATEGY_LABELS.get(strategy_key, strategy_key)
+            path_key = str(front_path.resolve())
+            if path_key in seen:
+                continue
+            seen.add(path_key)
+            found.append(
+                {
+                    "path": front_path,
+                    "strategy_key": strategy_key,
+                    "strategy_label": strategy_label,
+                    "heat_grid_retrofit_temp_case": _heat_grid_retrofit_temp_case_value(strategy_label),
+                }
+            )
+
+    if found:
+        return found
+
+    # Fallback for minor folder layout differences below the scenario folder.
+    if scenario_root.exists():
+        for front_path in scenario_root.rglob("centralized_front.pkl"):
+            parts = [p.lower() for p in front_path.parts]
+            matched_group = None
+            for temperature_dir, constraint_dir in CENTRALIZED_TEMPERATURE_CONSTRAINT_GROUPS:
+                if temperature_dir.lower() not in parts:
+                    continue
+                if constraint_dir and constraint_dir.lower() not in parts:
+                    continue
+                matched_group = (temperature_dir, constraint_dir)
+                break
+            if matched_group is None:
+                continue
+            strategy_key = _centralized_strategy_suffix(*matched_group)
+            strategy_label = CENTRALIZED_STRATEGY_LABELS.get(strategy_key, strategy_key)
+            path_key = str(front_path.resolve())
+            if path_key in seen:
+                continue
+            seen.add(path_key)
+            found.append(
+                {
+                    "path": front_path,
+                    "strategy_key": strategy_key,
+                    "strategy_label": strategy_label,
+                    "heat_grid_retrofit_temp_case": _heat_grid_retrofit_temp_case_value(strategy_label),
+                }
+            )
+    return found
+
+
+def load_centralized_fronts_for_scenario(
+    variation_root: Path,
+    scenario_name: str,
+    run_subdir: str,
+) -> List[Dict[str, float]]:
+    combined_front: List[Dict[str, float]] = []
+    for item in _resolve_centralized_front_paths(variation_root, scenario_name, run_subdir):
+        front = load_combined_front_from_path(Path(item["path"]))
+        for record in front:
+            marked = dict(record)
+            marked["heat_grid_retrofit_temp_case"] = float(item["heat_grid_retrofit_temp_case"])
+            marked["heat_grid_retrofit_temp_case_label"] = str(item["strategy_label"])
+            marked["centralized_strategy_key"] = str(item["strategy_key"])
+            combined_front.append(marked)
+    return combined_front
+
+
+def load_front_for_mode(
+    *,
+    cen_or_dec: str,
+    variation_root: Path,
+    scenario_name: str,
+    post_process_dir_name: str,
+    run_subdir: str,
+) -> List[Dict[str, float]] | None:
+    if str(cen_or_dec).lower() == "cen":
+        front = load_centralized_fronts_for_scenario(
+            variation_root=variation_root,
+            scenario_name=scenario_name,
+            run_subdir=run_subdir,
+        )
+        return front or None
+
+    scenario_path = _resolve_sensitivity_combined_front_path(
+        variation_root=variation_root,
+        scenario_name=scenario_name,
+        post_process_dir_name=post_process_dir_name,
+        run_subdir=run_subdir,
+    )
+    if scenario_path is None:
+        return None
+    return load_combined_front_from_path(scenario_path)
+
+
 def main() -> None:
-    variation_root = Path(
-        r"C:\Users\hill_mx\Desktop\processed_bds_in_DENI03403000SEC5658_variable"
+    cen_or_dec = SUPPLY_MODE
+
+    ueu_archive_root = Path(
+        r"M:\04_ArchivMA\Hillen Maximilian\Veröffentlichungen\UEU\processed_bds_in_DENI03403000SEC5658"
     )
-    reference_dir = Path(
-        r"/oemof/thermal_building_model/examples/03_applied_energy_optimization/processed_bds_in_DENI03403000SEC5658/post_processed_dec_k_combinations_2026_04_08/sfh_k06_mfh_k01"
-    )
-    run_subdir = "sfh_k06_mfh_k01"
-    reference_case_root = reference_dir.parents[1]
+    ueu_archive_root = DECENTRALIZED_REFERENCE_ROOT
+    variation_root = CENTRALIZED_PRICE_SCENARIO_ROOT
+    post_process_dir_name = DECENTRALIZED_POST_PROCESS_DIR_NAME
+    run_subdir = RUN_SUBDIR
+    reference_scenario_name = UEU_CASE_NAME
+    output_prefix = cen_or_dec
+    reference_case_root = ueu_archive_root
 
     script_dir = Path(__file__).resolve().parent
-    out_dir = script_dir / "_plot_outputs" / "carrier_price_sensitivity_extremes"
+    out_dir = script_dir / "_plot_outputs" / f"{output_prefix}_carrier_price_sensitivity_extremes"
     out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Supply mode: {cen_or_dec}", flush=True)
+    print(f"Reference root: {ueu_archive_root}", flush=True)
+    print(f"Sensitivity variation root: {variation_root}", flush=True)
+    print(f"Run subdir: {run_subdir}", flush=True)
     total_floor_area_all = _load_total_floor_area_from_clusters(reference_case_root, run_subdir)
 
-    ref_front = load_combined_front_from_path(reference_dir / "combined_front.pkl")
+    ref_front = load_centralized_fronts_for_scenario(
+        variation_root=variation_root,
+        scenario_name=reference_scenario_name,
+        run_subdir=run_subdir,
+    )
+    if not ref_front:
+        raise FileNotFoundError(
+            f"No centralized reference fronts found below {variation_root / reference_scenario_name}"
+        )
     ref_extremes = extract_extreme_points_from_tradeoffs(ref_front)
     ref_extreme_records = extract_extreme_records_from_tradeoffs(ref_front)
 
@@ -2223,6 +2617,7 @@ def main() -> None:
                 objective_name=objective_name,
                 scenario_name="reference",
                 scenario_label="Reference",
+                cen_or_dec=cen_or_dec,
             )
         )
         parallel_axis_rows.append(
@@ -2232,12 +2627,21 @@ def main() -> None:
                 objective_name=objective_name,
                 scenario_name="reference",
                 scenario_label="Reference",
+                cen_or_dec=cen_or_dec,
             )
         )
 
-    for scenario_name, label in ordered_scenarios():
-        scenario_path = variation_root / scenario_name / run_subdir / "combined_front.pkl"
-        combined_front = load_combined_front_from_path(scenario_path)
+    for scenario_name, label in ordered_scenarios(cen_or_dec):
+        combined_front = load_front_for_mode(
+            cen_or_dec=cen_or_dec,
+            variation_root=variation_root,
+            scenario_name=scenario_name,
+            post_process_dir_name=post_process_dir_name,
+            run_subdir=run_subdir,
+        )
+        if not combined_front:
+            print(f"WARNING: missing scenario front for {scenario_name}; skipping.")
+            continue
         extremes = extract_extreme_points_from_tradeoffs(combined_front)
         extreme_records = extract_extreme_records_from_tradeoffs(combined_front)
 
@@ -2270,6 +2674,7 @@ def main() -> None:
                     objective_name=objective_name,
                     scenario_name=scenario_name,
                     scenario_label=label,
+                    cen_or_dec=cen_or_dec,
                 )
             )
             parallel_axis_rows.append(
@@ -2279,6 +2684,7 @@ def main() -> None:
                     objective_name=objective_name,
                     scenario_name=scenario_name,
                     scenario_label=label,
+                    cen_or_dec=cen_or_dec,
                 )
             )
 
@@ -2336,8 +2742,11 @@ def main() -> None:
             "chp_capacity",
             "battery_capacity",
             "thermal_storage_capacity",
+            "seasonal_storage_capacity",
             "pv_capacity",
             "retrofit_depth",
+            "heat_grid_totex",
+            "heat_grid_retrofit_temp_case",
         ],
     )
     excel_path = out_dir / "extreme_deviation_and_technology_composition.xlsx"
@@ -2353,7 +2762,7 @@ def main() -> None:
         excel_written = False
         print(f"WARNING: Excel export failed ({exc}). CSV outputs are still written.")
 
-    width_cm = 15.11293
+    width_cm = 11.8
     height_cm = 6.5 * 1.34
     width_inch = width_cm / 2.54
     height_inch = height_cm / 2.54
@@ -2470,13 +2879,13 @@ def main() -> None:
     ax.legend(frameon=False, loc="best")
     fig.tight_layout()
 
-    pdf_path = out_dir / "dec_COMPARE_extreme_dev_tradeoffs_p7_h70_lines.pdf"
-    png_path = out_dir / "dec_COMPARE_extreme_dev_tradeoffs_p7_h70_lines.png"
+    pdf_path = out_dir / f"{output_prefix}_COMPARE_extreme_dev_tradeoffs_p7_h70_lines.pdf"
+    png_path = out_dir / f"{output_prefix}_COMPARE_extreme_dev_tradeoffs_p7_h70_lines.png"
 
     # Windows-safe save paths (long path support) + ensure dir exists right before writing.
     os.makedirs(_to_windows_long_path(str(out_dir)), exist_ok=True)
-    fig.savefig(_to_windows_long_path(str(pdf_path)), dpi=600, bbox_inches="tight")
-    fig.savefig(_to_windows_long_path(str(png_path)), dpi=300, bbox_inches="tight")
+    _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(pdf_path)), dpi=600)
+    _savefig_fixed_pdf_width(fig, _to_windows_long_path(str(png_path)), dpi=300)
     plt.close(fig)
 
     if ONLY_PARALLEL_STYLE_KEEP:
@@ -2490,6 +2899,8 @@ def main() -> None:
             height_filter=PARALLEL_TARGET_HEIGHT_TAGS,
             draw_mode="lines_points",
             show_colorbars=True,
+            cen_or_dec=cen_or_dec,
+            output_prefix=output_prefix,
         )
         plot_parallel_axes_sensitivity_by_extreme(
             parallel_axis_rows=parallel_axis_rows,
@@ -2501,6 +2912,8 @@ def main() -> None:
             height_filter=PARALLEL_TARGET_HEIGHT_TAGS,
             draw_mode="lines_points",
             show_colorbars=False,
+            cen_or_dec=cen_or_dec,
+            output_prefix=output_prefix,
         )
         # Additional variants: same legend, reduced plot symbol sizes in 15% steps.
         for marker_scale in (0.85, 0.70, 0.55):
@@ -2515,6 +2928,8 @@ def main() -> None:
                 draw_mode="lines_points",
                 show_colorbars=False,
                 marker_size_scale=float(marker_scale),
+                cen_or_dec=cen_or_dec,
+                output_prefix=output_prefix,
             )
         plot_parallel_axes_sensitivity_by_extreme(
             parallel_axis_rows=parallel_axis_rows,
@@ -2526,6 +2941,8 @@ def main() -> None:
             height_filter=PARALLEL_TARGET_HEIGHT_TAGS,
             draw_mode="points_only",
             show_colorbars=True,
+            cen_or_dec=cen_or_dec,
+            output_prefix=output_prefix,
         )
         plot_parallel_axes_sensitivity_triptych(
             parallel_axis_rows=parallel_axis_rows,
@@ -2534,6 +2951,8 @@ def main() -> None:
             height_variants=parallel_height_variants,
             font_size=font_size,
             height_filter=PARALLEL_TARGET_HEIGHT_TAGS,
+            cen_or_dec=cen_or_dec,
+            output_prefix=output_prefix,
         )
         if ENABLE_DEVIATION_NO_STD_PLOTS:
             plot_parallel_axes_deviation_no_std_by_extreme(
@@ -2544,6 +2963,8 @@ def main() -> None:
                 font_size=font_size,
                 objective_filter=PARALLEL_TARGET_OBJECTIVES,
                 height_filter=PARALLEL_TARGET_HEIGHT_TAGS,
+                cen_or_dec=cen_or_dec,
+                output_prefix=output_prefix,
             )
         if ENABLE_STD_BAND_PLOTS:
             for sigma in STD_BAND_MULTIPLIERS:
@@ -2557,6 +2978,8 @@ def main() -> None:
                     objective_filter=PARALLEL_TARGET_OBJECTIVES,
                     height_filter=PARALLEL_TARGET_HEIGHT_TAGS,
                     scale_within_axis_abs_max=STD_BAND_SCALE_WITHIN_AXIS_ABS_MAX,
+                    cen_or_dec=cen_or_dec,
+                    output_prefix=output_prefix,
                 )
     else:
         plot_parallel_axes_sensitivity_by_extreme(
@@ -2565,6 +2988,8 @@ def main() -> None:
             width_inch=width_inch,
             height_variants=parallel_height_variants,
             font_size=font_size,
+            cen_or_dec=cen_or_dec,
+            output_prefix=output_prefix,
         )
         plot_spider_sensitivity_by_extreme(
             parallel_axis_rows=parallel_axis_rows,
