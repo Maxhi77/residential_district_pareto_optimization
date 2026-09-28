@@ -40,6 +40,16 @@ in your virtualenv. In your code, you can import modules like e.g.:
 Documentation
 =============
 
+Grey-box modelling examples for this branch are located in:
+
+.. code:: text
+
+    src/oemof/thermal_building_model/examples/03_grey_box_modelling_paper
+
+The folder contains the focused scripts, weather inputs, and building
+parameters for the grey-box modelling paper workflow. See the folder README for
+the required local measurement data and execution notes.
+
 
 Contributing
 ============

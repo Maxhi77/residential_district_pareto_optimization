@@ -1,0 +1,56 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Local environments and build metadata
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+
+# IDE and OS metadata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Solver and run artifacts
+*.log
+error_logs/
+*.lp
+*.mps
+*.nl
+*.sol
+*.mst
+
+# Local grey-box measurement data
+src/oemof/thermal_building_model/examples/03_grey_box_modelling_paper/Datensatz_Musterhaus_KIT_2024_12_13.xlsx
+
+# Local audit and generated artifacts from other branches
+tmp/
+audit_tmp/
+_post_process_group_check/
+_post_process_group_fixture/
+centralized_availability_*.csv
+sec*_centralized_solution_counts.csv
+check_missing_*.txt
+rerun_missing_*.txt
+pareto_recombination_*report*
+pareto_recombination_*audit*
+computational_setup_report.md
+
+# Generated example outputs
+src/oemof/thermal_building_model/examples/02_investment_optimization/*.pkl
+src/oemof/thermal_building_model/examples/02_investment_optimization/figure.svg
+src/oemof/thermal_building_model/examples/04_post_processed_cen_*/
+
+# Example folders that are intentionally out of scope for this branch
+src/oemof/thermal_building_model/examples/03_applied_energy_optimization/
+src/oemof/thermal_building_model/examples/04_applied_energy_optimization_post_process/
+src/oemof/thermal_building_model/examples/05_applied_energy_pareto_set_analysis/
+src/oemof/thermal_building_model/examples/06_delete_failed_runs/
+src/oemof/thermal_building_model/examples/06_plot_hp_efficiency/
