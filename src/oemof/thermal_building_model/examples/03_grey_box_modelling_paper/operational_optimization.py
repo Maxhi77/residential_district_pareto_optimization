@@ -5,13 +5,13 @@ from matplotlib import pyplot as plt
 import pandas as pd
 
 from oemof.thermal_building_model.helpers.path_helper import get_project_root
-from oemof.thermal_building_model.helpers import calculate_gain_by_sun
 from oemof.thermal_building_model.tabula.tabula_reader import Building
 from oemof.thermal_building_model.m_5RC import M5RC
 
 import oemof.solph as solph
 from oemof.solph import views
 from oemof.tools import logger
+from measurement_data import calculate_solar_gains_from_qsol, load_measurement_data
 
 """
 General description
@@ -33,10 +33,11 @@ This example requires the version v0.5.x of oemof.solph. Install by:
 __copyright__ = "oemof developer group"
 __license__ = "MIT"
 
-EXAMPLE_DIR = os.path.dirname(__file__)
-MEASUREMENT_FILE = os.environ.get(
+DEFAULT_EXAMPLE_DIR = r"C:\Users\hill_mx\Desktop\Input_kevin_paper\Experiment_2425\Experiment_2425"
+EXAMPLE_DIR = os.environ.get("GREY_BOX_EXAMPLE_DIR", DEFAULT_EXAMPLE_DIR)
+MEASUREMENT_SOURCE = os.environ.get("GREY_BOX_EXPERIMENT_CSV_DIR") or os.environ.get(
     "GREY_BOX_MEASUREMENT_FILE",
-    os.path.join(EXAMPLE_DIR, "Datensatz_Musterhaus_KIT_2024_12_13.xlsx"),
+    EXAMPLE_DIR,
 )
 
 
@@ -46,24 +47,29 @@ def main():
     main_path = get_project_root()
 
     # Datei laden
-    file_path = MEASUREMENT_FILE
+    file_path = MEASUREMENT_SOURCE
 
     # Excel-Datei öffnen und das Blatt 'Experiment 1' auswählen
-    xls = pd.ExcelFile(file_path)
-    experiment1_df = pd.read_excel(xls, sheet_name='Experiment 2')
+    experiment1_df = load_measurement_data(file_path, sheet_name="Experiment 2")
     # Zeitstempel und Temperatur-Spalte extrahieren
     experiment1_df['Time'] = pd.to_datetime(experiment1_df['Time'])
     experiment1_df['T_amb [°C]'] = experiment1_df['T_amb [°C]'].astype(float)
     experiment1_df['P_appliance [W]'] = experiment1_df['P_appliance [W]'].astype(float)
     experiment1_df['P_kitchen [W]'] = experiment1_df['P_kitchen [W]'].astype(float)
-    experiment1_df['Q_hp,prim [W]'] = experiment1_df['Q_hp,prim [W]'].astype(float)
+    experiment1_df['Qdot_selected [W]'] = experiment1_df['Qdot_selected [W]'].astype(float)
     # Index auf den Zeitstempel setzen
     experiment1_df.set_index('Time', inplace=True)
     # Resampling auf stündliche Mittelwerte
     hourly_avg_temp = experiment1_df['T_amb [°C]'].resample('H').mean()
     hourly_avg_p_appl = experiment1_df['P_appliance [W]'].resample('H').mean()
     hourly_avg_p_kit = experiment1_df['P_kitchen [W]'].resample('H').mean()
-    hourly_avg_q_demand = experiment1_df['Q_hp,prim [W]'].resample('H').mean()
+    hourly_avg_q_demand = experiment1_df['Qdot_selected [W]'].resample('H').mean()
+    hourly_avg_qsol = None
+    if "Qsol [W/m2]" in experiment1_df.columns:
+        hourly_avg_qsol = experiment1_df["Qsol [W/m2]"].resample("H").mean().ffill().bfill()
+    hourly_avg_t_set = None
+    if "T_set [°C]" in experiment1_df.columns:
+        hourly_avg_t_set = experiment1_df["T_set [°C]"].resample("H").mean().ffill().bfill()
     # Die stündlichen Durchschnittswerte anzeigen
     # Optional: Liste der stündlichen Durchschnittswerte ausgeben
     hourly_avg_list = hourly_avg_temp.tolist()
@@ -89,7 +95,7 @@ def main():
     building_example = Building(
         country="DE",
         construction_year=2016,
-        class_building="very light",
+        class_building="average",
         building_type="SFH",
         refurbishment_status="advanced_refurbishment",
         number_of_time_steps=number_of_time_steps,
@@ -98,37 +104,22 @@ def main():
 
     building_example.calculate_all_parameters()
 
-    # Pre-Calculation of solar gains with weather_data and building_data
-    location = calculate_gain_by_sun.Location(
-        #latitude=48.973,
-        #longitude=8.33,
-        epwfile_path=os.path.join(
-            os.path.dirname(__file__),
-            "DWD_Station_4177_2024.epw",
-        ),
+    if hourly_avg_qsol is None:
+        raise ValueError(
+            "Measurement data must contain 'Qsol [W/m2]'. For Experiment 3 CSV "
+            "input this is read from Exp3_weather.csv."
+        )
+    solar_gains = calculate_solar_gains_from_qsol(
+        hourly_avg_qsol.tolist(), building_params
     )
 
-
-    if True:
-        solar_gains = building_example.calc_solar_gaings_through_windows(
-            time_index=time_index,
-            object_location_of_building=location,
-            number_of_time_steps=8760
+    if hourly_avg_t_set is None:
+        raise ValueError(
+            "Measurement data must contain 'T_set [°C]'. For Experiment 3 CSV "
+            "input this is derived from Exp3_indoor_temperatures.csv."
         )
-    else:
-        solar_gains = []
-
-    # Internal gains of residents, machines (f.e. fridge, computer,...) and lights have to be added manually
-    a_1_5 = 25.99 + 25.85 + 47.18 + 64.47 + 77.31
-    a_b = 12.74
-    a_k  = 26.08
-    a_c = 28.06 + 39.01
-    t_set_heating = []
-    t_set_cooling = []
-    for _ in range(number_of_time_steps ):
-        t_set_heating.append((21*a_1_5 +  24*a_b + 18*a_k + 18*a_c)/(a_1_5+a_b+a_k+a_c))
-        t_set_cooling.append(25)
-        #solar_gains.append(0)
+    t_set_heating = hourly_avg_t_set.tolist()
+    t_set_cooling = [25] * number_of_time_steps
     # initiate the logger (see the API docs for more information)
     logger.define_logging(
         logfile="oemof_example.log",
