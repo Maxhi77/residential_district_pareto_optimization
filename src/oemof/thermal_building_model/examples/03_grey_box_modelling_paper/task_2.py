@@ -4,7 +4,7 @@ import logging
 
 import pandas as pd
 from matplotlib import pyplot as plt
-
+import numpy as np
 import oemof.solph as solph
 from oemof.solph import views
 from oemof.tools import logger
@@ -41,6 +41,10 @@ BUILDINGS = (
 DATA_ROOT = (
     r"C:\Users\hill_mx\Desktop\Input_kevin_paper"
     r"\Experiment_2425\Experiment_2425"
+)
+
+HEAT_PRICE_ROOT = (
+    r"C:\Users\hill_mx\Desktop\Input_kevin_paper"
 )
 
 MEASUREMENT_SOURCE = os.path.join(
@@ -269,6 +273,48 @@ def run_building(building_id):
         f"{hourly_avg_t_indoor.max():.3f} °C"
     )
 
+    print("READ VARIABLE HEAT PRICE AS ADDITION TO TASK 1")
+
+    print("READ VARIABLE HEAT PRICE AS ADDITION TO TASK 1")
+
+    df = pd.read_csv(
+        os.path.join(HEAT_PRICE_ROOT, "heat_price_data.csv")
+    )
+
+    # Convert 15-minute prices to hourly averages
+    hourly_prices = df[
+        ["heat_price_variable", "heat_price_const_and_variable"]
+    ].groupby(np.arange(len(df)) // 4).mean()
+
+    print(f"Heat price data loaded: {len(hourly_prices)} hourly steps (7 days).")
+    print("Reducing heat price data to the first 3 days of simulation.")
+
+    # Select first 3 days (72 hourly steps)
+    hourly_prices = hourly_prices.iloc[:72]
+
+    heat_price_variable = hourly_prices["heat_price_variable"].tolist()
+    heat_price_const_and_variable = hourly_prices["heat_price_const_and_variable"].tolist()
+
+    # Validate simulation length
+    if len(hourly_prices) != number_of_time_steps:
+        raise ValueError(
+            f"Length mismatch: expected {number_of_time_steps} "
+            f"steps, got {len(hourly_prices)}."
+        )
+
+    # Select heat price scenario
+    heat_price = heat_price_variable
+    # heat_price = heat_price_const_and_variable
+
+    scenario = (
+        "Variable heat price"
+        if heat_price is heat_price_variable
+        else "Constant and variable heat price"
+    )
+
+    print(f"!!! Selected heat price scenario: {scenario}")
+    print(f"Heat price data ready: {len(hourly_prices)} hourly steps.")
+
     # =========================================================
     # Gebäudemodell erzeugen
     # =========================================================
@@ -308,11 +354,11 @@ def run_building(building_id):
     # Falls du sie später verwenden möchtest:
     #
     t_set_heating = hourly_avg_t_set.tolist()
-
+    t_set_cooling_temp=24
     t_set_cooling = [
-        35
+        t_set_cooling_temp
     ] * number_of_time_steps
-
+    print("!!! Results highly infl. by t_set_cooling: "+str(t_set_cooling_temp))
     # =========================================================
     # Energy System
     # =========================================================
@@ -353,7 +399,7 @@ def run_building(building_id):
             label="elect_from_grid",
             outputs={
                 b_elect: solph.flows.Flow(
-                    variable_costs=30
+                    variable_costs=max(heat_price_variable)*1000
                 )
             },
         )
@@ -368,7 +414,7 @@ def run_building(building_id):
             label="elect_into_grid",
             inputs={
                 b_elect: solph.flows.Flow(
-                    variable_costs=-0.001
+                    variable_costs=0
                 )
             },
         )
@@ -379,14 +425,16 @@ def run_building(building_id):
     # =========================================================
 
     es.add(
-        solph.components.Converter(
-            label="ElectricalHeater",
-            inputs={b_elect: solph.flows.Flow()},
-            outputs={b_heat: solph.flows.Flow(nominal_value=20000)},
-            conversion_factors={b_elect: 1},
+        solph.components.Source(
+            label="HeatFromHeatGridToBuilding",
+            outputs={
+                b_heat: solph.flows.Flow(
+                    nominal_value=10000000000000000,
+                    variable_costs=heat_price_variable,
+                )
+            },
         )
     )
-
     # =========================================================
     # Kühlung
     # =========================================================
@@ -402,7 +450,7 @@ def run_building(building_id):
             },
             outputs={},
             conversion_factors={
-                b_cool: 0.9,
+                b_cool: 1,
                 b_elect: 1,
             },
         )
@@ -422,7 +470,7 @@ def run_building(building_id):
             },
             outputs={
                 b_cool: solph.flows.Flow(
-                    variable_costs=5
+                    variable_costs=0
                 )
             },
             solar_gains=solar_gains,
@@ -667,9 +715,16 @@ def run_building(building_id):
     hourly_avg_t_set.plot(
         ax=ax,
         linestyle="--",
-        label=f"T_set {building_id}",
+        label=f"T_set heating{building_id}",
     )
-
+    pd.Series(
+        t_set_cooling,
+        index=hourly_avg_t_indoor.index
+    ).plot(
+        ax=ax,
+        linestyle="--",
+        label=f"T_set cooling{building_id}",
+    )
     ax.set_title(
         f"Indoor Temperature Comparison - {building_id}"
     )
