@@ -1,3 +1,11 @@
+"""Prepare building-specific profiles and component objects before aggregation.
+
+The applied workflows supply existing representative rows, processed household
+profiles, weather, and a time index. This module combines them with TABULA and
+technology parameters to prepare inputs for energy-system assembly. It neither
+generates the original household profiles nor writes optimization results.
+"""
+
 from __future__ import annotations
 
 import copy
@@ -56,6 +64,12 @@ def _normalize_scenario_name(name) -> str:
 
 
 def _load_building_demands(building_row, directory_path, ev):
+    """Read household electricity and warm-water inputs for one representative.
+
+    ``directory_path`` locates the processed case, not an optimization archive.
+    Electricity is converted to watts before the demand facade applies the
+    model's base-unit scaling. Warm water remains a volume profile at this step.
+    """
     building_id = building_row["building_id"]
     number_of_households = int(building_row["number_of_apartments"])
 
@@ -176,6 +190,12 @@ def process_cluster_decentralized(
     time_index,
     price_scenario_name="ref",
 ):
+    """Populate profiles and components for one decentralized representative.
+
+    Return the updated time-series table, the component collection indexed by
+    building identifier, and the heat-demand sizing quantity used by the caller.
+    Thermal demand and PV yield are calculated before temporal aggregation.
+    """
     building_id = building_row["building_id"]
     tabula_year_class = building_row["tabula_year_class"]
     building_floor_area = building_row["net_floor_area"]
@@ -271,6 +291,12 @@ def process_cluster_centralized(
     ev,
     time_index,
 ):
+    """Prepare profiles for a building under the supplied refurbishment object.
+
+    The caller selects the building configuration for the district scenario.
+    Return the updated profile table, component collection, and the
+    representative-weighted heat-demand sizing quantity for district assembly.
+    """
     building_id = building_row["building_id"]
     tabula_year_class = building_row["tabula_year_class"]
     building_floor_area = building_row["net_floor_area"]

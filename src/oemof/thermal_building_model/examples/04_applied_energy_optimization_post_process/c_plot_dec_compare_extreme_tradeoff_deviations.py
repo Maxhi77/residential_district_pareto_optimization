@@ -62,6 +62,9 @@ def _savefig_fixed_pdf_width(fig, filename, *args, **kwargs):
 # -----------------------------
 # Plot switches / scope
 # -----------------------------
+# Source-level research configuration: select the intended supply mode and
+# align reference/sensitivity roots, case name, and run subdirectory below.
+# Figure outputs are selected separately in main(); see the directory README.
 ONLY_PARALLEL_STYLE_KEEP = True
 PARALLEL_TARGET_OBJECTIVES = ["min_gwp", "min_totex", "min_peak"]
 PARALLEL_TARGET_HEIGHT_TAGS = ["h70", "h80", "h90", "h100"]

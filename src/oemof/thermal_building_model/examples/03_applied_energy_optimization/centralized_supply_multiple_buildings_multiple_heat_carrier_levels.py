@@ -7,6 +7,12 @@ inputs as the decentralized workflow, but optimizes a shared district supply
 system with centralized heat-grid components. Output files are centralized full
 and reduced pickle results for the CO2 and peak-reduction sweeps used in the
 Applied Energy manuscript and thesis analyses.
+
+This research configuration supports inspection of the computational workflow
+accompanying the PhD dissertation. Input and result roots can be relocated with
+``--input-root`` and ``--result-storage-root``; package-relative weather and
+parameter settings remain in the source. README.md describes the required
+input structure and the transition to centralized result consolidation.
 """
 
 from oemof.thermal_building_model.oemof_facades.base_component import  PhysicalBaseUnit
@@ -1090,6 +1096,11 @@ def _script_base_path():
 
 
 def _normalize_result_root(raw_value, base_path):
+    """Resolve a local root against the executable's directory.
+
+    URL-shaped values contribute only their path; this helper does not transfer
+    remote data. ``none``/``default`` retain the caller's default location.
+    """
     if raw_value is None:
         return None
 
@@ -1121,10 +1132,12 @@ def _normalize_input_root(raw_value, base_path):
 
 
 def _get_input_root():
+    """Locate processed case folders under the selected input root."""
     return INPUT_ROOT if INPUT_ROOT else _script_base_path()
 
 
 def _get_result_storage_root():
+    """Locate result case folders independently of the processed input root."""
     return RESULT_STORAGE_ROOT if RESULT_STORAGE_ROOT else _script_base_path()
 
 
@@ -1830,6 +1843,8 @@ DEFAULT_CO2_REDUCTION_FACTORS_T80 = [
     -0.1,
     -0.2,
 ]
+# Research defaults: command-line roots override these script-relative choices.
+# Keep independent studies in separate result roots to preserve their provenance.
 RESULT_STORAGE_ROOT = None
 INPUT_ROOT = None
 

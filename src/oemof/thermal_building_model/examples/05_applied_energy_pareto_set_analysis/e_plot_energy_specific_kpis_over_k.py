@@ -1,3 +1,11 @@
+"""Visualize energy KPIs from the prepared cluster demand and PV caches.
+
+The input root identifies processed case folders containing the expected
+profile-cache files. Align it with the cache-generation configuration and set
+a local output root before producing figures for an independently generated
+study; see README.md for this branch's dependencies.
+"""
+
 import pickle
 import re
 from pathlib import Path
@@ -10,6 +18,8 @@ from matplotlib.lines import Line2D
 from matplotlib.ticker import FormatStrFormatter
 
 
+# Local adaptation point: replace the research-machine case root. OUTPUT_BASE_DIR
+# is derived from it below and may be selected separately for new figure exports.
 EXAMPLES_BASE_DIR = Path(
     r"C:\Users\hill_mx\Desktop\From Luis\Case Studies\Small New"
 )

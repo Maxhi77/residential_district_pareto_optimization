@@ -8,6 +8,12 @@ configuration files. Outputs are full and reduced pickle result files per
 cluster, building representative, refurbishment case, price scenario, and CO2
 step. This is the main decentralized workflow entry point used to reproduce the
 building-level analyses in the manuscript.
+
+As part of the research software accompanying the PhD dissertation, this script
+keeps case selection and preprocessing visible for computational traceability.
+Processed inputs are resolved relative to this script; result storage and
+resume-check roots can be selected independently through command-line options.
+See README.md in this directory for local reuse and the post-processing inputs.
 """
 
 import argparse
@@ -574,10 +580,12 @@ def _normalize_result_root(raw_value, base_path):
 
 
 def _get_result_storage_root():
+    """Use the configured result root, falling back to the script directory."""
     return RESULT_STORAGE_ROOT if RESULT_STORAGE_ROOT else _script_base_path()
 
 
 def _get_result_check_root():
+    """Locate existing outputs for resume checks independently of new writes."""
     if RESULT_CHECK_ROOT:
         return RESULT_CHECK_ROOT
     return _get_result_storage_root()
@@ -595,6 +603,11 @@ def _prepare_group_context(
     sfh_k_value=None,
     mfh_k_value=None,
 ):
+    """Prepare building profiles, a reference solve, and the worker context.
+
+    The processed case is located relative to this executable. Storage paths
+    refer to optimization results and may use a separate filesystem root.
+    """
     base_path = _script_base_path()
     directory_path = os.path.join(base_path, ueu)
     result_storage_root = _get_result_storage_root()

@@ -1,3 +1,12 @@
+"""Compare consolidated centralized result sets across representative counts.
+
+The inputs are the centralized packages from the preceding post-processing
+stage, grouped by case, cluster combination, temperature, and constraint token.
+Research archive roots and case selections are configured below. For locally
+generated results, adapt those roots while retaining the expected hierarchy;
+see the parent README for the complete analysis sequence.
+"""
+
 import os
 import pickle
 import re
@@ -7,6 +16,8 @@ import numpy as np
 import pandas as pd
 
 
+# Keep the consolidation input root separate from the generated analysis tables.
+# The following archive paths are research defaults and can be adapted locally.
 INPUT_BASE_DIR = Path(
     "M:/04_ArchivMA/Hillen Maximilian/Ver\u00f6ffentlichungen/UEU/centralized_post_processed"
 )

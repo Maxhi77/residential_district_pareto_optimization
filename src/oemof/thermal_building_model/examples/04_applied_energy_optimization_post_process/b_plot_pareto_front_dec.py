@@ -7990,7 +7990,11 @@ if __name__ == "__main__":# ====================================================
     import matplotlib.pyplot as plt
 
     # ============================================================
-    # CONFIG (your base)
+    # Research figure configuration. For local results, select available cases,
+    # adapt base_path/out_dir, and point each combined-front override to its
+    # post-processed combination folder. Review the active branch and later
+    # overrides together; directory relocation does not select a scenario.
+    # See README.md for the optimization -> consolidation -> plotting sequence.
     # ============================================================
     ueu_list = [
         "processed_bds_in_DENI03403000SEC4580",

@@ -1,3 +1,12 @@
+"""Prepare demand and PV profile caches for the energy-KPI analysis branch.
+
+This stage reads processed building/household inputs and writes
+``demands_and_pv_potential.pkl`` within the selected case/cluster tree. Its
+profiles are analysis inputs, distinct from solved optimization records.
+For a new study, select a local input tree and preserve existing caches before
+regeneration. The directory README describes its upstream requirements.
+"""
+
 import copy
 import os
 import pickle
@@ -16,6 +25,8 @@ from oemof.thermal_building_model.oemof_facades.refurbishment.building_model imp
 from oemof.thermal_building_model.oemof_facades.technologies.renewable_energy_source import PVSystem
 
 
+# Research-machine input root: adapt to the parent of the local processed cases.
+# Cache outputs are written inside that tree, so use a working copy for new runs.
 EXAMPLES_BASE_DIR = Path(
     r"C:\Users\hill_mx\Desktop\From Luis\Case Studies\Small New"
 )

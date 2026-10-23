@@ -5,6 +5,12 @@ SFH/MFH cluster-count combinations using normalized hypervolume, delta
 hypervolume, and IGD against a reference Pareto set. The resulting tables are
 used by the downstream heatmap and Pareto-projection scripts for the Applied
 Energy manuscript and thesis analyses.
+
+For local reuse, align INPUT_BASE_DIR, OUTPUT_BASE_DIR, and the selected case
+folders with the upstream combination outputs. Post-processing folder names
+must retain the dated form checked by POST_PROCESS_ROOT_PATTERN, including
+when selected explicitly with POST_PROCESS_NAME. See the parent README for
+the distinction between raw results, processed fronts, and generated tables.
 """
 
 import pickle
@@ -16,6 +22,8 @@ import numpy as np
 import pandas as pd
 
 
+# Research analysis roots are configured in source. Set them to the local
+# combination archive and a separate analysis output root before generating tables.
 POST_PROCESS_ROOT_PATTERN = re.compile(r"^post_processed_dec_k_combinations_(\d{4})_(\d{2})_(\d{2})$")
 INPUT_BASE_DIR = Path(__file__).resolve().parent / "hypervolume_results"
 OUTPUT_BASE_DIR = Path(__file__).resolve().parent / "hypervolume_results"

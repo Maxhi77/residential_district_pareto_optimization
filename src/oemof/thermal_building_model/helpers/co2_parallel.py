@@ -1,3 +1,10 @@
+"""Orchestrate decentralized CO2-factor jobs using a prepared building context.
+
+Profiles, component definitions, reference quantities, and output paths are
+prepared by the executable. Workers evaluate the configured peak reductions
+and save paired detailed/reduced dictionaries for downstream combination.
+"""
+
 from __future__ import annotations
 
 import multiprocessing
@@ -32,6 +39,12 @@ from oemof.thermal_building_model.helpers.result_helpers import (
 
 
 def run_co2_factor_for_context(group_key, co2_reduction_factor, context, *, run_model: Callable):
+    """Execute one CO2-factor sweep and return the associated result filenames.
+
+    Individual records use ``(co2_factor, peak_factor, refurbishment, "co2")``
+    keys. An existing reduced file triggers the implemented resume path, so
+    independently configured studies should use independent result roots.
+    """
     data = context["data"]
     aggregation1 = context["aggregation1"]
     t1_agg = context["t1_agg"]

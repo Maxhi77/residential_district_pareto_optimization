@@ -1,3 +1,11 @@
+"""Export reference building and energy-KPI workbooks for selected UEU cases.
+
+Processed building records and reference profiles supply the tabular summaries.
+These workbooks support the analysis branch rather than replacing optimization
+outputs. Set the local input root, case selection, and OUTPUT_DIR before
+regeneration to preserve the reference workbooks supplied with the repository.
+"""
+
 import copy
 import pickle
 import re
@@ -27,6 +35,8 @@ except ModuleNotFoundError:
     PVSystem = None
 
 
+# The checkout is the default input root. Select a separate OUTPUT_DIR when
+# exporting a new study, because the default targets the supplied workbook folder.
 EXAMPLES_BASE_DIR = Path(__file__).resolve().parents[1] / "03_applied_energy_optimization"
 OUTPUT_DIR = Path(__file__).resolve().parent
 EV_SUFFIX_NO = "no_EV"

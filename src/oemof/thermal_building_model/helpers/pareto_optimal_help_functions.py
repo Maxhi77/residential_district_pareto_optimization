@@ -410,6 +410,17 @@ def combine_all_buildings(
     max_points_after_each_merge: Optional[int] = 5000,
     representative_selection: str = 'raw_sum',
 ) -> Tuple[Dict[str,List[Dict[str,Any]]], List[Dict[str,Any]]]:
+    """Build per-building candidate fronts and merge them into district records.
+
+    The input maps building identifiers to refurbishment-specific result
+    dictionaries. Objective triples contain CO2, peak, and total cost, with all
+    three objectives minimized. Building fronts are dominance-filtered before combination;
+    configured epsilon reductions and point limits can reduce intermediate
+    sets. Return the per-building fronts and the retained district candidates.
+
+    Reduction settings are part of the processing configuration and should be
+    retained with the source revision when interpreting a generated front.
+    """
 
     # --- NEU: globale Skalen einmal bestimmen, wenn nicht gesetzt
     global_scales = compute_global_scales_from_fronts(

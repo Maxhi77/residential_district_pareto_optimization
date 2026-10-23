@@ -1,3 +1,10 @@
+"""Load precomputed building representatives or full reference-case records.
+
+Integer k selections identify SFH/MFH cluster pickle folders. A ``reference``
+selection reads the processed case GeoPackage. This module consumes existing
+clustering artifacts; it does not perform clustering or acquire source data.
+"""
+
 from __future__ import annotations
 
 import os
@@ -47,6 +54,11 @@ def load_cluster_for_k_and_type(
     *,
     add_reference_buildings_in_cluster: bool = False,
 ) -> tuple[Any, str]:
+    """Return the selected building table and its conventional case directory.
+
+    ``base_path`` is the parent of the processed case folder. The returned path
+    identifies the cluster/reference location; it does not create output files.
+    """
     cluster_root = os.path.join(base_path, cluster_name)
     if is_reference_k(k_value):
         gpkg_ueu = os.path.join(cluster_root, f"{cluster_name}.gpkg")

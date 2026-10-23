@@ -1,6 +1,13 @@
 #! /usr/bin/env python
 # -*- encoding: utf-8 -*-
 
+"""Declare package metadata and direct dependencies for the research sources.
+
+Optimization, post-processing, and figure generation are configured in the
+example scripts. Installation does not select a study or generate its results;
+see the root README and the stage-specific workflow guides.
+"""
+
 from glob import glob
 from os.path import basename, join, splitext
 from setuptools import find_packages, setup

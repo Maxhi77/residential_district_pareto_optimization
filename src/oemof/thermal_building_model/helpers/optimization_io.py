@@ -1,3 +1,10 @@
+"""Parse workflow selections and resolve local optimization result filenames.
+
+The research scripts share these conventions so that optimization outputs can
+be found by later processing stages. Roots may be relocated while preserving
+case names, cluster folders, and the record/filename conventions.
+"""
+
 from __future__ import annotations
 
 import os
@@ -10,6 +17,7 @@ import pandas as pd
 
 
 def co2_factor_to_suffix(factor: float) -> str:
+    """Encode a reduction factor for filenames, e.g. 0.9 as ``09``."""
     value = float(factor)
     if value.is_integer():
         return str(int(value))
@@ -22,6 +30,11 @@ def co2_factor_to_suffix(factor: float) -> str:
 
 
 def atomic_pickle_dump(path: str | Path, payload: Any) -> None:
+    """Serialize a payload to a local file, creating its parent directories.
+
+    The existing helper writes directly to the destination and replaces its
+    content in place. Keep archived research results separate from new runs.
+    """
     path = str(path)
     parent = os.path.dirname(path)
     if parent:
@@ -40,6 +53,11 @@ def load_pickle_dict_if_exists(path: str | Path) -> dict:
 
 
 def safe_load_cluster_pickle(path: str | Path) -> pd.DataFrame:
+    """Read a trusted representative table, returning an empty table if absent.
+
+    Existing non-DataFrame payloads are passed to the DataFrame constructor;
+    deserialization and conversion errors propagate to the caller.
+    """
     path = str(path)
     if not os.path.exists(path):
         return pd.DataFrame()
@@ -140,6 +158,13 @@ def script_base_path(file_path: str | Path) -> str:
 
 
 def normalize_result_root(raw_value: Any, base_path: str | Path, *, label: str = "storage/check") -> str | None:
+    """Resolve a user-supplied filesystem root against the given script base.
+
+    Empty values and ``none``/``default`` select the caller's default root.
+    URL-shaped inputs contribute their path component; this is local path
+    normalization, not a remote-transfer interface. Absolute local paths are
+    preferable when connecting optimization and post-processing stages.
+    """
     if raw_value is None:
         return None
 

@@ -6,6 +6,11 @@ factor. This script combines those building-level result files for selected
 SFH/MFH cluster-count combinations, constructs district-level Pareto packages,
 and writes the post-processed files consumed by the Applied Energy and thesis
 plotting scripts.
+
+The input result archive and cluster metadata can be stored separately. Set
+``--base-dir`` and ``--cluster-base-dir`` for locally generated runs, and select
+the matching case names. The directory README documents the resulting package
+structure and the source-level path settings of downstream plot scripts.
 """
 
 import argparse
@@ -28,6 +33,9 @@ from oemof.thermal_building_model.helpers.pareto_optimal_help_functions import (
 
 
 BASE_DIR = Path(__file__).resolve().parent
+# The archive default reflects the research configuration. For local reuse,
+# pass --base-dir; pass --cluster-base-dir separately when inputs stay elsewhere.
+# Disable the optional JSON selection with --k-config-path "" when using CLI k values.
 DEFAULT_DATA_BASE_DIR = Path(
     r"M:\04_ArchivMA\Hillen Maximilian\Veröffentlichungen\UEU"
 )
@@ -624,6 +632,12 @@ def _save_combination_outputs(
     combined_front: List[Dict[str, Any]],
     meta: Dict[str, Any],
 ) -> None:
+    """Write the five artifacts consumed by plotting and Pareto-set analysis.
+
+    ``combined_package.pkl`` stores the building dictionary, per-building fronts,
+    and combined front in that order; metadata is also stored independently.
+    These files are generated outputs and can replace files at the same paths.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     with open(output_dir / "building_dict.pkl", "wb") as fh:
         pickle.dump(building_dict, fh, protocol=pickle.HIGHEST_PROTOCOL)

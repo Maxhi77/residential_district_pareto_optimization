@@ -1,3 +1,10 @@
+"""Construct decentralized result records and their on-disk organization.
+
+The record keys and filename tokens form the interface to post-processing.
+Changing a storage root preserves that interface; changing schemas or labels
+requires corresponding changes in downstream readers.
+"""
+
 from __future__ import annotations
 
 import os
@@ -28,6 +35,12 @@ def build_result_entries(
     time: float | None,
     price_scenario_name: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return detailed and reduced records for one optimization outcome.
+
+    Both variants retain objective values and scenario information. A successful
+    reduced record also retains the electricity-grid block; it is not limited
+    to scalars. An unavailable solution is represented by ``None`` fields.
+    """
     include_price_scenario = price_scenario_name is not None
 
     if final_results is None:
@@ -104,6 +117,11 @@ def get_worker_result_paths(
 
 
 def get_result_output_dir(root_path, cluster_name, k_value, building_type):
+    """Locate the case/type/cluster directory below a selected storage root.
+
+    Joint models use an SFH/MFH pair in a combined-cluster directory; reference
+    selections use ``reference``. These names are consumed by result readers.
+    """
     cluster_root = os.path.join(root_path, cluster_name)
     if building_type == "COMBINED":
         if not isinstance(k_value, (tuple, list)) or len(k_value) != 2:
@@ -138,6 +156,11 @@ def missing_co2_factors(
     simple_file_path_base: str,
     co2_reduction_factors,
 ) -> list[float]:
+    """List factors for which the reduced result file is absent.
+
+    This resume check examines filename existence without loading file content.
+    Separate roots should be used for studies with different configurations.
+    """
     missing = []
     for co2_reduction_factor in co2_reduction_factors:
         _, worker_simple_file_path = get_worker_result_paths(

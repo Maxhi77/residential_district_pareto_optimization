@@ -3,9 +3,13 @@
 Centralized optimization result files already represent complete district-level
 solutions. This script therefore loads the selected result records, extracts
 objective values and metadata, filters invalid or incomplete files, and writes
-one consolidated package per UEU, combined-cluster case, and heat-carrier
-temperature level. No building-level recombination or Pareto pruning is applied
-in this step.
+one consolidated package per UEU, combined-cluster case, heat-carrier temperature,
+and constraint/scenario token. No building-level recombination or Pareto pruning
+is applied in this step.
+
+For independently generated results, select the raw archive with ``--input-root``
+and a separate consolidation location with ``--output-root``. The accompanying
+README describes the case/cluster/temperature/group hierarchy used by consumers.
 """
 
 import argparse
@@ -34,6 +38,8 @@ from oemof.thermal_building_model.helpers.price_scenarios import (
 
 BASE_DIR = Path(__file__).resolve().parent
 EXAMPLES_DIR = BASE_DIR.parents[1]
+# These defaults locate the research archive or fall back to the checkout.
+# Explicit --input-root/--output-root values allow the same processing of new runs.
 DEFAULT_ARCHIVE_UEU_CASE_ROOT = Path(
     r"M:\04_ArchivMA\Hillen Maximilian\Veröffentlichungen\UEU"
     r"\processed_bds_in_DENI03403000SEC5658"
@@ -759,6 +765,12 @@ def run_post_processing(
     temperature_levels: Optional[set[int]],
     keep_series: bool,
 ) -> List[Dict[str, Any]]:
+    """Consolidate selected raw result cases and return their processing summaries.
+
+    Input roots identify raw case directories. Output roots receive grouped
+    packages and diagnostics; they should be distinct from preserved archives.
+    Summary status fields record missing inputs and groups without valid records.
+    """
     all_summaries: List[Dict[str, Any]] = []
 
     for ueu_case, input_case_root in _resolve_input_cases(input_root, ueu_cases, price_scenarios):
