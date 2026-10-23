@@ -1,346 +1,349 @@
-|badge_pypi| |badge_travis| |badge_docs| |badge_coverage| |link-latest-doi|
+Residential district Pareto optimization
+========================================
 
-#############
-oemof.thermal_building_model
-#############
+``residential_district_pareto_optimization`` is the repository and project name.
+Its reusable Python package is named ``oemof.thermal_building_model``; this is
+the namespace used in imports and in the package installation metadata.
 
-This package provides tools to model thermal building models as an extension of
-oemof.solph.
+The project provides thermal building and energy-system modelling components,
+optimization workflows, and result-processing scripts for residential buildings
+and districts. It accompanies a PhD dissertation and makes its computational
+procedures available for inspection and reuse.
+
+The software combines reusable model components with scripts configured for
+the research cases. Some input, result, and figure paths are specified directly
+in those scripts. These settings identify the data locations expected by the
+research workflow; they are not prescribed locations for subsequent studies.
+Researchers can generate their own results, adapt the relevant paths, and use
+the framework with compatible inputs and result structures.
 
 .. contents::
+    :depth: 2
+    :local:
 
-About
-=====
+Purpose and scope
+-----------------
 
-The aim of oemof.thermal_building_model is to create easily
-for 20 european countries a building model
-with three retrofit status. The energy system of the building model
-can be optimized for a specific retrofit status, by using the
-thermal inertia of the building and optimizing the internal air
-temperature.
+The repository supports the computational traceability of the PhD research:
+readers can inspect how building records and demand profiles are transformed
+into energy-system models, how scenarios are executed, and how results are
+prepared for analysis and visualization. The implemented workflows include
+building heat-demand calculations, PV yield preparation, investment and
+operation optimization, and Pareto-set analysis.
 
-oemof.thermal_building_model is under active development.
-Contributions are welcome.
+The scripts provide the executable research configuration. Reproducing a
+particular output requires the corresponding input data, parameter settings,
+software environment, solver, and upstream result files. The presence of a
+script or a saved result file alone does not demonstrate reproduction of an
+entire study.
 
-Quickstart
-==========
+Scientific background and model concept
+---------------------------------------
 
-Install oemof.thermal_building_model by running
+Residential heat-supply planning involves trade-offs between expenditure,
+emissions, and electricity-grid interaction. Building characteristics and
+refurbishment states influence heat demand and the required supply temperatures,
+which in turn affect technology sizing and operation. Representing every
+building individually increases computational effort. The research therefore
+examines how a reduced building-stock representation affects district-level
+energy-system results. The accompanying dissertation [Thesis]_ provides the
+full methodological background.
 
-.. code:: bash
+An Urban Energy Unit (UEU) is the district considered in an optimization study.
+Its single-family housing (SFH) and multi-family housing (MFH) stocks can be
+represented by preprocessed building archetypes. Each archetype represents a
+specified number of original buildings; occurrence factors map its quantities
+to the represented stock. The SFH and MFH cluster counts determine the
+building-stock resolution. These archetype inputs are generated upstream of
+the main scripts in this repository. A separate temporal reduction uses TSAM
+to aggregate hourly demand and generation profiles into typical periods with
+occurrence weights. Building-stock reduction and temporal aggregation are
+distinct modelling steps.
 
-    pip install oemof.thermal_building_model
+The main applied workflows calculate space-heating demand and PV profiles
+before assembling an energy-system model with ``oemof.solph`` [Krien2020]_.
+Household electricity and hot-water profiles, building attributes, weather,
+prices, and the selected refurbishment state are inputs to each solve.
+Refurbishment cases are prepared as scenarios. The optimization determines
+technology investments and operation within the configured capacity and
+technical constraints. Electricity, fuels, and heat are connected through
+generation, conversion, storage, and demand components. Discrete heat-carrier
+temperature levels represent supply requirements and temperature-dependent
+technology operation.
 
-in your virtualenv. In your code, you can import modules like e.g.:
+Annual total expenditure (TOTEX) is minimized while emission and electricity-
+peak limits are varied through an epsilon-constraint procedure. The scripts
+first determine cost-reference results and then solve successive constraint
+cases. The resulting records describe trade-offs among TOTEX, emissions
+(``co2``), and maximum electricity import or export power (``peak``). A solution
+is non-dominated within a candidate set if no other candidate is at least as
+good in every objective and strictly better in at least one. The retained
+solutions form a finite Pareto approximation for the evaluated scenarios and
+constraint levels.
 
-.. code:: python
+In the default decentralized workflow, building representatives are optimized
+independently. Post-processing scales and recombines their candidate solutions
+to construct district-level approximations, using filtering and archive
+reduction to control the number of combinations. In the centralized workflow,
+the selected representatives are optimized jointly with shared heat-generation,
+storage, and heat-grid infrastructure. Each centralized solution already
+describes a district system; its downstream processing consolidates those
+records. Comparing different SFH/MFH cluster counts then assesses how the
+chosen building representation changes energy quantities and the resulting
+sets of trade-offs.
 
-    from oemof.thermal_building_model import m_5RC
+Repository organization
+-----------------------
 
-Documentation
-=============
+The Python sources are located in ``src/oemof/thermal_building_model``:
 
-Main executable scripts
-=======================
+* ``m_5RC.py`` implements a thermal building model embedded in optimization;
+  the earlier operational examples illustrate this execution path.
+* ``tabula/`` contains the building-typology reader and its parameter table.
+* ``helpers/`` contains building and household preprocessing, PV preparation,
+  cluster loading, scenario selection, and result-file utilities.
+* ``oemof_facades/`` contains carriers, grid connections, demands, technology
+  and refurbishment components, and reusable model-assembly functions.
+* ``input/`` contains economic and refurbishment parameters, weather files,
+  and profiles used by the single-building examples.
+* ``examples/01_basic_examples`` and ``02_investment_optimization`` contain
+  earlier operational and investment examples.
+* ``examples/03_applied_energy_optimization`` contains the main decentralized
+  and centralized optimization scripts and the supplied processed district case.
+* ``examples/04_applied_energy_optimization_post_process`` contains result
+  combination, centralized consolidation, and plotting scripts.
+* ``examples/05_applied_energy_pareto_set_analysis`` contains Pareto-set
+  comparisons, energy-KPI analyses, and reference workbooks.
 
-The main execution entry points for reproducing the manuscript workflows are in
-``src/oemof/thermal_building_model/examples``.
+The root directory contains ``setup.py`` for package metadata and dependency
+requirements, ``environment.yml`` for a Conda environment, and
+``requirements-lock.txt`` for direct dependency pins. Tests are stored in
+``tests/``. The workflow scripts are used from a source checkout.
 
-``decentralized_supply_single_building_multiple_heat_carrier_levels.py``
-    Runs the decentralized building-level workflow from
-    ``03_applied_energy_optimization``. It loads processed UEU cluster data,
-    refurbishment options, EV settings, and price scenarios, then writes full
-    and reduced pickle results for CO2 and peak-reduction sweeps. This is the
-    currently maintained manuscript workflow.
-
-``centralized_supply_multiple_buildings_multiple_heat_carrier_levels.py``
-    Runs the centralized district-level workflow from
-    ``03_applied_energy_optimization``. It uses the same processed UEU and
-    cluster data basis, but optimizes combined district supply systems for
-    selected SFH/MFH cluster combinations and heat-carrier temperature levels.
-
-Model-building facades
-======================
-
-The reusable model-building layer is located in
-``src/oemof/thermal_building_model/oemof_facades``. These facades are the main
-interface between the workflow scripts and ``oemof.solph``. They define the
-building blocks used to assemble the optimization models, including energy
-carriers and grids, demand profiles, decentralized and centralized supply
-technologies, thermal storage, refurbishment options, and workflow-specific
-scenario blocks.
-
-The purpose of this layer is to generate flexible and repeatable optimization
-models from the same scientific parameter basis. Workflow scripts select a UEU,
-cluster resolution, refurbishment case, EV setting, price scenario, and
-constraint-reduction targets; the facades then translate these settings into a
-consistent ``oemof.solph`` energy system. This keeps the executable scripts
-focused on orchestration while the physical, technical, economic, and emission
-parameterization is applied in one reusable model-building layer.
-
-``refurbishment/building_model.py`` contains the thermal building demand model.
-The ``ThermalBuilding`` facade converts TABULA-based building information,
-floor area, household and occupant data, refurbishment status, and the selected
-time index into a space-heating demand component. The building model also
-stores the heat-demand temperature level that determines to which heat-carrier
-bus the space-heating demand is connected. In the decentralized workflow this
-allows buildings with different thermal requirements to be represented in the
-same model structure while preserving the distinction between domestic hot
-water and space-heating temperature levels.
-
-``infrastructure/demands.py`` provides demand facades for electricity,
-domestic hot water, and space heating. Electricity and LPG-derived warm-water
-profiles are read by the workflow helpers and then assigned to the
-corresponding demand facades. Domestic hot water is connected to its demand
-temperature, while the thermal building demand is connected to the heat-carrier
-level of the selected building and refurbishment state. The heat-carrier facade
-creates the required temperature-level buses, for example low-temperature
-space-heating levels and higher domestic-hot-water or storage levels.
-
-``infrastructure/carriers.py`` and ``infrastructure/grids.py`` define the
-energy carriers and grid interfaces used in the models. Electricity, gas,
-biogas, hydrogen, and heat carriers provide the buses through which
-technologies, demands, and grid connections are linked. Grid facades apply the
-operational cost and CO2 parameters from the input files and provide the
-components used to account for grid imports, exports, and peak grid exchange.
-
-``technologies`` contains the investment and operation facades for PV systems,
-batteries, hot-water tanks, gas heaters, CHP units, heat pumps, and heat-grid
-related components. These facades read the technology-specific investment,
-fixed-cost, lifetime, efficiency, and emission parameters from the economics
-and emissions input modules. The workflow therefore references the correct
-parameter scripts indirectly: when a model is built, the selected component
-configuration is copied, scaled to the building or cluster representative, and
-connected to the appropriate electricity, gas, hydrogen, and heat-temperature
-buses.
-
-``scenario_blocks`` provides reusable model-assembly functions for recurring
-workflow patterns. These blocks add carriers, grids, local demands, PV,
-storages, conversion technologies, central heat carriers, solver handling, and
-constraint-reduction logic. They are intended to make repeated model generation
-less error-prone: each scenario can be rebuilt from the same input data and
-parameter files while only the selected UEU, cluster size, technology set,
-price scenario, and CO2 or peak constraint targets change.
-
-The cost, emission, refurbishment, and technology assumptions used in the
-manuscript are provided through the input parameter files listed below and are
-applied by these facades when the models are created. The scientific
-motivation, source assumptions, technology data, and cost data are described in
-the accompanying paper; the repository files are the executable implementation
-of those assumptions. For publication runs, changes in ``oemof_facades`` or the
-corresponding input parameter files should therefore be treated as potentially
-result-affecting scientific changes.
-
-Reproducing the decentralized example workflow
-==============================================
-
-``decentralized_supply_single_building_multiple_heat_carrier_levels.py``
-is the main entry point for the decentralized building-level workflow used in
-the manuscript. It optimizes representative single-family and multi-family
-buildings with decentralized heat-supply technologies, refurbishment options,
-PV, batteries, hot-water storage, and electricity, gas, biogas, and hydrogen
-grid connections. The script writes full and reduced pickle files for CO2 and
-electricity-peak reduction sweeps.
-
-Required inputs
----------------
-
-A runnable case requires a processed UEU folder below
-``src/oemof/thermal_building_model/examples/03_applied_energy_optimization``.
-For clustered runs, the folder must contain matching SFH and MFH cluster files,
-for example:
-
-.. code:: text
-
-    processed_bds_in_.../
-      sfh_cluster_k06/sfh_cluster.pkl
-      mfh_cluster_k01/mfh_cluster.pkl
-      <building_id>_demand_no_EV.pkl
-
-The cluster pickle files contain representative building rows with TABULA
-building class, floor area, roof geometry, household information, and
-``building_id``. The demand pickle files contain hourly household electricity
-and warm-water demand columns, such as ``Electricity_HH1`` and
-``Warm Water_HH1``. EV scenarios require the corresponding
-``*_demand_yes_EV.pkl`` or ``*_demand_yes_EV2.pkl`` files.
-
-For the manuscript workflow, household electricity, domestic hot-water, and EV
-charging demand profiles were generated with the LoadProfileGenerator (LPG) and
-then stored as processed demand pickle files. The repository includes the
-processed data for Urban Energy Unit 5658 in
-``processed_bds_in_DENI03403000SEC5658``. This is the SFH-dominated urban
-energy unit used in the paper and can be used as the main decentralized example
-case.
-
-The workflow also uses repository-provided parameter and weather files:
-
-* ``input/weather_files/03_HH_Hamburg-Fuhlsbuttel_TRY2035.csv``
-* ``input/economics/investment_components.py``
-* ``input/economics/operation_grid_economics.py``
-* ``input/emissions/co2_components.py``
-* ``input/refurbishment/refurbishment_data.py``
-* ``tabula/tabula_data_sorted.csv``
-
-Environment and solver
+Computational workflow
 ----------------------
 
-Install the package in editable mode and ensure that the workflow dependencies
-and a Pyomo-compatible MILP solver are available:
+The main applied workflow has five stages:
+
+1. Load preprocessed single-family housing (SFH) and multi-family housing (MFH)
+   representatives, or reference buildings, for an Urban Energy Unit (UEU).
+   Read the corresponding household demand profiles and building attributes.
+2. Calculate space-heating demand and PV yield, prepare the selected
+   refurbishment and price scenarios, and aggregate hourly profiles into
+   representative periods.
+3. Assemble the energy-system models, solve the cost-reference cases, and
+   execute the configured emission and electricity-peak constraint sweeps.
+4. Save full and reduced optimization result dictionaries. Combine
+   decentralized building results into district candidates, or consolidate
+   the centralized district results.
+5. Compare the resulting sets across building-stock resolutions and generate
+   figures and tables. Energy-profile caches and reference workbooks support
+   a separate, partly independent KPI analysis branch.
+
+The main applied supply-system workflows prepare thermal demand before
+optimization. They should be distinguished from the earlier examples using
+``m_5RC.py`` to represent thermal states inside the optimization model.
+
+Detailed stage guides are provided in:
+
+* `Optimization workflow <src/oemof/thermal_building_model/examples/03_applied_energy_optimization/README.md>`_
+* `Post-processing and plotting <src/oemof/thermal_building_model/examples/04_applied_energy_optimization_post_process/README.md>`_
+* `Centralized result consolidation <src/oemof/thermal_building_model/examples/04_applied_energy_optimization_post_process/centralized/README.md>`_
+* `Pareto-set and energy-KPI analysis <src/oemof/thermal_building_model/examples/05_applied_energy_pareto_set_analysis/README.md>`_
+
+Interpreting Pareto-set comparisons
+-----------------------------------
+
+The analysis scripts compare district-level solution sets using two
+complementary indicators, following the references used in Section 4.1.4 of
+the dissertation:
+
+* **Hypervolume (HV)** measures the objective-space volume dominated by a
+  solution set and bounded by a specified reference point [Bader2011]_. With
+  common scaling and the same reference point, larger HV indicates a larger
+  dominated volume for the minimization objectives considered here. The
+  reported relative deviation from the reference is
+  ``100 * (HV_reference - HV_candidate) / HV_reference``: positive values
+  indicate a smaller volume, negative values a larger volume, and values
+  near zero a similar volume.
+* **Inverted generational distance (IGD)** averages the Euclidean distance
+  from each point of a prescribed reference set to its nearest candidate
+  point [Coello2004]_ [Ishibuchi2015]_. Smaller values indicate closer
+  agreement with that reference set. The scripts use conventional IGD;
+  its lack of Pareto compliance is discussed by Ishibuchi et al.
+  [Ishibuchi2015]_. It is therefore interpreted alongside HV.
+
+For each comparison group, the scripts normalize each objective using the
+minimum and maximum over the available solution sets. Normalized HV uses the
+reference point ``(1.05, 1.05, 1.05)``. IGD is exported for both unscaled and
+normalized objective values; normalization places the three objectives on
+comparable numerical scales. Comparisons are performed separately for
+decentralized and centralized results, with centralized groups also
+distinguished by temperature and constraint type where present.
+
+The reference/reference combination supplies the unclustered numerical
+reference set. It is itself a finite approximation, so these indicators
+describe agreement with available computed results. Similar HV values alone
+do not establish similar front geometry. Interpretation also depends on the
+included scenarios, normalization range, and reference-set coverage. The
+`analysis guide <src/oemof/thermal_building_model/examples/05_applied_energy_pareto_set_analysis/README.md>`_
+documents the required result packages and output tables.
+
+Environment and installation
+----------------------------
+
+``environment.yml`` specifies Python 3.12.3 and the declared scientific Python
+dependencies. ``setup.py`` and ``requirements-lock.txt`` additionally identify
+the required ``oemof.solph`` Git revision:
+``1a33411d8bbc4363b297cefe1e08ba0ff150a633``. The model components use
+investment attributes provided by that revision. An arbitrary solph release
+should not be assumed to provide the same interface.
+
+A source-based installation follows the repository's environment specification.
+From the repository root:
 
 .. code:: bash
 
-    pip install -e .
+    conda env create -f environment.yml
+    conda activate thermal-building-model
 
-For Conda or Mamba based environments, the publication environment can be
-created from the repository root with:
-
-.. code:: bash
-
-    mamba env create -f environment.yml
-    mamba activate thermal-building-model
-
-The file ``environment.yml`` pins the direct workflow dependencies to exact
-versions. Its ``pip`` section intentionally installs ``oemof.network==0.5.0``
-before installing ``oemof.solph`` from the fixed Git commit
-``1a33411d8bbc4363b297cefe1e08ba0ff150a633`` of the
-``feature/custom_attributes_for_investments`` branch. This order is required
-for the publication workflow. The file ``requirements-lock.txt`` mirrors these
-direct pins for pip-based installations.
-
-The default solver is ``scip``. Other Pyomo solver backends can be selected with
-``--solver``, but solver versions and tolerances should be documented for
-publication runs.
-
-Minimal execution command
--------------------------
-
-The following command runs a small reference-price, no-EV, no-refurbishment
-case for the included UEU 5658 input data. It assumes that the command is
-executed from
-``src/oemof/thermal_building_model/examples/03_applied_energy_optimization``.
+For an existing Python environment, the declared pip installation sequence is:
 
 .. code:: bash
 
-    python decentralized_supply_single_building_multiple_heat_carrier_levels.py \
-      --serial \
-      --workers 1 \
-      --solver scip \
-      --solver-threads 1 \
-      --ueu-cases processed_bds_in_DENI03403000SEC5658 \
-      --sfh-k 6 \
-      --mfh-k 1 \
-      --refurbishments no_refurbishment \
-      --price-scenarios ref \
-      --ev no_EV \
-      --result-storage-root demo_results \
-      --result-check-root demo_results
+    python -m pip install oemof.network==0.5.0
+    python -m pip install -r requirements-lock.txt
+    python -m pip install -e .
 
-The script currently uses the default CO2 and peak-reduction factor lists from
-the executable. Even a small case therefore runs several optimization problems.
+The separate installation of ``oemof.network`` precedes setup of the pinned
+solph source. The environment files pin direct dependencies; they do not
+constitute a complete lock of transitive packages, system libraries, or solvers.
+Local execution also requires compatible package versions and a working MILP
+solver. The dependency declarations specify the research configuration;
+compatibility in a new environment must be established separately.
 
-Expected outputs
-----------------
+A Pyomo-compatible solver must be installed separately. The decentralized
+entry point defaults to ``scip`` and the centralized entry point to ``gurobi``;
+``--solver`` selects the local backend. Gurobi requires an appropriate license.
+Record the solver version and options when reporting a run.
 
-Results are written below the selected result root and grouped by UEU case,
-building type, k-value, refurbishment case, EV setting, building id, and CO2
-factor. Typical files are:
+Research configuration and path adaptation
+------------------------------------------
 
-.. code:: text
+Configuration is distributed between command-line arguments, parameter modules,
+and source-level settings. This organization exposes the choices used by the
+research scripts and supports inspection of the computational procedure.
+It also means that a new researcher must review the relevant script settings
+before execution.
 
-    demo_results/processed_bds_in_DENI03403000SEC5658/
-      sfh_cluster_k06/
-        results_dec_no_refurbishment_no_EV_<building_id>_co2_<factor>.pkl
-        simple_results_dec_no_refurbishment_no_EV_<building_id>_co2_<factor>.pkl
-      mfh_cluster_k01/
-        results_dec_no_refurbishment_no_EV_<building_id>_co2_<factor>.pkl
-        simple_results_dec_no_refurbishment_no_EV_<building_id>_co2_<factor>.pkl
+In particular:
 
-The reduced ``simple_results`` files contain the main quantities used for
-Pareto-front post-processing: annualized total costs, CO2 emissions,
-electricity-grid peak import/export, and the corresponding scenario metadata.
+* Both main optimizers accept ``--result-storage-root``. The decentralized
+  optimizer also accepts ``--result-check-root`` for resume checks.
+* The centralized optimizer accepts ``--input-root``. The decentralized
+  optimizer reads processed case folders relative to its script directory.
+* The post-processing scripts accept input/result roots. The decentralized
+  combiner can read cluster metadata from a separate directory.
+* Several plotting and Pareto/KPI scripts retain absolute research-machine
+  paths or source-level input and output constants. Their stage READMEs name
+  the settings that must be adapted for locally generated results.
 
-Post-processing
----------------
+Prefer absolute paths when passing directories between stages, because the
+optimizers resolve relative roots against their script directory whereas other
+scripts can resolve them against the current working directory. Retain the
+expected case names, cluster subdirectories, filenames, and pickle structures
+when relocating results. Different studies can use different storage locations
+without changing the model equations.
 
-The ``a_``, ``b_``, and ``c_`` prefixes in the post-processing script names
-indicate the suggested execution order of the decentralized analysis workflow:
-first aggregate building-level optimization outputs, then create Pareto-front
-figures, then run optional comparison plots.
+Technical and economic parameters are supplied through
+``input/economics/investment_components.py``,
+``input/economics/investment_components_heat_grid.py``,
+``input/economics/investment_infrastructure_heat_grid.py``,
+``input/economics/operation_grid_economics.py``, and
+``input/refurbishment/refurbishment_data.py``. Weather selection, temporal
+aggregation, and some scenario defaults are configured in the executable
+scripts. Changes to these parameters can affect results and should be recorded
+separately from changes to storage paths.
 
-Building-level result files can be combined into district-level Pareto-front
-inputs with:
+Inputs and generated artifacts
+------------------------------
 
-.. code:: bash
+The checkout includes the processed case
+``processed_bds_in_DENI03403000SEC5658`` under the optimization directory,
+including ``sfh_cluster_k06``, ``mfh_cluster_k01``, a case GeoPackage, and
+``*_demand_no_EV.pkl`` household profiles. Matching data are required for any
+other case, cluster resolution, or EV scenario selected for a run.
 
-    python ../04_applied_energy_optimization_post_process/decentralized/a_post_process_decentralized_k_combinations.py \
-      --ueu-case processed_bds_in_DENI03403000SEC5658 \
-      --base-dir demo_results \
-      --cluster-base-dir . \
-      --cluster-ueu-case processed_bds_in_DENI03403000SEC5658 \
-      --sfh-k 6 \
-      --mfh-k 1 \
-      --refurbishments no_refurbishment \
-      --optimization-strategies co2 \
-      --serial \
-      --output-root-name demo_post_processed
+The optimization entry points consume already processed building, clustering,
+and household inputs. They do not acquire the original building database,
+create new clusterings, or execute LoadProfileGenerator. Existing weather
+source notes are stored in ``input/weather_files/information.md``.
 
-The post-processing step writes ``building_dict.pkl``,
-``per_building_front.pkl``, ``combined_front.pkl``, ``combined_package.pkl``,
-``meta.pkl``, and ``summary.csv``.
+Full optimization pickles contain detailed technology and flow results;
+reduced pickles retain the objective values and metadata used downstream.
+Post-processing produces combined or consolidated result packages, CSV
+summaries, and metadata. Plotting and analysis scripts then produce figures
+and tables. The stage guides describe their directory structures.
 
-Publication figures for the decentralized Pareto fronts can be generated with
-``../04_applied_energy_optimization_post_process/b_plot_pareto_front_dec.py``.
-The plotting script reads a post-processed folder containing
-``combined_front.pkl``. Before running it, set the input path in the script's
-``combined_front_input_override_by_ueu_short`` configuration block to the
-post-processing output folder and set ``out_dir`` to the desired figure output
-directory. Then run:
+Result paths refer to files that a researcher must generate or obtain
+separately; configured archive locations do not imply that those archives are
+included in this checkout. The supplied XLSX workbooks are supplementary
+reference tables and do not replace missing optimization outputs.
 
-.. code:: bash
+Reusing the framework and recording a run
+-----------------------------------------
 
-    python ../04_applied_energy_optimization_post_process/b_plot_pareto_front_dec.py
+For a new application, provide compatible processed inputs, select the intended
+scenarios, direct outputs to a separate working directory, and point downstream
+scripts to those generated outputs. The reusable facades can also be used from
+new scripts with explicit component parameters. Preserve completed research
+outputs when experimenting with a new configuration.
 
-The plotting step produces manuscript-style Pareto-front and technology
-contribution figures from the post-processed decentralized result set.
+For computational traceability, retain the Git revision, environment and solver
+versions, input identifiers, scenario arguments, any edited source settings,
+and the output-directory mapping. Store post-processing metadata and summaries
+with the results they describe. Resume checks can depend on existing filenames;
+use separate result roots when changing the configuration of a study.
 
-Centralized result files can be consolidated with:
+The documentation describes the implementation and its execution dependencies.
+It is not an execution log or a claim that all dissertation outputs have been
+regenerated. Retain execution records separately with each computational run.
 
-.. code:: bash
+The existing MIT license covers the software under its stated terms. Confirm
+the provenance and redistribution conditions of external datasets separately;
+the presence of a data file does not by itself establish publication rights.
+For software citation, identify the repository and the precise commit or release
+used in the research.
 
-    python ../04_applied_energy_optimization_post_process/centralized/a_post_process_centralized_results.py \
-      --ueu-case processed_bds_in_DENI03403000SEC5658 \
-      --result-kind simple \
-      --temperature-levels 50,80
+References
+----------
 
-The centralized post-processing step reads district-level centralized result
-records and writes ``centralized_records.pkl``, ``centralized_front.pkl``,
-``centralized_package.pkl``, ``meta.pkl``, ``summary.csv``, and diagnostic CSV
-files. In contrast to the decentralized post-processing, it does not combine
-single-building fronts and does not apply Pareto pruning.
+.. [Thesis] Hillen, M. *Archetype-Based Model Reduction for Multi-Objective
+   District Energy System Optimization: Centralized and Decentralized
+   Residential Heat Supply*. Accompanying PhD dissertation, Chapters 3 and 4.
+   Section 4.1.4 describes the Pareto-set comparison indicators.
 
-Minimal example and full manuscript reproduction
-------------------------------------------------
+.. [Krien2020] Krien, U., et al. (2020). oemof.solph—A model generator for
+   linear and mixed-integer linear optimisation of energy systems.
+   *Software Impacts*, 6, 100028.
+   `doi:10.1016/j.simpa.2020.100028 <https://doi.org/10.1016/j.simpa.2020.100028>`_.
 
-The minimal workflow verifies that the executable, input schema, solver setup,
-and result structure are reproducible. It is not intended to reproduce all
-manuscript figures.
+.. [Bader2011] Bader, J., and Zitzler, E. (2011). HypE: An Algorithm for Fast
+   Hypervolume-Based Many-Objective Optimization. *Evolutionary Computation*,
+   19(1), 45–76.
+   `doi:10.1162/EVCO_a_00009 <https://doi.org/10.1162/EVCO_a_00009>`_.
 
-Full manuscript reproduction requires the complete processed UEU datasets, all
-selected SFH and MFH k-values, refurbishment cases, EV cases, price scenarios,
-the full CO2 and peak-reduction sweeps, and the downstream post-processing and
-plotting scripts. If processed building, demand, or weather data cannot be
-redistributed, a synthetic or anonymized demo dataset should be provided and the
-data provenance should be documented separately.
+.. [Coello2004] Coello Coello, C. A., and Reyes Sierra, M. (2004).
+   A Study of the Parallelization of a Coevolutionary Multi-objective
+   Evolutionary Algorithm. In *MICAI 2004: Advances in Artificial
+   Intelligence*, LNCS 2972, 688–697. Springer.
+   `doi:10.1007/978-3-540-24694-7_71 <https://doi.org/10.1007/978-3-540-24694-7_71>`_.
 
-Known publication-readiness notes
----------------------------------
-
-The decentralized workflow is research-code oriented and relies on preprocessed
-pickle inputs. Before using it as a public reproducibility example, provide a
-small redistributable demo dataset, document the exact data provenance and
-solver version, and keep any changes to model equations, objectives,
-constraints, parameter values, units, and output definitions out of the
-documentation-only example.
+.. [Ishibuchi2015] Ishibuchi, H., Masuda, H., Tanigaki, Y., and Nojima, Y.
+   (2015). Modified Distance Calculation in Generational Distance and
+   Inverted Generational Distance. In *Evolutionary Multi-Criterion
+   Optimization*, LNCS 9019, 110–125. Springer.
+   `doi:10.1007/978-3-319-15892-1_8 <https://doi.org/10.1007/978-3-319-15892-1_8>`_.
 
 Contact
 ========
@@ -356,21 +359,12 @@ Main author and contact person:
 Contributing
 ============
 
-Everybody is welcome to contribute to the development of oemof.thermal. Find here the `developer
-guidelines of oemof <https://oemof.readthedocs.io/en/latest/developing_oemof.html>`_.
-
-Running Tests Locally
-=====================
-
-Run the unit test suite with:
-
-.. code:: bash
-
-    python -m pytest -q
-
-Solver-backed unit tests require at least one MILP solver available to Pyomo.
-The test suite checks for ``cbc``, ``glpk``, or ``highs`` and skips solver-backed
-tests with an explicit reason when none is installed.
+Contributions should preserve the distinction between documentation, software
+maintenance, and changes to scientific configuration. Describe the purpose of
+each change and record any effect on model behaviour, input interpretation, or
+saved outputs. The existing test modules are available in ``tests/``; their
+execution and solver requirements should be considered separately from this
+documentation.
 
 License
 =======
