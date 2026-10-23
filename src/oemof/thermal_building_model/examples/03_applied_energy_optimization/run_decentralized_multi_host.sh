@@ -45,7 +45,7 @@ PRICE_SCENARIOS_PER_HOST=(
 )
 # Multiple scenarios per host are supported as comma-separated values,
 # e.g. "ref,electricity_plus20,gas_minus20".
-# Standard rerun set from failed_pickle_loads.csv, without combined optimization:
+# Configured distributed rerun set, without combined optimization:
 # SFH k={1,2,4,6,8,10,14,18,reference}, MFH k={1,2,3,4,5,6,reference}.
 # The values are split across hosts so each SFH/MFH cluster is started once.
 SFH_K_PER_HOST=(
