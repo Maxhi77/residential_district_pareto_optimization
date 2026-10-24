@@ -1,0 +1,17 @@
+{
+  "processed_bds_in_DENI03403000SEC4580": {
+    "heat_grid_length": 2723.29,
+    "sfh_k": [1, 2, 4, 6, 8, 10, "reference"],
+    "mfh_k": [1, 2, 3, 4, 6, 10, "reference"]
+  },
+  "processed_bds_in_DENI03403000SEC5101": {
+    "heat_grid_length": 890.35,
+    "sfh_k": [1, 2, "reference"],
+    "mfh_k": [1, 2, 3, 4, 6, 10, 14, 18, "reference"]
+  },
+  "processed_bds_in_DENI03403000SEC5658": {
+    "heat_grid_length": 1146.15,
+    "sfh_k": [1, 2, 4, 6, 8, 10, 14, 18, "reference"],
+    "mfh_k": [1, 2, 3, 4, 5, 6, "reference"]
+  }
+}
